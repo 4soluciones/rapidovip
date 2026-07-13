@@ -1,0 +1,144 @@
+{% extends 'home.html' %}
+{% block title %}Gestión de sedes{% endblock %}
+
+{% block body %}
+<div class="rv-page">
+    <div class="rv-page-header">
+        <div>
+            <h1><i class="fas fa-building"></i> Gestión de sedes y series</h1>
+            <p class="rv-page-subtitle">Configure series y correlativos por sede, empresa y tipo de servicio</p>
+        </div>
+        {% if has_companies %}
+        <button type="button" class="rv-btn rv-btn-success" id="btn-new-subsidiary">
+            <i class="fas fa-plus"></i> Nueva sede
+        </button>
+        {% endif %}
+    </div>
+
+    {% if not has_companies %}
+    <div class="rv-form-section">
+        <div class="rv-alert-box">
+            <i class="fas fa-exclamation-triangle"></i>
+            Antes de crear sedes, registre al menos una empresa en
+            <a href="{% url 'users:company_list' %}">Gestión de empresas</a>.
+        </div>
+    </div>
+    {% else %}
+    <div class="rv-subsidiary-list">
+        {% for row in subsidiary_rows %}
+        <article class="rv-subsidiary-card">
+            <div class="rv-subsidiary-card-head">
+                <div>
+                    <h2 class="rv-subsidiary-card-title">{{ row.subsidiary.name }}</h2>
+                    <div class="rv-subsidiary-card-meta">
+                        <span class="rv-badge rv-badge-route">{{ row.subsidiary.short_name }}</span>
+                        {% if row.company %}
+                            <span class="rv-badge rv-badge-service">{{ row.company.short_name }}</span>
+                        {% endif %}
+                        {% if row.subsidiary.address %}
+                            <span class="rv-subsidiary-card-address"><i class="fas fa-map-marker-alt"></i> {{ row.subsidiary.address }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if row.company %}
+                <button type="button"
+                        class="rv-btn rv-btn-outline rv-btn-sm btn-edit-subsidiary"
+                        data-subsidiary-id="{{ row.subsidiary.id }}"
+                        data-company-id="{{ row.company.id }}">
+                    <i class="fas fa-pen"></i> Editar
+                </button>
+                {% else %}
+                <button type="button" class="rv-btn rv-btn-outline rv-btn-sm" disabled>
+                    <i class="fas fa-pen"></i> Editar
+                </button>
+                {% endif %}
+            </div>
+
+            {% if row.serial_groups %}
+            <div class="rv-subsidiary-serial-groups">
+                {% for group in row.serial_groups %}
+                <section class="rv-subsidiary-serial-group rv-subsidiary-serial-group-{{ group.service_type|lower }}">
+                    <h3 class="rv-subsidiary-serial-group-title">{{ group.service_label }}</h3>
+                    <div class="rv-subsidiary-serial-items">
+                        {% for item in group.items %}
+                        <div class="rv-subsidiary-serial-item">
+                            <span class="rv-subsidiary-serial-label">{{ item.doc_label }}</span>
+                            <span class="rv-subsidiary-serial-value">{{ item.serial|default:"—" }}</span>
+                            <span class="rv-subsidiary-serial-corr" title="Último correlativo">#{{ item.correlative|stringformat:"06d" }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </section>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="rv-subsidiary-card-empty">Sin series configuradas para esta sede.</p>
+            {% endif %}
+        </article>
+        {% empty %}
+        <div class="rv-subsidiary-card rv-subsidiary-card-empty-wrap">
+            <p class="text-center text-muted mb-0">
+                No hay sedes registradas.
+                <button type="button" class="btn btn-link p-0" id="btn-new-subsidiary-empty">Crear la primera</button>
+            </p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<div class="modal fade" id="modalSubsidiary" tabindex="-1"></div>
+{% endblock %}
+
+{% block extrajs %}
+<script>
+    function openSubsidiaryModal() {
+        $.get('{% url "users:get_subsidiary_form" %}', function (r) {
+            if (r.success) {
+                $('#modalSubsidiary').html(r.grid);
+                $('#modalSubsidiary').modal('show');
+            }
+        });
+    }
+
+    function openSubsidiaryEditModal(subsidiaryId, companyId) {
+        const urlTmpl = '{% url "users:get_subsidiary_edit_form" subsidiary_id=0 company_id=0 %}';
+        const url = urlTmpl.replace('/0/company/0/', `/${subsidiaryId}/company/${companyId}/`);
+        $.get(url, function (r) {
+            if (r.success) {
+                $('#modalSubsidiary').html(r.grid);
+                $('#modalSubsidiary').modal('show');
+            }
+        });
+    }
+
+    $('#btn-new-subsidiary, #btn-new-subsidiary-empty').on('click', openSubsidiaryModal);
+
+    $(document).on('click', '.btn-edit-subsidiary', function () {
+        openSubsidiaryEditModal($(this).data('subsidiary-id'), $(this).data('company-id'));
+    });
+
+    $(document).on('submit', '#subsidiary-modal-form', function (e) {
+        e.preventDefault();
+        $.post('{% url "users:save_subsidiary" %}', $(this).serialize(), function (r) {
+            toastr.success(r.message);
+            $('#modalSubsidiary').modal('hide');
+            setTimeout(() => location.reload(), 600);
+        }).fail(function (jq) {
+            toastr.error(jq.responseJSON?.message || 'Error al guardar');
+        });
+    });
+
+    $(document).on('submit', '#subsidiary-edit-modal-form', function (e) {
+        e.preventDefault();
+        const action = $(this).data('action');
+        $.post(action, $(this).serialize(), function (r) {
+            toastr.success(r.message);
+            $('#modalSubsidiary').modal('hide');
+            setTimeout(() => location.reload(), 600);
+        }).fail(function (jq) {
+            toastr.error(jq.responseJSON?.message || 'Error al guardar');
+        });
+    });
+</script>
+{% endblock %}

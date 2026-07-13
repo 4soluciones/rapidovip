@@ -1,0 +1,116 @@
+{% extends 'home.html' %}
+
+{% block title %}
+    coronasoft.dev | Reporte de Manifiesto
+{% endblock title %}
+
+{% block body %}
+
+
+    <div class="container-fluid">
+
+        <div class="card montserrat" style="background: #f3dbe4;">
+            <div class="card-body pb-0 ">
+                <form id="search-form" method="POST">
+                    {% csrf_token %}
+                    <div class="form-group row">
+                        <label for="id_date_initial" class="col-sm-1 col-form-label">Fecha inicial</label>
+
+                        <div class="col-sm-3">
+                            <input type="date"
+                                   class="form-control"
+                                   name="start-date"
+                                   id="id_date_initial"
+                                   value="{{ date_now }}" required>
+
+                        </div>
+                        <label for="id_date_final" class="col-sm-1 col-form-label">Fecha final</label>
+                        <div class="col-sm-3">
+                            <input type="date"
+                                   class="form-control"
+                                   name="end-date"
+                                   id="id_date_final"
+                                   value="{{ date_now }}" required>
+                        </div>
+                        <div class="col-sm-2">
+                            <button type="submit" id="id_btn_show" class="btn btn-outline-primary">
+                                <i class="fas fa-search"></i>
+                            </button>
+
+
+                            <button onclick="excelManifest();" class="btn  btn-outline-success"><span
+                                    class="fa fa-file-excel"></span> Exportar excel
+                            </button>
+
+                        </div>
+
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card-group mt-3">
+            <div class="card" style="flex-grow: 1">
+                <div class="card-body mt-1">
+
+                    <div class="table-responsive pt-1" id="manifest-grid-list"></div>
+
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+
+
+
+{% endblock body %}
+
+{% block extrajs %}
+
+    <script type="text/javascript">
+
+
+        $('#search-form').submit(function (event) {
+            event.preventDefault();
+            let _data = new FormData($('#search-form').get(0));
+            $.ajax({
+                url: '/comercial/report_manifest_grid/',
+                type: "POST",
+                data: _data,
+                cache: false,
+                processData: false,
+                contentType: false,
+                success: function (response, textStatus, xhr) {
+                    if (xhr.status === 200) {
+                        $('#manifest-grid-list').html(response.grid);
+                        toastr.info(response['message'], '¡Bien hecho!');
+                    }
+                },
+                error: function (jqXhr, textStatus, xhr) {
+                    if (jqXhr.status === 500) {
+                        toastr.error(jqXhr.responseJSON.error, '¡Inconcebible!');
+                    }
+                }
+            });
+        });
+
+        function excelManifest() {
+
+            $("#table-manifest").table2excel({
+                // exclude CSS class
+                exclude: ".noExl",
+                name: "Worksheet Manifiesto",
+                filename: "Manifiesto",//do not include extension
+                fileext: ".xlsx", // file extension
+                preserveColors: true
+
+            });
+        }
+
+
+    </script>
+
+
+{% endblock extrajs %}
+

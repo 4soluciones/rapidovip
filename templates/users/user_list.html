@@ -1,0 +1,175 @@
+{% extends 'home.html' %}
+{% block title %}RapidoVip — Usuarios{% endblock %}
+
+{% block body %}
+<div class="rv-page rv-users-page">
+    <div class="rv-page-header">
+        <div>
+            <h1><i class="fas fa-users-cog"></i> Gestión de usuarios</h1>
+            <p class="rv-page-subtitle">Administre accesos, sedes y roles del personal operativo</p>
+        </div>
+        <button type="button" class="rv-btn rv-btn-success" id="btn-new-user">
+            <i class="fas fa-user-plus"></i> Nuevo usuario
+        </button>
+    </div>
+
+    <div class="rv-users-stats">
+        <div class="rv-users-stat">
+            <span class="rv-users-stat-value">{{ users|length }}</span>
+            <span class="rv-users-stat-label">Total usuarios</span>
+        </div>
+        <div class="rv-users-stat">
+            <span class="rv-users-stat-value">{{ users_active_count }}</span>
+            <span class="rv-users-stat-label">Activos</span>
+        </div>
+        <div class="rv-users-stat">
+            <span class="rv-users-stat-value">{{ users_staff_count }}</span>
+            <span class="rv-users-stat-label">Administradores</span>
+        </div>
+    </div>
+
+    <div class="rv-form-section">
+        <div class="rv-table-wrap">
+            <table class="rv-table rv-users-table" id="users-table">
+                <thead>
+                    <tr>
+                        <th>Usuario</th>
+                        <th>Nombre completo</th>
+                        <th>Sede</th>
+                        <th>Empresa</th>
+                        <th>Rol</th>
+                        <th>Estado</th>
+                        <th class="text-right">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr>
+                        <td>
+                            <div class="rv-user-cell">
+                                <span class="rv-user-avatar">{{ u.username|slice:":1"|upper }}</span>
+                                <strong>{{ u.username }}</strong>
+                            </div>
+                        </td>
+                        <td>
+                            {% if u.worker_set.last %}{{ u.worker_set.last.employee.full_name }}{% else %}{{ u.get_full_name|default:"—" }}{% endif %}
+                        </td>
+                        <td>
+                            {% with us=u.usersubsidiary_set.first %}
+                                {% if us %}
+                                    <span class="rv-badge rv-badge-route">{{ us.subsidiary.short_name }}</span>
+                                {% else %}—{% endif %}
+                            {% endwith %}
+                        </td>
+                        <td>
+                            {% if u.companyuser %}
+                                {{ u.companyuser.company_rotation.short_name }}
+                            {% else %}—{% endif %}
+                        </td>
+                        <td>
+                            {% if u.is_staff %}
+                                <span class="rv-badge rv-badge-primary">Administrador</span>
+                            {% else %}
+                                <span class="rv-badge rv-badge-muted">Operador</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if u.is_active %}
+                                <span class="rv-badge rv-badge-success">Activo</span>
+                            {% else %}
+                                <span class="rv-badge rv-badge-muted">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <div class="rv-table-actions">
+                                <button type="button"
+                                        class="rv-btn rv-btn-outline rv-btn-sm btn-edit-user"
+                                        data-user-id="{{ u.id }}"
+                                        title="Editar usuario">
+                                    <i class="fas fa-pen"></i> Editar
+                                </button>
+                                {% if u != user %}
+                                <form method="post" action="{% url 'users:toggle_user_active' u.pk %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit"
+                                            class="rv-btn rv-btn-sm {% if u.is_active %}rv-btn-outline{% else %}rv-btn-success{% endif %}"
+                                            title="{% if u.is_active %}Desactivar{% else %}Activar{% endif %} usuario">
+                                        {% if u.is_active %}
+                                            <i class="fas fa-user-slash"></i>
+                                        {% else %}
+                                            <i class="fas fa-user-check"></i>
+                                        {% endif %}
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-5">
+                            <i class="fas fa-users fa-2x mb-3 d-block opacity-50"></i>
+                            No hay usuarios registrados.
+                            <button type="button" class="btn btn-link p-0" id="btn-new-user-empty">Crear el primero</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalUser" tabindex="-1"></div>
+{% endblock %}
+
+{% block extrajs %}
+<script>
+    function openUserModal() {
+        $.get('{% url "users:get_user_form" %}', function (r) {
+            if (r.success) {
+                $('#modalUser').html(r.grid);
+                $('#modalUser').modal('show');
+            }
+        });
+    }
+
+    function openUserEditModal(userId) {
+        $.get('{% url "users:get_user_edit_form" 0 %}'.replace('/0/', '/' + userId + '/'), function (r) {
+            if (r.success) {
+                $('#modalUser').html(r.grid);
+                $('#modalUser').modal('show');
+            }
+        });
+    }
+
+    $('#btn-new-user, #btn-new-user-empty').on('click', openUserModal);
+    $(document).on('click', '.btn-edit-user', function () {
+        openUserEditModal($(this).data('user-id'));
+    });
+
+    $(document).on('submit', '#user-modal-form', function (e) {
+        e.preventDefault();
+        $.post('{% url "users:save_user" %}', $(this).serialize(), function (r) {
+            toastr.success(r.message);
+            $('#modalUser').modal('hide');
+            setTimeout(() => location.reload(), 600);
+        }).fail(function (jq) {
+            toastr.error(jq.responseJSON?.message || 'Error al guardar');
+        });
+    });
+
+    $(document).on('submit', '#user-edit-modal-form', function (e) {
+        e.preventDefault();
+        var userId = $(this).data('user-id');
+        var url = '{% url "users:save_user_edit" 0 %}'.replace('/0/', '/' + userId + '/');
+        $.post(url, $(this).serialize(), function (r) {
+            toastr.success(r.message);
+            $('#modalUser').modal('hide');
+            setTimeout(() => location.reload(), 600);
+        }).fail(function (jq) {
+            toastr.error(jq.responseJSON?.message || 'Error al actualizar');
+        });
+    });
+</script>
+{% endblock %}

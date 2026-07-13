@@ -1,0 +1,60 @@
+{% if programmings %}
+<table id="programming-data-grid" class="rv-table table table-hover">
+    <thead>
+    <tr>
+        <th class="noExl"></th>
+        <th>Servicio</th>
+        <th>Vehículo</th>
+        <th>Conductor</th>
+        <th>Sede</th>
+        <th>Salida</th>
+        <th>Llegada</th>
+        <th>Estado</th>
+        <th>Manifiesto</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for p in programmings %}
+        <tr class="rv-prog-row rv-prog-{{ p.status|lower }}">
+            <td class="noExl text-center">
+                {% if show_edit %}
+                    <button type="button" class="rv-btn-icon programming-edit" pk="{{ p.id }}" title="Editar">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                {% endif %}
+            </td>
+            <td>
+                <span class="rv-badge rv-badge-service">{{ p.get_service_type_display }}</span>
+            </td>
+            <td><strong>{% if p.truck %}{{ p.truck.license_plate }}{% else %}—{% endif %}</strong></td>
+            <td>
+                {{ p.support_pilot|default:"—" }}
+            </td>
+            <td class="small">
+                {% if p.subsidiary %}{{ p.subsidiary.name }}{% else %}—{% endif %}
+            </td>
+            <td>{% if p.departure_date %}{{ p.departure_date|date:"d/m/Y" }}{% else %}—{% endif %}</td>
+            <td>{% if p.arrival_date %}{{ p.arrival_date|date:"d/m/Y" }}{% else %}—{% endif %}</td>
+            <td>
+                {% if p.status == 'P' %}
+                    <span class="rv-badge rv-badge-muted">Programado</span>
+                {% elif p.status == 'R' %}
+                    <span class="rv-badge rv-badge-route">En ruta</span>
+                {% elif p.status == 'E' or p.status == 'F' %}
+                    <span class="rv-badge rv-badge-success">Entregado</span>
+                {% elif p.status == 'C' or p.status == 'A' %}
+                    <span class="rv-badge rv-badge-danger">Cancelado</span>
+                {% else %}
+                    <span class="rv-badge">{{ p.get_status_display }}</span>
+                {% endif %}
+            </td>
+            <td class="small text-muted">
+                {% if p.serial or p.correlative %}{{ p.serial|default_if_none:'' }}{% if p.serial and p.correlative %}-{% endif %}{{ p.correlative|default_if_none:'' }}{% else %}—{% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="text-center text-muted py-4 mb-0 rv-table-empty-msg">No hay programaciones para mostrar</p>
+{% endif %}

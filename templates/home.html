@@ -1,0 +1,57 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>{% block title %}RapidoVip — Encomiendas{% endblock title %}</title>
+
+    <link href="{% static 'css/font-face.css' %}" rel="stylesheet" media="all">
+    <link href="{% static 'vendor/font-awesome-5/all.css' %}" rel="stylesheet">
+    <link href="{% static 'vendor/bootstrap-4.1/bootstrap.min.css' %}" rel="stylesheet" media="all">
+    <link href="{% static 'vendor/toastr/toastr.min.css' %}" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'vendor/datatables/datatables.min.css' %}">
+    <link rel="stylesheet" href="{% static 'vendor/select2/select2.min.css' %}">
+    <link rel="stylesheet" href="{% static 'vendor/select2/select2-bootstrap4.css' %}">
+    <link href="{% static 'css/rapidovip.css' %}" rel="stylesheet" media="all">
+    <link href="{% static 'css/theme.css' %}" rel="stylesheet" media="all">
+    <link rel="stylesheet" href="{% static 'css/loader.css' %}">
+    <link rel="shortcut icon" type="image/png" href="{% static 'assets/rapidovip_logo.png' %}">
+</head>
+
+<body class="rv-body"
+      data-switch-subsidiary-url="{% url 'users:switch_subsidiary' %}">
+    <div class="page-wrapper">
+        {% include "megamenu.html" %}
+        {% include "megamenu-mobile.html" %}
+
+        <div class="page-content--bgf7 rv-page-content">
+            {% block body %}
+            {% endblock body %}
+
+            <section class="p-t-30 p-b-20">
+                <div class="container">
+                    <div class="copyright text-center text-muted small">
+                        <p>Desarrollado por <a href="http://4soluciones.net/">4soluciones S.A.C.</a></p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="{% static 'vendor/jquery-3.2.1.min.js' %}"></script>
+    <script src="{% static 'vendor/bootstrap-4.1/popper.min.js' %}"></script>
+    <script src="{% static 'vendor/bootstrap-4.1/bootstrap.min.js' %}"></script>
+    <script src="{% static 'vendor/toastr/toastr.min.js' %}"></script>
+    <script src="{% static 'vendor/sweetalert/sweetalert.min.js' %}"></script>
+    <script src="{% static 'vendor/select2/select2.min.js' %}"></script>
+    <script src="{% static 'vendor/chained/jquery.chained.min.js' %}"></script>
+    <script src="{% static 'vendor/table2excel/jquery.table2excel.min.js' %}"></script>
+    <script src="{% static 'vendor/datatables/datatables.min.js' %}"></script>
+    <script src="{% static 'vendor/datatables/datatables.language.js' %}"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.9.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.9.0/firebase-database.js"></script>
+    <script src="{% static 'js/rapidovip.js' %}"></script>
+    {% block extrajs %}{% endblock extrajs %}
+</body>
+</html>

@@ -1,0 +1,166 @@
+<div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+    <div class="modal-content rv-modal rv-truck-modal">
+        <div class="modal-header">
+            <div>
+                <h5 class="modal-title">
+                    {% if truck_obj %}
+                        <i class="fas fa-pen"></i> Editar unidad
+                    {% else %}
+                        <i class="fas fa-truck"></i> Registrar unidad
+                    {% endif %}
+                </h5>
+                <p class="rv-modal-subtitle mb-0">
+                    {% if truck_obj %}{{ truck_obj.license_plate }}{% else %}Nueva unidad de la flota{% endif %}
+                </p>
+            </div>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+
+        <form id="truck-modal-form" method="POST" action="{% url 'comercial:save_truck' %}">
+            {% csrf_token %}
+            <input type="hidden" name="truck_id" id="truck_id" value="{{ truck_id }}">
+            <input type="hidden" name="owner" id="id_owner" value="{{ default_owner.pk }}">
+
+            <div class="modal-body">
+                <div class="rv-modal-hint">
+                    <i class="fas fa-info-circle"></i>
+                    Los campos marcados en <span class="rv-required-mark">rojo</span> son obligatorios.
+                </div>
+
+                <div class="rv-form-grid">
+                    <div class="rv-form-group rv-form-group-required">
+                        <label for="id_license_plate">{{ form.license_plate.label }}</label>
+                        {{ form.license_plate }}
+                    </div>
+
+                    <div class="rv-form-group rv-form-group-required">
+                        <label for="id_drive_type">{{ form.drive_type.label }}</label>
+                        {{ form.drive_type }}
+                    </div>
+
+                    <div class="rv-form-group rv-form-group-required">
+                        <label for="id_owner_display">Propietario</label>
+                        <input type="text" class="rv-form-control rv-owner-display" id="id_owner_display"
+                               value="{{ company.business_name }}" readonly>
+                        <small class="rv-field-hint">RUC {{ company.ruc }}</small>
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_year">{{ form.year.label }}</label>
+                        {{ form.year }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_truck_brand">Marca</label>
+                        <select class="rv-form-control" name="truck_brand" id="id_truck_brand">
+                            <option value="">—</option>
+                            {% for brand in brands %}
+                                <option {% if truck_obj and truck_obj.truck_model and truck_obj.truck_model.truck_brand_id == brand.id %}selected{% endif %}
+                                        value="{{ brand.id }}">{{ brand.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_truck_model">Modelo</label>
+                        <select class="rv-form-control" name="truck_model" id="id_truck_model">
+                            <option value="">—</option>
+                            {% for model in models %}
+                                <option {% if truck_obj and truck_obj.truck_model_id == model.id %}selected{% endif %}
+                                        value="{{ model.id }}"
+                                        data-chained="{{ model.truck_brand_id }}">{{ model.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_capacidad_kg">{{ form.capacidad_kg.label }}</label>
+                        {{ form.capacidad_kg }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_capacidad_m3">{{ form.capacidad_m3.label }}</label>
+                        {{ form.capacidad_m3 }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_num_axle">{{ form.num_axle.label }}</label>
+                        {{ form.num_axle }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_fuel_type">{{ form.fuel_type.label }}</label>
+                        {{ form.fuel_type }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_color">{{ form.color.label }}</label>
+                        {{ form.color }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_engine">{{ form.engine.label }}</label>
+                        {{ form.engine }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_chassis">{{ form.chassis.label }}</label>
+                        {{ form.chassis }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_condition_owner">{{ form.condition_owner.label }}</label>
+                        {{ form.condition_owner }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_contact_phone">{{ form.contact_phone.label }}</label>
+                        {{ form.contact_phone }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_certificate">{{ form.certificate.label }}</label>
+                        {{ form.certificate }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_technical_review_expiration_date">{{ form.technical_review_expiration_date.label }}</label>
+                        {{ form.technical_review_expiration_date }}
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="id_soat_expiration_date">{{ form.soat_expiration_date.label }}</label>
+                        {{ form.soat_expiration_date }}
+                    </div>
+
+                    <div class="rv-form-group rv-form-group-checkbox">
+                        <label class="rv-checkbox-label">
+                            {{ form.is_active }}
+                            <span>{{ form.is_active.label }}</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
+                <button type="submit" class="rv-btn rv-btn-success" id="btn-save-truck">
+                    <i class="fas fa-save"></i>
+                    {% if truck_obj %}Guardar cambios{% else %}Registrar unidad{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script type="text/javascript">
+    (function () {
+        if ($.fn.chained) {
+            $("#id_truck_model").chained("#id_truck_brand");
+        }
+        $('#id_license_plate, #id_drive_type').addClass('rv-form-control rv-input-required');
+        $('#truck-modal-form .form-control').not('#id_license_plate, #id_drive_type').addClass('rv-form-control');
+    })();
+</script>

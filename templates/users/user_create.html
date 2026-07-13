@@ -1,0 +1,88 @@
+{% extends 'home.html' %}
+
+{% block title %}RapidoVip — Nuevo usuario{% endblock %}
+
+{% block body %}
+<div class="rv-dashboard">
+    <div class="rv-page-header">
+        <div>
+            <h1>Nuevo <span>Usuario</span></h1>
+            <p class="text-muted mb-0">Complete los datos para registrar un usuario</p>
+        </div>
+        <a href="{% url 'users:user_list' %}" class="rv-btn rv-btn-outline text-white">
+            <i class="fas fa-arrow-left"></i> Volver
+        </a>
+    </div>
+
+    {% if not has_subsidiaries or not has_companies %}
+    <div class="rv-alert-box mb-4">
+        <i class="fas fa-exclamation-triangle"></i>
+        {% if not has_companies %}
+            Primero debe <a href="{% url 'users:subsidiary_list' %}">crear una empresa y una sede</a>.
+        {% elif not has_subsidiaries %}
+            Primero debe <a href="{% url 'users:subsidiary_list' %}">crear al menos una sede</a>.
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-12 col-lg-8 col-xl-6">
+            <div class="rv-card">
+                <div class="rv-card-body">
+                    <form method="post" class="rv-form-grid">
+                        {% csrf_token %}
+                        {% if form.errors %}
+                            <div class="rv-alert-box col-span-full">
+                                {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+                                {% for field in form %}{% for error in field.errors %}<div>{{ field.label }}: {{ error }}</div>{% endfor %}{% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <div class="rv-form-group">
+                            <label>Usuario</label>
+                            {{ form.username }}
+                        </div>
+                        <div class="rv-form-group">
+                            <label>Correo</label>
+                            {{ form.email }}
+                        </div>
+                        <div class="rv-form-group col-span-full">
+                            <label>Nombre completo</label>
+                            {{ form.full_name }}
+                        </div>
+                        <div class="rv-form-group">
+                            <label>Teléfono</label>
+                            {{ form.phone }}
+                        </div>
+                        <div class="rv-form-group">
+                            <label>Rol en sede</label>
+                            {{ form.rol }}
+                        </div>
+                        <div class="rv-form-group">
+                            <label>Sede</label>
+                            {{ form.subsidiary }}
+                        </div>
+                        <div class="rv-form-group">
+                            <label>Empresa</label>
+                            {{ form.company }}
+                        </div>
+                        <div class="rv-form-group">
+                            <label>Contraseña</label>
+                            {{ form.password }}
+                        </div>
+                        <div class="rv-form-group">
+                            <label>Confirmar contraseña</label>
+                            {{ form.password_confirm }}
+                        </div>
+                        <div class="col-span-full">
+                            <button type="submit" class="rv-btn rv-btn-search text-white w-100" {% if not has_subsidiaries or not has_companies %}disabled{% endif %}>
+                                <i class="fas fa-save"></i> Guardar usuario
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,100 @@
+{% load app_filters %}
+{% if manifest_set %}
+    <h4 class="montserrat text-center pb-3 font-weight-bold"> REPORTE DE MANIFIESTOS</h4>
+    <table class="table roboto-condensed-light small table-sm table-striped table-bordered" id="table-manifest">
+        <thead class="thead-dark">
+        <tr class="text-dark text-center text-uppercase">
+            <th class="align-middle">
+                ID
+            </th>
+            <th class="align-middle">
+                Fecha de emisión
+            </th>
+            <th class="align-middle">
+                Origen
+            </th>
+            <th class="align-middle">
+                Destino
+            </th>
+            <th class="align-middle">
+                Placa
+            </th>
+            <th class="align-middle">
+                Tipo
+            </th>
+            <th class="align-middle">
+                Turno
+            </th>
+            <th class="align-middle">
+                Serial
+            </th>
+            <th class="align-middle">
+                Correlativo
+            </th>
+            <th class="align-middle">
+                Cant. Encomiendas Asignadas
+            </th>
+            <th class="align-middle">
+                Acción
+            </th>
+
+        </tr>
+        </thead>
+        <tbody id="{{ manifest_set.count }}{{ manifest_set }}">
+        {% for m in manifest_set.all %}
+            <tr>
+                <td class="align-middle text-center font-weight-bold">{{ m.id }}</td>
+                <td class="align-middle text-center font-weight-bold">{{ m.created_at|date:"d-m-y" }}</td>
+                <td class="align-middle text-center font-weight-bold">{{ m.orderprogramming_set.first.programming.path.get_first_point.short_name }}</td>
+                <td class="align-middle text-center font-weight-bold">{{ m.orderprogramming_set.first.order.orderroute_set.last.subsidiary.short_name }}</td>
+                <td class="align-middle text-center font-weight-bold">{{ m.orderprogramming_set.first.programming.truck.license_plate }}</td>
+                <td class="align-middle text-center font-weight-bold">{{ m.orderprogramming_set.first.programming.truck.get_drive_type_display }}</td>
+                <td class="align-middle text-center font-weight-bold">{{ m.orderprogramming_set.first.programming.get_turn_display }}</td>
+                <td class="align-middle text-center font-weight-bold">{{ m.serial }}</td>
+                <td class="align-middle text-center font-weight-bold">{{ m.correlative }}</td>
+                <td class="align-middle text-center font-weight-bold" style="width: 10%">{{ m.orderprogramming_set.count }}</td>
+                <td class="align-middle  font-weight-bold text-center"
+                    style="width: 5%">
+                    <a class="btn btn-green ml-1 my-1 montserrat"
+                       href="{% url 'comercial:print_manifest_comidity'  m.id %}"
+                       target="print">
+                        <span class="fa fa-print"></span></a>
+                </td>
+            </tr>
+
+        {% endfor %}
+
+        </tbody>
+    </table>
+
+
+
+{% else %}
+    <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+        <strong>Atencion!</strong> Tu debes registrar una encomienda primero.
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+{% endif %}
+<style>
+    .fancy-theme-gray .fancy-grid-body .fancy-drop-cell-first-mask {
+        border-top-color: #626262 !important;
+    }
+
+    .fancy-theme-gray .fancy-grid-body .fancy-drop-cell-mask {
+        border-bottom-color: #626262 !important;
+    }
+
+</style>
+
+{% block extrajs %}
+
+    <script type="text/javascript">
+
+
+    </script>
+
+
+{% endblock extrajs %}
+

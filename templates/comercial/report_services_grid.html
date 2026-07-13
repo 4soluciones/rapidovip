@@ -1,0 +1,146 @@
+{% load app_filters %}
+<div class="rv-report-output">
+    <div class="rv-report-toolbar">
+        <div class="rv-report-toolbar-left">
+            <span class="rv-report-count">{{ count }} registro{{ count|pluralize:"s" }}</span>
+            <span class="rv-report-period">{{ f1 }} — {{ f2 }}</span>
+        </div>
+        <div class="rv-report-toolbar-right">
+            <div class="rv-report-search-inline">
+                <i class="fas fa-search"></i>
+                <input type="text" id="report-inline-search" class="rv-form-control" placeholder="Filtrar en tabla..." autocomplete="off">
+            </div>
+            <a href="{% url 'comercial:print_report_commodity' f1 f2 t w d %}" class="rv-btn rv-btn-outline rv-btn-sm" target="_blank" title="Descargar PDF">
+                <i class="fas fa-file-pdf"></i> PDF
+            </a>
+            <button type="button" class="rv-btn rv-btn-outline rv-btn-sm" id="btn-export-excel" title="Exportar Excel">
+                <i class="fas fa-file-excel"></i> Excel
+            </button>
+        </div>
+    </div>
+
+    <div class="rv-table-wrap rv-report-table-wrap">
+        <table class="rv-table rv-report-table" id="report-services-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Servicio</th>
+                    <th>Comprobante</th>
+                    <th>Remitente</th>
+                    <th>Destinatario</th>
+                    <th>Detalle</th>
+                    <th>Importe</th>
+                    <th>Destino</th>
+                    <th>Usuario</th>
+                    <th>Estado</th>
+                    <th class="noExl">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for o in order_set %}
+                <tr data-id="{{ o.id }}" class="{% if o.status == 'A' %}rv-report-row-cancelled{% elif o.type_commodity_destiny %}rv-report-row-exchange{% endif %}">
+                    <td class="rv-report-date">{{ o.traslate_date|date:"d/m/Y" }}</td>
+                    <td>
+                        <span class="rv-report-svc rv-report-svc-{{ o.service_type|lower }}">{{ o.service_type_label|title }}</span>
+                    </td>
+                    <td>
+                        <span class="rv-report-doc">{{ o.serial }}-{{ o.correlative_sale }}</span>
+                        <small class="rv-report-doc-type">{{ o.type_document_label }}</small>
+                    </td>
+                    <td>{{ o.item_action_sender.0.client_names|default:"—"|upper }}</td>
+                    <td>
+                        {% if o.type_commodity_destiny %}
+                            <span class="rv-report-tag rv-report-tag-warn">Canje</span>
+                        {% else %}
+                            {{ o.item_action_addressee.0.client_names|default:"—"|upper }}
+                        {% endif %}
+                    </td>
+                    <td class="rv-report-detail">
+                        {% if o.item_detail_order %}
+                            <span>{{ o.item_detail_order.0.description|upper }}</span>
+                            {% if not o.type_commodity_destiny %}
+                                <small>Cant. {{ o.item_detail_order.0.quantity|floatformat:0 }}</small>
+                            {% endif %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="rv-report-amount">
+                        {% if o.status != 'A' and not o.type_commodity_destiny %}
+                            <strong>S/ {{ o.total }}</strong>
+                            <small class="rv-report-pay rv-report-pay-{{ o.way_to_pay|lower }}">{{ o.way_to_pay_label|title }}</small>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ o.destiny_label|default:o.item_route_destiny.0.subsidiary|default:"—" }}</td>
+                    <td>{{ o.user|upper }}</td>
+                    <td>
+                        {% if o.status == 'A' %}
+                            <span class="rv-report-status rv-report-status-cancel">Anulado</span>
+                        {% else %}
+                            <span class="rv-report-status rv-report-status-ok">{{ o.status_label|title }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="rv-report-actions noExl">
+                        {% if o.type_document == 'F' or o.type_document == 'B' %}
+                            <a class="rv-report-action-btn" href="{% url 'comercial:print_bill_order_commodity' o.id %}" target="_blank" title="Imprimir">
+                                <i class="fas fa-print"></i>
+                            </a>
+                        {% else %}
+                            <a class="rv-report-action-btn" href="{% url 'comercial:print_ticket_order_commodity' o.id %}" target="_blank" title="Imprimir">
+                                <i class="fas fa-print"></i>
+                            </a>
+                        {% endif %}
+                        {% if user_log_perm and o.status != 'A' %}
+                            <button type="button" class="rv-report-action-btn rv-report-action-danger btn-cancel-service" data-id="{{ o.id }}" title="Anular">
+                                <i class="fas fa-ban"></i>
+                            </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script type="text/javascript">
+(function () {
+    $('#report-inline-search').on('keyup', function () {
+        var q = $(this).val().toLowerCase();
+        $('#report-services-table tbody tr').each(function () {
+            $(this).toggle($(this).text().toLowerCase().indexOf(q) > -1);
+        });
+    });
+
+    $('#btn-export-excel').on('click', function () {
+        if ($.fn.table2excel) {
+            $('#report-services-table').table2excel({
+                exclude: '.noExl',
+                name: 'Reporte de servicios',
+                filename: 'reporte_servicios',
+                fileext: '.xls',
+                preserveColors: true
+            });
+        }
+    });
+
+    $(document).off('click.reportCancel').on('click.reportCancel', '.btn-cancel-service', function () {
+        var orderId = $(this).data('id');
+        var reason = prompt('Motivo de anulación:');
+        if (!reason) return;
+        var $form = $('#report-search-form');
+        $.get('{% url "comercial:cancel_commodity" %}', {
+            pk: orderId,
+            reason: reason,
+            'start-date': $form.find('[name=start-date]').val(),
+            'end-date': $form.find('[name=end-date]').val(),
+            user: $form.find('[name=user]').val(),
+            way_to_pay: $form.find('[name=way_to_pay]').val(),
+            destiny: $form.find('[name=destiny]').val()
+        }).done(function (r) {
+            toastr.success(r.message || 'Servicio anulado correctamente.');
+            $('#report-results').html(r.grid);
+        }).fail(function (xhr) {
+            toastr.error(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error al anular.');
+        });
+    });
+})();
+</script>

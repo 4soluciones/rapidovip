@@ -1,0 +1,155 @@
+{% extends 'home.html' %}
+{% load static %}
+
+{% block title %}Detalles de Programaciones - {{ license_plate }}{% endblock %}
+
+{% block body %}
+<div class="main-panel roboto-condensed-regular">
+    <div class="content-wrapper">
+        <div class="row">
+            <div class="col-12 grid-margin stretch-card">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h4 class="card-title">
+                                Detalles de Programaciones - {{ license_plate }}
+                                <small class="text-muted">{{ search_date|date:"d/m/Y" }}</small>
+                            </h4>
+                            <a href="{% url 'comercial:get_all_programmings' %}?date={{ search_date|date:'Y-m-d' }}" 
+                               class="btn btn-secondary">
+                                <i class="mdi mdi-arrow-left"></i> Volver
+                            </a>
+                        </div>
+
+                        {% if vehicle_info %}
+                            <div class="row mb-4">
+                                <div class="col-md-6">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Información del Vehículo</h6>
+                                            <p><strong>Placa:</strong> {{ license_plate }}</p>
+                                            {% if vehicle_info.truck %}
+                                                <p><strong>Tipo:</strong> Tracto</p>
+                                                <p><strong>Marca/Modelo:</strong>
+                                                    {{ vehicle_info.truck.truck_model.truck_brand.name }} /
+                                                    {{ vehicle_info.truck.truck_model.name }}
+                                                </p>
+                                                <p><strong>Propietario:</strong> {{ vehicle_info.truck.owner.name }}</p>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Resumen</h6>
+                                            <p><strong>Total Programaciones:</strong> {{ programmings|length }}</p>
+                                            <p><strong>Fecha:</strong> {{ search_date|date:"d/m/Y" }}</p>
+                                            <p><strong>Placa:</strong> {{ license_plate }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        {% if programmings %}
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead class="thead-dark">
+                                        <tr>
+{#                                            <th>ID</th>#}
+                                            <th>Fecha Salida</th>
+                                            <th>Fecha Llegada</th>
+                                            <th>Hora de salida</th>
+                                            <th>Tipo</th>
+                                            <th>Estado</th>
+                                            <th>Sede</th>
+{#                                            <th>Peso</th>#}
+                                            <th>Precio</th>
+                                            <th>Observaciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for programming in programmings %}
+                                        <tr>
+{#                                            <td>#}
+{#                                                <span class="badge badge-secondary">#{{ programming.id }}</span>#}
+{#                                            </td>#}
+                                            <td>
+                                                {% if programming.departure_date %}
+                                                    {{ programming.departure_date|date:"d/m/Y" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                               {% if programming.departure_date %}
+                                                    {{ programming.departure_date|date:"d/m/Y" }}
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-light">{{ programming.truck_exit|date:"H:i" }}</span>
+                                            </td>
+                                            <td>
+                                                {% if programming.type == 'E' %}
+                                                    <span class="badge badge-primary">Encomienda</span>
+                                                {% elif programming.type == 'V' %}
+                                                    <span class="badge badge-info">Viajes</span>
+                                                {% else %}
+                                                    <span class="badge badge-secondary">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if programming.status == 'P' %}
+                                                    <span class="badge badge-warning">Programado</span>
+                                                {% elif programming.status == 'R' %}
+                                                    <span class="badge badge-info">En Ruta</span>
+                                                {% elif programming.status == 'F' %}
+                                                    <span class="badge badge-success">Finalizado</span>
+                                                {% elif programming.status == 'C' %}
+                                                    <span class="badge badge-danger">Cancelado</span>
+                                                {% elif programming.status == 'A' %}
+                                                    <span class="badge badge-secondary">Apoyo</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if programming.subsidiary %}
+                                                    <span class="badge badge-outline-primary">{{ programming.subsidiary.name }}</span>
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if programming.price %}
+                                                    <span class="badge badge-outline-success">S/ {{ programming.price }}</span>
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if programming.observation %}
+                                                    <small class="text-muted">{{ programming.observation|truncatechars:30 }}</small>
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-warning">
+                                <i class="mdi mdi-alert-circle-outline"></i>
+                                No se encontraron programaciones para la placa {{ license_plate }} en la fecha {{ search_date|date:"d/m/Y" }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

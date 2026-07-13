@@ -1,0 +1,82 @@
+<form id="change-destiny-form" action="" method="POST">
+    {% csrf_token %}
+
+    <input type="hidden" id="id_order" name="orden" value="{{ order_id }}">
+
+    <table class="table table-sm pay-options">
+
+            <thead>
+            <tr class="text-uppercase font-weight-lighter">
+                <th class="border-right text-center border-left align-middle">Sucursal registrada:</th>
+                <th class="border-right text-center border-left align-middle">Sucursal a cambiar:</th>
+            </tr>
+            </thead>
+            <tbody class="mb-4">
+            <tr>
+                <td class="border-top-0 border-bottom border-left border-right align-middle text-center p-0" >
+                    {{ subsidiary_origin }}
+                </td>
+
+                <td class="border-top-0 border-bottom border-right align-middle">
+
+                    <select id="id_new_destiny"
+                            name="new_destiny"
+                            class="form-control form-control-sm">
+                        <option value="0">Seleccione</option>
+                        {% for s in subsidiary_set %}
+                            <option value="{{ s.id }}">{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            </tbody>
+
+        <tfoot>
+        <tr class="border-0">
+            <td colspan="2" class="border-0 pr-2 text-right pt-3 pb-0">
+                <button type="submit" id="btn-save" class="btn btn-primary"> Guardar</button>
+            </td>
+        </tr>
+        </tfoot>
+    </table>
+
+</form>
+
+<script type="text/javascript">
+
+    $('#change-destiny-form').submit(function (event) {
+        event.preventDefault();
+        let data = new FormData($('#change-destiny-form').get(0));
+
+        let order_id = $("#id_order").val();
+        $('#btn-save').attr("disabled", "true");
+
+        $.ajax({
+            url: '/comercial/change_destiny/',
+            type: "POST",
+            data: data,
+            cache: false,
+            processData: false,
+            contentType: false,
+            success: function (response, textStatus, xhr) {
+                if (xhr.status === 200) {
+                    // $('#product-detail-grid').html(response.grid);
+                    $('#modal-changedestiny').modal('hide');
+                    console.log(response.destiny)
+                    $('td.destiny[pk="'+ order_id +'"]').html(response.destiny)
+                    {#$('#table-order').html(response['grid']);#}
+                    toastr.success(response['message'], '¡Bien hecho!');
+                }
+            },
+            error: function (jqXhr, textStatus, xhr) {
+                if (jqXhr.status === 500) {
+                    toastr.error(jqXhr.responseJSON.error, '¡Inconcebible!');
+                }
+            }
+        });
+        $('#btn-save').removeAttr("disabled", "false");
+
+    });
+
+</script>
+

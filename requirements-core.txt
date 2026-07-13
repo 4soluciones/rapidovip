@@ -1,0 +1,15 @@
+# NALU - Dependencias principales
+# Instalar: pip install -r requirements-core.txt
+
+Django>=3.2,<5
+psycopg2-binary>=2.9
+Pillow>=9.0
+django-imagekit>=5.0
+django-import-export>=3.0
+graphene-django>=3.0
+django-graphql-jwt>=0.4
+reportlab>=4.0
+requests>=2.28
+pandas>=2.0
+pdfkit>=1.0
+openpyxl>=3.1

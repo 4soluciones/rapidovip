@@ -1,0 +1,240 @@
+{% extends 'home.html' %}
+{% block title %}Caja y gastos{% endblock %}
+
+{% block body %}
+<div class="rv-page">
+    <div class="rv-page-header">
+        <div>
+            <h1><i class="fas fa-cash-register"></i> Caja y gastos</h1>
+            <p class="rv-page-subtitle">Aperturas, ingresos, gastos y cierres en un solo registro</p>
+        </div>
+        <div class="rv-page-actions">
+            <button type="button" class="rv-btn rv-btn-outline btn-new-cash">
+                <i class="fas fa-plus"></i> Nueva caja
+            </button>
+            <button type="button" class="rv-btn rv-btn-outline btn-open-cash">
+                <i class="fas fa-door-open"></i> Aperturar
+            </button>
+            <button type="button" class="rv-btn rv-btn-success" id="btn_expense">
+                <i class="fas fa-receipt"></i> Registrar gasto
+            </button>
+        </div>
+    </div>
+
+    <div class="rv-form-section rv-finance-toolbar">
+        <form class="rv-filter-bar" id="search-form" method="POST">
+            {% csrf_token %}
+            <div class="rv-form-grid rv-form-grid-4">
+                <div class="rv-form-group rv-form-group-required">
+                    <label for="id-cash">Caja</label>
+                    <select class="rv-form-control" id="id-cash" name="cash" required>
+                        {% for c in only_cash_set %}
+                            <option value="{{ c.pk }}">{{ c.name }}</option>
+                        {% empty %}
+                            <option value="" disabled selected>Sin cajas registradas</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="rv-form-group">
+                    <label for="id-start-date">Fecha</label>
+                    <input type="date" class="rv-form-control" id="id-start-date" name="start-date" value="{{ formatdate }}">
+                </div>
+                <div class="rv-form-group">
+                    <label for="id-user">Usuario</label>
+                    <select class="rv-form-control" id="id-user" name="user" required>
+                        <option value="1">Todos</option>
+                        <option value="2">Solo mi usuario</option>
+                    </select>
+                </div>
+                <div class="rv-form-group rv-form-group-action">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="rv-btn rv-btn-search" id="btn-search">
+                        <i class="fas fa-search"></i> Buscar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="rv-form-section rv-cash-movements-panel">
+        <div id="account-grid-list">
+            <div class="rv-cash-empty rv-cash-empty-initial">
+                <i class="fas fa-search"></i>
+                <p>Seleccione caja y fecha para ver los movimientos</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-cash" tabindex="-1" aria-hidden="true"></div>
+<div class="modal fade" id="modal-expense" tabindex="-1" aria-hidden="true" data-backdrop="static"></div>
+<div class="modal fade" id="modal-open-cash" tabindex="-1" aria-hidden="true">
+    {% include "accounting/cash_open_modal_form.html" %}
+</div>
+{% endblock %}
+
+{% block extrajs %}
+<script type="text/javascript">
+    function openCashModal() {
+        $.get('{% url "accounting:get_cash_form" %}', function (response) {
+            if (response.success) {
+                $('#modal-cash').html(response.grid);
+                $('#modal-cash').modal('show');
+            }
+        });
+    }
+
+    function openExpenseModal() {
+        var cashId = $('#id-cash').val();
+        if (!cashId) {
+            toastr.warning('Seleccione o cree una caja primero');
+            return;
+        }
+        $.get('{% url "accounting:modal_expense" %}', { cash_id: cashId }, function (response) {
+            if (response.success) {
+                $('#modal-expense').html(response.grid);
+                $('#modal-expense').modal('show');
+            }
+        });
+    }
+
+    function reloadCashGrid(response) {
+        if (response.grid) {
+            $('#account-grid-list').html(response.grid);
+        }
+    }
+
+    $('.btn-new-cash').on('click', openCashModal);
+    $('#btn_expense').on('click', openExpenseModal);
+
+    $('.btn-open-cash').on('click', function () {
+        var selectedCash = $('#id-cash').val();
+        if (selectedCash) {
+            $('#id-select-cash').val(selectedCash);
+            $('#id-select-cash').trigger('change');
+        }
+        $('#modal-open-cash').modal('show');
+    });
+
+    $(document).on('submit', '#cash-modal-form', function (e) {
+        e.preventDefault();
+        var data = new FormData(this);
+        $('#btn-save-cash').prop('disabled', true);
+        $.ajax({
+            url: '{% url "accounting:new_entity" %}',
+            type: 'POST',
+            data: data,
+            cache: false,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                $('#btn-save-cash').prop('disabled', false);
+                toastr.success(response.message);
+                $('#modal-cash').modal('hide');
+                if (response.cash_id) {
+                    var exists = $('#id-cash option[value="' + response.cash_id + '"]').length;
+                    if (!exists) {
+                        $('#id-cash, #id-select-cash').append(
+                            '<option value="' + response.cash_id + '">' + response.cash_name + '</option>'
+                        );
+                    }
+                    $('#id-cash, #id-select-cash').val(response.cash_id);
+                }
+            },
+            error: function (jqXhr) {
+                $('#btn-save-cash').prop('disabled', false);
+                toastr.error(jqXhr.responseJSON?.error || 'Error al registrar la caja');
+            }
+        });
+    });
+
+    $('#search-form').submit(function (event) {
+        event.preventDefault();
+        var _data = new FormData(this);
+        $('#btn-search').prop('disabled', true);
+        $.ajax({
+            url: '{% url "accounting:get_cash_control_list" %}',
+            type: 'POST',
+            data: _data,
+            cache: false,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                $('#btn-search').prop('disabled', false);
+                reloadCashGrid(response);
+                toastr.success('Movimientos actualizados');
+            },
+            error: function (jqXhr) {
+                $('#btn-search').prop('disabled', false);
+                toastr.warning(jqXhr.responseJSON?.error || 'Sin movimientos para la fecha');
+                $('#account-grid-list').html(
+                    '<div class="rv-cash-empty"><i class="fas fa-inbox"></i><p>' +
+                    (jqXhr.responseJSON?.error || 'No hay movimientos') + '</p></div>'
+                );
+            }
+        });
+    });
+
+    $('#cash-form').submit(function (event) {
+        event.preventDefault();
+        var data = new FormData(this);
+        if (!$('#cash-date').val()) {
+            toastr.warning('Seleccione una fecha');
+            return;
+        }
+        $('#btn-save').prop('disabled', true);
+        $.ajax({
+            url: '{% url "accounting:open_cash" %}',
+            type: 'POST',
+            data: data,
+            cache: false,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                $('#btn-save').prop('disabled', false);
+                $('#modal-open-cash').modal('hide');
+                toastr.success(response.message);
+                var openedCash = response.cash_id || $('#id-select-cash').val();
+                if (openedCash) {
+                    $('#id-cash').val(openedCash);
+                }
+                var openDate = response.transaction_date || $('#cash-date').val();
+                if (openDate) {
+                    $('#id-start-date').val(openDate);
+                }
+                $('#search-form').trigger('submit');
+            },
+            error: function (jqXhr) {
+                $('#btn-save').prop('disabled', false);
+                toastr.error(jqXhr.responseJSON?.error || 'Error al aperturar');
+            }
+        });
+    });
+
+    $(document).on('change', '#id-select-cash', function () {
+        var val = $(this).val();
+        if (!val) {
+            $('#cash-amount').val('');
+            return;
+        }
+        $.get('{% url "accounting:get_initial_balance" %}', { cash: val }, function (response) {
+            var balance = parseFloat(response.initial_balance);
+            $('#cash-amount').val(isNaN(balance) ? '0.00' : balance.toFixed(2));
+        }).fail(function () {
+            $('#cash-amount').val('0.00');
+        });
+    });
+
+    $(document).on('click', '.cash-update', function () {
+        var _pk = $(this).attr('pk');
+        var _date = $(this).attr('date');
+        var _status = $(this).attr('status');
+        $.get('{% url "accounting:close_cash" %}', { pk: _pk, date: _date, status: _status }, function (response) {
+            toastr.success(response.message);
+            $('#search-form').trigger('submit');
+        }).fail(function (jqXhr) {
+            toastr.error(jqXhr.responseJSON?.error || 'Error al cerrar caja');
+        });
+    });
+</script>
+{% endblock %}

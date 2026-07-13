@@ -1,0 +1,84 @@
+{% load app_filters %}
+{% if cash_flow_set %}
+<div class="rv-expense-report">
+    <div class="rv-expense-report-header">
+        <div>
+            <h2 class="rv-expense-report-title">Reporte de gastos</h2>
+            <p class="rv-expense-report-meta mb-0">
+                {% if cash_name %}<span><i class="fas fa-cash-register"></i> {{ cash_name }}</span>{% endif %}
+                {% if report_date_display %}<span><i class="fas fa-calendar-alt"></i> {{ report_date_display }}</span>{% endif %}
+                <span><i class="fas fa-list"></i> {{ cash_flow_set|length }} registro(s)</span>
+            </p>
+        </div>
+        <button type="button" id="btn_export_excel_expense" class="rv-btn rv-btn-outline">
+            <i class="fas fa-file-export"></i> Exportar Excel
+        </button>
+    </div>
+
+    <div class="rv-expense-summary">
+        <div class="rv-expense-summary-card">
+            <span class="rv-expense-summary-label">Total del día</span>
+            <strong class="rv-expense-summary-value">S/ {{ sum_total|replace_round_separator }}</strong>
+        </div>
+        <div class="rv-expense-summary-card muted">
+            <span class="rv-expense-summary-label">Registros</span>
+            <strong class="rv-expense-summary-value">{{ cash_flow_set|length }}</strong>
+        </div>
+    </div>
+
+    <div class="rv-form-section rv-table-wrap">
+        <table class="rv-table table table-hover" id="expense-data-table">
+            <thead>
+            <tr>
+                <th>Usuario</th>
+                <th>Comprobante</th>
+                <th>Nº documento</th>
+                <th>Concepto</th>
+                <th class="text-right">Total</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for c in cash_flow_set %}
+                <tr>
+                    <td>
+                        <span class="rv-expense-user">{{ c.user.username|upper }}</span>
+                    </td>
+                    <td>
+                        <span class="rv-badge rv-badge-service">{{ c.get_document_type_attached_display }}</span>
+                    </td>
+                    <td class="small text-muted">
+                        {% if c.serial or c.n_receipt %}
+                            {{ c.serial|default_if_none:'' }}{% if c.serial and c.n_receipt %} - {% endif %}{{ c.n_receipt|default_if_none:'' }}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ c.description }}</td>
+                    <td class="text-right font-weight-bold rv-expense-amount">S/ {{ c.total|replace_round_separator }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+            <tfoot>
+            <tr class="rv-expense-total-row">
+                <td colspan="4" class="text-right">Total del día</td>
+                <td class="text-right">S/ {{ sum_total|replace_round_separator }}</td>
+            </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<script type="text/javascript">
+    $('#btn_export_excel_expense').off('click').on('click', function () {
+        $('#expense-data-table').table2excel({
+            exclude: '.noExl',
+            name: 'Gastos',
+            filename: 'Reporte de Gastos',
+            fileext: '.xls',
+            preserveColors: true
+        });
+    });
+</script>
+{% else %}
+<div class="rv-form-section">
+    <p class="text-center text-muted py-5 mb-0 rv-table-empty-msg">No hay gastos para mostrar con los filtros seleccionados.</p>
+</div>
+{% endif %}

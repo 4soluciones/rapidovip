@@ -1,0 +1,126 @@
+{% extends 'home.html' %}
+
+{% load static %}
+
+{% block title %}Emisión de Encomiendas — RapidoVip{% endblock %}
+
+
+{% block body %}
+
+<div class="rv-page rv-guide-page">
+
+    <form id="new-guide-form" class="rv-guide-form" autocomplete="off"
+
+          data-url-create="{% url 'comercial:create_order' %}"
+
+          data-url-document="{% url 'comercial:get_guide_document' %}"
+
+          data-url-cash-date="{% url 'accounting:get_cash_date' %}"
+
+          data-url-address="{% url 'comercial:get_address_subsidiary_by_id' %}"
+
+          data-url-business="{% url 'comercial:get_name_business' %}"
+
+          data-url-phone="{% url 'comercial:get_phone_number_by_name_addressee' %}"
+
+          data-csrf="{{ csrf_token }}">
+
+
+
+        <input type="hidden" id="id_service_type" name="service_type" value="E">
+
+        <input type="hidden" id="id_user" name="user" value="{{ user.id }}">
+
+        <input type="hidden" id="id_traslate_date" name="traslate_date" value="{{ date }}">
+
+        <input type="hidden" id="id_cash" value="{{ open_cash_id|default:'' }}">
+
+
+
+        <div class="rv-guide-hero">
+
+            <div class="rv-guide-hero-text rv-guide-hero-text--center">
+
+                <h1>Emisión de encomiendas</h1>
+                <p>Registre encomiendas de forma rápida y segura</p>
+
+            </div>
+
+            <div class="rv-guide-hero-actions">
+
+                <div class="rv-guide-cash-status" id="guide-cash-status">
+
+                    <span class="rv-guide-cash-dot"></span>
+
+                    <span id="guide-cash-label">Verificando...</span>
+
+                </div>
+
+                {# Cada servicio maneja su propio botón Guardar #}
+
+            </div>
+
+        </div>
+
+
+
+        <div class="rv-guide-doc-bar">
+
+            <div class="rv-guide-doc-field">
+
+                <label for="id_serie">Serie</label>
+
+                <input type="text" class="rv-form-control text-center rv-guide-doc-locked" id="id_serie" readonly value="{{ service_docs.E.T.serial }}">
+
+            </div>
+
+            <div class="rv-guide-doc-field">
+
+                <label for="id_correlative">Correlativo</label>
+
+                <input type="text" class="rv-form-control text-center rv-guide-doc-locked" id="id_correlative" readonly value="{{ service_docs.E.T.correlative }}">
+
+            </div>
+
+        </div>
+
+
+
+        <div class="rv-guide-main">
+            {% include 'comercial/guide_service_encomiendas.html' %}
+        </div>
+
+    </form>
+
+
+
+    <div class="rv-guide-loading" id="guide-loading" style="display:none">
+
+        <div class="rv-guide-loading-inner"><i class="fas fa-spinner fa-spin"></i> Guardando...</div>
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+
+
+{% block extrajs %}
+
+<script src="{% static 'js/guide_services.js' %}"></script>
+
+<script type="text/javascript">
+
+    GuideServices.init({
+
+        serviceDocs: {{ service_docs_json|safe }},
+
+        defaultService: '{{ service_type|default:"E" }}'
+
+    });
+
+</script>
+
+{% endblock %}
+

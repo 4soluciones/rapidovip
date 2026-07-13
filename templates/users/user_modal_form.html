@@ -1,0 +1,88 @@
+<div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content rv-modal">
+        <div class="modal-header">
+            <div>
+                <h5 class="modal-title"><i class="fas fa-user-plus"></i> Nuevo usuario</h5>
+                <p class="rv-modal-subtitle mb-0">Registre un usuario con acceso al sistema</p>
+            </div>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+
+        {% if not can_create %}
+        <div class="modal-body">
+            <div class="rv-alert-box">
+                <i class="fas fa-exclamation-triangle"></i>
+                {% if not has_companies %}
+                    Primero debe <a href="{% url 'users:company_list' %}">registrar al menos una empresa</a>.
+                {% elif not has_subsidiaries %}
+                    Primero debe <a href="{% url 'users:subsidiary_list' %}">crear al menos una sede</a>.
+                {% endif %}
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cerrar</button>
+        </div>
+        {% else %}
+        <form id="user-modal-form">
+            {% csrf_token %}
+            <div class="modal-body">
+                <h6 class="rv-section-label">Datos de acceso</h6>
+                <div class="rv-form-grid">
+                    <div class="rv-form-group">
+                        <label>Usuario</label>
+                        {{ form.username }}
+                    </div>
+                    <div class="rv-form-group">
+                        <label>Correo electrónico</label>
+                        {{ form.email }}
+                    </div>
+                    <div class="rv-form-group">
+                        <label>Contraseña</label>
+                        {{ form.password }}
+                    </div>
+                    <div class="rv-form-group">
+                        <label>Confirmar contraseña</label>
+                        {{ form.password_confirm }}
+                    </div>
+                </div>
+
+                <h6 class="rv-section-label mt-3">Datos personales</h6>
+                <div class="rv-form-grid">
+                    <div class="rv-form-group rv-form-group-full">
+                        <label>Nombre completo</label>
+                        {{ form.full_name }}
+                    </div>
+                    <div class="rv-form-group">
+                        <label>Teléfono</label>
+                        {{ form.phone }}
+                    </div>
+                </div>
+
+                <h6 class="rv-section-label mt-3">Asignación</h6>
+                <div class="rv-form-grid">
+                    <div class="rv-form-group">
+                        <label>Sede</label>
+                        {{ form.subsidiary }}
+                    </div>
+                    <div class="rv-form-group">
+                        <label>Empresa</label>
+                        {{ form.company }}
+                    </div>
+                    <div class="rv-form-group">
+                        <label>Rol en sede</label>
+                        {{ form.rol }}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
+                <button type="submit" class="rv-btn rv-btn-success">
+                    <i class="fas fa-save"></i> Guardar usuario
+                </button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+</div>

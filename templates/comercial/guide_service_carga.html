@@ -1,0 +1,162 @@
+<div class="rv-guide-service rv-guide-service-c">
+    <div class="rv-guide-e-top rv-guide-e-top--balanced">
+        <div class="rv-guide-card rv-guide-e-doc">
+            <div class="rv-guide-card-head"><i class="fas fa-building"></i><span>Cliente</span></div>
+            <div class="rv-guide-s-route-fields">
+                <div class="rv-form-group rv-form-group-required">
+                    <label for="c_client_ruc">RUC</label>
+                    <div class="rv-input-group rv-doc-search-group" id="c_ruc_doc_group">
+                        <div class="rv-doc-search-field">
+                            <input type="text" id="c_client_ruc" class="rv-form-control" maxlength="11" placeholder="11 dígitos">
+                        </div>
+                        <button type="button" class="rv-btn rv-btn-outline rv-btn-sm rv-doc-search-btn" id="c_btn_search_ruc" title="Buscar RUC">
+                            <i class="fas fa-search rv-doc-search-btn-icon"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="rv-form-group rv-form-group-required rv-guide-s-field-full">
+                    <label for="c_client_name">Razón social</label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-briefcase rv-e-input-icon"></i>
+                        <input type="text" id="c_client_name" class="rv-form-control rv-e-input-pad text-uppercase">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="rv-guide-card rv-guide-e-route">
+            <div class="rv-guide-card-head"><i class="fas fa-exchange-alt"></i><span>Origen y destino</span></div>
+            <div class="rv-guide-s-route-panels">
+                <section class="rv-guide-s-route-panel rv-guide-s-route-panel-origin">
+                    <h6 class="rv-guide-s-route-panel-title"><i class="fas fa-arrow-circle-up"></i> Origen</h6>
+                    <div class="rv-guide-s-route-fields">
+                        <div class="rv-form-group rv-form-group-required rv-guide-s-field-full">
+                            <label for="c_origin_address">Dirección</label>
+                            <input type="text" id="c_origin_address" class="rv-form-control text-uppercase">
+                        </div>
+                        <div class="rv-form-group">
+                            <label for="c_origin_contact">Contacto</label>
+                            <input type="text" id="c_origin_contact" class="rv-form-control text-uppercase">
+                        </div>
+                        <div class="rv-form-group">
+                            <label for="c_origin_phone">Teléfono</label>
+                            <input type="text" id="c_origin_phone" class="rv-form-control" maxlength="9">
+                        </div>
+                    </div>
+                </section>
+                <section class="rv-guide-s-route-panel rv-guide-s-route-panel-dest">
+                    <h6 class="rv-guide-s-route-panel-title"><i class="fas fa-arrow-circle-down"></i> Destino</h6>
+                    <div class="rv-guide-s-route-fields">
+                        <div class="rv-form-group rv-form-group-required rv-guide-s-field-full">
+                            <label for="c_dest_address">Dirección</label>
+                            <input type="text" id="c_dest_address" class="rv-form-control text-uppercase">
+                        </div>
+                        <div class="rv-form-group">
+                            <label for="c_dest_contact">Contacto</label>
+                            <input type="text" id="c_dest_contact" class="rv-form-control text-uppercase">
+                        </div>
+                        <div class="rv-form-group">
+                            <label for="c_dest_phone">Teléfono</label>
+                            <input type="text" id="c_dest_phone" class="rv-form-control" maxlength="9">
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <div class="rv-guide-card rv-guide-card-full rv-guide-e-detail">
+        <div class="rv-guide-card-head">
+            <span><i class="fas fa-truck-loading"></i> Mercancía</span>
+            <span class="rv-guide-e-detail-count" id="c_detail_count">0 ítems</span>
+        </div>
+
+        <div class="rv-guide-e-detail-compose rv-guide-e-detail-compose--cargo">
+            <div class="rv-form-group rv-guide-e-detail-qty">
+                <label for="c_cargo_qty">Cant.</label>
+                <input type="number" id="c_cargo_qty" class="rv-form-control text-center" min="1" value="1">
+            </div>
+            <div class="rv-form-group rv-guide-e-detail-desc">
+                <label for="c_cargo_type">Tipo de carga</label>
+                <div class="rv-e-input-wrap">
+                    <i class="fas fa-pallet rv-e-input-icon"></i>
+                    <input type="text" id="c_cargo_type" class="rv-form-control rv-e-input-pad text-uppercase" placeholder="Ej. PALLETS, SACOS, MAQUINARIA">
+                </div>
+            </div>
+            <div class="rv-form-group rv-guide-e-detail-price">
+                <label for="c_cargo_price">Precio (S/)</label>
+                <div class="rv-e-input-wrap">
+                    <span class="rv-e-input-prefix">S/</span>
+                    <input type="number" id="c_cargo_price" class="rv-form-control rv-e-input-prefix-pad" min="0" step="0.01" placeholder="0.00">
+                </div>
+            </div>
+            <div class="rv-form-group rv-guide-e-detail-add">
+                <label>&nbsp;</label>
+                <button type="button" class="rv-btn rv-btn-success" id="c_add_cargo">
+                    <i class="fas fa-plus"></i> Agregar
+                </button>
+            </div>
+        </div>
+
+        <div class="rv-guide-e-detail-body">
+            <div class="rv-guide-e-detail-list-head rv-guide-e-detail-list-head--cargo">
+                <span>Cant.</span>
+                <span>Tipo</span>
+                <span class="text-right">Precio</span>
+                <span></span>
+            </div>
+            <div class="rv-guide-e-detail-list" id="c_cargo_body"></div>
+            <div class="rv-guide-e-detail-empty" id="c_cargo_empty">
+                <i class="fas fa-truck-loading"></i>
+                <p>Agregue la mercancía a transportar</p>
+            </div>
+        </div>
+
+        <div class="rv-guide-e-detail-summary">
+            <div class="rv-guide-e-summary-item">
+                <span>Subtotal mercancía</span>
+                <strong>S/ <span class="c-cargo-total">0.00</span></strong>
+            </div>
+            <div class="rv-guide-e-summary-item rv-guide-e-summary-total">
+                <span>Tarifa total</span>
+                <strong>S/ <span id="c_fare_display">0.00</span></strong>
+            </div>
+        </div>
+    </div>
+
+    <div class="rv-guide-card rv-guide-e-doc">
+        <div class="rv-guide-card-head"><i class="fas fa-credit-card"></i><span>Pago</span></div>
+        <div class="rv-guide-e-doc-fields">
+            <div class="rv-form-group rv-form-group-required">
+                <label for="c_fare_amount">Tarifa total (S/)</label>
+                <div class="rv-e-input-wrap">
+                    <span class="rv-e-input-prefix">S/</span>
+                    <input type="number" id="c_fare_amount" class="rv-form-control rv-e-input-prefix-pad" min="0.01" step="0.01" placeholder="0.00">
+                </div>
+            </div>
+            <div class="rv-form-group">
+                <label for="c_payment_method">Método de pago</label>
+                <select id="c_payment_method" class="rv-form-control">
+                    <option value="E">Efectivo</option>
+                    <option value="T">Tarjeta</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="rv-guide-e-footer rv-guide-service-footer">
+        <div class="rv-guide-e-footer-left rv-guide-service-footer-left">
+            <button type="button" class="rv-btn rv-btn-outline rv-guide-e-btn-clear" id="c_btn_clear">
+                <i class="fas fa-eraser"></i> Limpiar
+            </button>
+            <button type="button" class="rv-btn rv-btn-outline rv-guide-e-btn-cancel rv-guide-btn-cancel">
+                <i class="fas fa-times"></i> Cancelar
+            </button>
+        </div>
+        <div class="rv-guide-e-footer-right rv-guide-service-footer-right">
+            <button type="submit" class="rv-btn rv-btn-primary rv-guide-e-btn-save" id="c_btn_save_carga">
+                <i class="fas fa-save"></i> Guardar carga
+            </button>
+        </div>
+    </div>
+</div>

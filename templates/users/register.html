@@ -1,0 +1,73 @@
+{% extends 'home.html' %}
+{% load static %}
+
+{% block title %}RapidoVip — Registro{% endblock %}
+
+{% block body %}
+<div class="rv-dashboard" style="max-width:600px;">
+    <div class="rv-card">
+        <div class="rv-card-header"><i class="fas fa-user-plus mr-2"></i> Crear cuenta</div>
+        <div class="rv-card-body">
+            <form method="post">
+                {% csrf_token %}
+                {% if form.errors %}
+                    <div class="rv-alert mb-3">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}<div>{{ error }}</div>{% endfor %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="form-group">
+                    <label>Usuario</label>
+                    {{ form.username }}
+                </div>
+                <div class="row">
+                    <div class="col-md-6 form-group">
+                        <label>Nombres</label>
+                        {{ form.first_name }}
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label>Apellidos</label>
+                        {{ form.last_name }}
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Nombre completo</label>
+                    {{ form.full_name }}
+                </div>
+                <div class="form-group">
+                    <label>Correo</label>
+                    {{ form.email }}
+                </div>
+                <div class="form-group">
+                    <label>Teléfono</label>
+                    {{ form.phone }}
+                </div>
+                <div class="row">
+                    <div class="col-md-6 form-group">
+                        <label>Sede</label>
+                        {{ form.subsidiary }}
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label>Empresa</label>
+                        {{ form.company }}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 form-group">
+                        <label>Contraseña</label>
+                        {{ form.password }}
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label>Confirmar</label>
+                        {{ form.password_confirm }}
+                    </div>
+                </div>
+                <button type="submit" class="rv-btn rv-btn-search text-white w-100 mt-2">Registrarse</button>
+                <p class="text-center mt-3 mb-0"><a href="{% url 'login' %}">¿Ya tiene cuenta? Iniciar sesión</a></p>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

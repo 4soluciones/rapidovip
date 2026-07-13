@@ -1,0 +1,87 @@
+{% extends 'home.html' %}
+{% load static %}
+
+{% block title %}RapidoVip — Panel de control{% endblock %}
+
+{% block body %}
+<div class="rv-dashboard">
+    <header class="rv-dashboard-hero">
+        <div class="rv-dashboard-hero-logo-wrap">
+            <img
+                src="{% static 'assets/rapidovip_logo.png' %}"
+                alt="{% if company_rotation %}{{ company_rotation.business_name }}{% else %}RapidoVip{% endif %}"
+                class="rv-dashboard-hero-logo"
+            >
+        </div>
+        <div class="rv-dashboard-hero-text">
+            <p class="rv-dashboard-hero-greeting">Hola,</p>
+            <h1 class="rv-dashboard-hero-name">{{ user_display_name }}</h1>
+            <p class="rv-dashboard-hero-meta">
+                {% if subsidiary %}{{ subsidiary.name }}{% elif user_subsidiary_name %}{{ user_subsidiary_name }}{% endif %}
+                {% if company_rotation %}
+                    <span class="rv-dashboard-hero-company">{{ company_rotation.business_name }}</span>
+                {% endif %}
+            </p>
+            <p class="rv-dashboard-hero-tagline">Plataforma integral de gestión de transporte y logística</p>
+        </div>
+    </header>
+
+    <section class="rv-dashboard-panel">
+        <div class="rv-dashboard-panel-head">
+            <div>
+                <h2>Operaciones del día</h2>
+                <p>Acceda rápidamente a emisión de servicios y control operativo</p>
+            </div>
+        </div>
+
+        <div class="rv-dashboard-actions">
+            <a href="{% url 'comercial:new_guide' %}?service_type=E" class="rv-dashboard-action rv-dashboard-action-e">
+                <span class="rv-dashboard-action-icon"><i class="fas fa-box"></i></span>
+                <span class="rv-dashboard-action-title">Encomiendas</span>
+                <span class="rv-dashboard-action-desc">Registrar envíos y órdenes</span>
+            </a>
+            <a href="{% url 'comercial:guide_assignment' %}" class="rv-dashboard-action rv-dashboard-action-g">
+                <span class="rv-dashboard-action-icon"><i class="fas fa-file-invoice"></i></span>
+                <span class="rv-dashboard-action-title">Guías de remisión</span>
+                <span class="rv-dashboard-action-desc">Asignar y emitir GRE / GRT</span>
+            </a>
+            <a href="{% url 'comercial:programming_list' %}" class="rv-dashboard-action rv-dashboard-action-p">
+                <span class="rv-dashboard-action-icon"><i class="fas fa-route"></i></span>
+                <span class="rv-dashboard-action-title">Programación</span>
+                <span class="rv-dashboard-action-desc">Rutas y salidas de unidades</span>
+            </a>
+            {% if can_see_reports %}
+            <a href="{% url 'comercial:report_comodity_grid' %}" class="rv-dashboard-action rv-dashboard-action-r">
+                <span class="rv-dashboard-action-icon"><i class="fas fa-chart-bar"></i></span>
+                <span class="rv-dashboard-action-title">Reporte de servicios</span>
+                <span class="rv-dashboard-action-desc">Consultar operaciones</span>
+            </a>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="rv-dashboard-info">
+        <div class="rv-dashboard-info-card">
+            <i class="fas fa-map-marked-alt"></i>
+            <div>
+                <h3>Cobertura nacional</h3>
+                <p>Gestione encomiendas y guías de remisión desde una sola plataforma.</p>
+            </div>
+        </div>
+        <div class="rv-dashboard-info-card">
+            <i class="fas fa-shield-alt"></i>
+            <div>
+                <h3>Control operativo</h3>
+                <p>Seguimiento de órdenes, programación de flota y guías transportista.</p>
+            </div>
+        </div>
+        <div class="rv-dashboard-info-card">
+            <i class="fas fa-headset"></i>
+            <div>
+                <h3>Atención eficiente</h3>
+                <p>Emisión ágil de tickets y guías para una operación confiable y ordenada.</p>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}

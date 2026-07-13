@@ -1,0 +1,61 @@
+<div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" role="document">
+    <div class="modal-content rv-modal rv-subsidiary-modal">
+        <div class="modal-header">
+            <div class="rv-subsidiary-modal-header">
+                <span class="rv-subsidiary-modal-icon" aria-hidden="true"><i class="fas fa-building"></i></span>
+                <div>
+                    <h5 class="modal-title">Nueva sede</h5>
+                    <p class="rv-modal-subtitle mb-0">Registre la sede y configure las series por servicio</p>
+                </div>
+            </div>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+
+        <form id="subsidiary-modal-form">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="rv-modal-hint">
+                    <i class="fas fa-info-circle"></i>
+                    Complete los datos de la sede y asigne las series iniciales. Los correlativos comienzan en cero.
+                </div>
+
+                <div class="rv-subsidiary-modal-sections">
+                    <section class="rv-subsidiary-modal-block">
+                        <h6 class="rv-subsidiary-modal-block-title">
+                            <i class="fas fa-map-marker-alt"></i> Datos de la sede
+                        </h6>
+                        <div class="rv-form-grid rv-subsidiary-data-grid">
+                            {% for field in form %}
+                            <div class="rv-form-group {% if field.name == 'address' %}rv-form-group-full{% endif %}">
+                                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <section class="rv-subsidiary-modal-block">
+                        <h6 class="rv-subsidiary-modal-block-title">
+                            <i class="fas fa-hashtag"></i> Empresa y series
+                        </h6>
+                        <div class="rv-form-group rv-subsidiary-company-field">
+                            <label for="{{ series_form.company.id_for_label }}">{{ series_form.company.label }}</label>
+                            {{ series_form.company }}
+                            <span class="rv-field-hint">Las series quedarán asociadas a esta empresa en la sede.</span>
+                        </div>
+                        {% include "users/subsidiary_modal_serials_fields.html" with series_form=series_form %}
+                    </section>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
+                <button type="submit" class="rv-btn rv-btn-success">
+                    <i class="fas fa-save"></i> Guardar sede
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,74 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>RapidoVip — Acceso</title>
+    <link href="{% static 'vendor/font-awesome-5/all.css' %}" rel="stylesheet">
+    <link href="{% static 'css/rapidovip.css' %}" rel="stylesheet">
+    <link rel="shortcut icon" type="image/png" href="{% static 'assets/rapidovip_logo.png' %}">
+</head>
+<body class="rv-body rv-auth-body">
+    <div class="rv-auth">
+        <section class="rv-auth-stage">
+            <div class="rv-auth-stage-overlay"></div>
+            <div class="rv-auth-stage-grid"></div>
+            <div class="rv-auth-stage-content">
+                <img src="{% static 'assets/rapidovip_logo.png' %}" alt="" class="rv-auth-logo">
+                <p class="rv-auth-brand">RapidoVip</p>
+                <h2 class="rv-auth-headline">Encomiendas con precisión operativa</h2>
+                <p class="rv-auth-copy">
+                    Emisión, programación y guías de remisión en un flujo claro para su flota.
+                </p>
+                <ul class="rv-auth-points">
+                    <li><i class="fas fa-box-open"></i> Órdenes de encomienda</li>
+                    <li><i class="fas fa-truck"></i> Programación de unidades</li>
+                    <li><i class="fas fa-file-alt"></i> Guías remitente y transportista</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="rv-auth-panel">
+            <form class="rv-auth-card" action="" method="post" novalidate>
+                {% csrf_token %}
+                <p class="rv-auth-kicker">Acceso seguro</p>
+                <h1>Bienvenido</h1>
+                <p class="rv-auth-lead">Ingrese con su usuario de sede para continuar.</p>
+
+                {% if form.errors %}
+                <div class="rv-auth-alert" role="alert">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>
+                        {% for error in form.non_field_errors %}{{ error }}{% empty %}
+                        Usuario o contraseña incorrectos.
+                        {% endfor %}
+                    </span>
+                </div>
+                {% endif %}
+
+                <label class="rv-auth-label" for="id_username">Usuario</label>
+                <div class="rv-auth-field">
+                    <i class="fas fa-user"></i>
+                    {{ form.username }}
+                </div>
+
+                <label class="rv-auth-label" for="id_password">Contraseña</label>
+                <div class="rv-auth-field">
+                    <i class="fas fa-lock"></i>
+                    {{ form.password }}
+                </div>
+
+                <button class="rv-auth-submit" type="submit">
+                    <span>Iniciar sesión</span>
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+
+                <p class="rv-auth-foot">
+                    Desarrollado por <a href="http://4soluciones.net/" target="_blank" rel="noopener">4soluciones S.A.C.</a>
+                </p>
+            </form>
+        </section>
+    </div>
+</body>
+</html>

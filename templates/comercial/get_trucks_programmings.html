@@ -1,0 +1,90 @@
+{% extends 'home.html' %}
+{% load static %}
+
+{% block title %}Programaciones por Placa{% endblock %}
+
+{% block body %}
+<div class="main-panel roboto-condensed-regular">
+    <div class="content-wrapper">
+        <div class="row">
+            <div class="col-12 grid-margin stretch-card">
+                <div class="card">
+                    <div class="card-body">
+                        <h4 class="card-title">Programaciones por Placa - {{ search_date|date:"d/m/Y" }}</h4>
+                        
+                        <!-- Filtro de fecha -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <form method="GET" class="form-inline">
+                                    <div class="form-group">
+                                        <label for="date" class="mr-2">Fecha:</label>
+                                        <input type="date" class="form-control" id="date" name="date" 
+                                               value="{{ search_date|date:'Y-m-d' }}" onchange="this.form.submit()">
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        {% if trucks_programmings %}
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Placa</th>
+                                            <th>Tipo</th>
+                                            <th>Total Viajes</th>
+                                            <th>Estado</th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for license_plate, data in trucks_programmings.items %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ license_plate }}</strong>
+                                            </td>
+                                            <td>
+                                                Minivan
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-primary">{{ data.programmings|length }}</span>
+                                            </td>
+                                            <td>
+                                                {% for programming in data.programmings %}
+                                                    {% if programming.status == 'P' %}
+                                                        <span class="badge badge-warning">Programado</span>
+                                                    {% elif programming.status == 'R' %}
+                                                        <span class="badge badge-info">En Ruta</span>
+                                                    {% elif programming.status == 'F' %}
+                                                        <span class="badge badge-success">Finalizado</span>
+                                                    {% elif programming.status == 'C' %}
+                                                        <span class="badge badge-danger">Cancelado</span>
+                                                    {% elif programming.status == 'A' %}
+                                                        <span class="badge badge-secondary">Apoyo</span>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </td>
+                                            <td>
+                                                <a href="{% url 'comercial:get_trucks_programming_grid' %}?date={{ search_date|date:'Y-m-d' }}&plate={{ license_plate }}"
+                                                   class="btn btn-sm btn-primary">
+                                                    <i class="mdi mdi-eye"></i> Ver Detalles
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-info">
+                                <i class="mdi mdi-information-outline"></i>
+                                No se encontraron programaciones para la fecha {{ search_date|date:"d/m/Y" }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

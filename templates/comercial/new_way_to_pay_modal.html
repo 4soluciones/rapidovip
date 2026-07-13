@@ -1,0 +1,81 @@
+<form id="change-way-to-pay-form" action="" method="POST">
+    {% csrf_token %}
+
+    <input type="hidden" id="id_order" name="orden" value="{{ order_id }}">
+
+    <table class="table table-sm pay-options">
+
+        <thead>
+        <tr class="text-uppercase font-weight-lighter">
+            <th class="border-right text-center border-left align-middle">Seleccione método de pago:</th>
+        </tr>
+        </thead>
+        <tbody class="mb-4">
+        <tr>
+            <td class="border-top-0 border-bottom border-right align-middle">
+                <select id="id_way_to_pay" name="way_to_pay" class="form-control">
+                    {% for item in choices_type_payments %}
+                        <option value="{{ item.0 }}">{{ item.1 }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+        </tr>
+        </tbody>
+
+        <tfoot>
+        <tr class="border-0">
+            <td colspan="2" class="border-0 pr-2 text-right pt-3 pb-0">
+                <button type="submit" id="btn-save" class="btn btn-primary"> Guardar</button>
+            </td>
+        </tr>
+        </tfoot>
+    </table>
+
+</form>
+
+<script type="text/javascript">
+
+    $('#change-way-to-pay-form').submit(function (event) {
+        event.preventDefault();
+        let data = new FormData($('#change-way-to-pay-form').get(0));
+
+        let order_id = $("#id_order").val();
+        let way_to_pay = $("#id_way_to_pay").val();
+        $('#btn-save').attr("disabled", "true");
+
+        $.ajax({
+            url: '/comercial/change_way_to_pay/',
+            type: "POST",
+            data: data,
+            cache: false,
+            processData: false,
+            contentType: false,
+            success: function (response, textStatus, xhr) {
+                if (xhr.status === 200) {
+                    $('#modal-changetypepay').modal('hide');
+                    console.log(response.way_to_pay)
+                    console.log(response.total)
+                    if (way_to_pay === 'C') {
+                        $('td.way-to-pay[pk="' + order_id + '"][type_pay="'+ way_to_pay +'"]').html('S/ '+ response.total)
+                        $('td.way-to-pay[pk="' + order_id + '"][type_pay="'+ 'D' +'"]').html('')
+                    }
+                    else if (way_to_pay === 'D') {
+                        $('td.way-to-pay[pk="' + order_id + '"][type_pay="'+ way_to_pay +'"]').html('S/ '+ response.total)
+                        $('td.way-to-pay[pk="' + order_id + '"][type_pay="'+ 'C' +'"]').html('')
+                    }
+
+                    toastr.success(response['message'], '¡Bien hecho!');
+                }
+            },
+            error: function (jqXhr, textStatus, xhr) {
+                if (jqXhr.status === 500) {
+                    toastr.error(jqXhr.responseJSON.error, '¡Inconcebible!');
+                }
+            }
+        });
+        $('#btn-save').removeAttr("disabled", "false");
+
+    });
+
+</script>
+

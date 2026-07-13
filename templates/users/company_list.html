@@ -1,0 +1,121 @@
+{% extends 'home.html' %}
+{% block title %}RapidoVip — Empresas{% endblock %}
+
+{% block body %}
+<div class="rv-page">
+    <div class="rv-page-header">
+        <div>
+            <h1><i class="fas fa-industry"></i> Gestión de empresas</h1>
+            <p class="rv-page-subtitle">Administre las empresas de transporte del sistema</p>
+        </div>
+        <button type="button" class="rv-btn rv-btn-success" id="btn-new-company">
+            <i class="fas fa-plus"></i> Nueva empresa
+        </button>
+    </div>
+
+    <div class="rv-form-section">
+        <div class="rv-table-wrap">
+            <table class="rv-table" id="company-table">
+                <thead>
+                    <tr>
+                        <th>Razón social</th>
+                        <th>Nombre corto</th>
+                        <th>RUC</th>
+                        <th>Teléfono</th>
+                        <th>Dirección</th>
+                        <th>Estado</th>
+                        <th class="text-right">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in companies %}
+                    <tr>
+                        <td><strong>{{ c.business_name }}</strong></td>
+                        <td><span class="rv-badge rv-badge-route">{{ c.short_name }}</span></td>
+                        <td>{{ c.ruc }}</td>
+                        <td>{{ c.phone|default:"—" }}</td>
+                        <td class="small text-muted">{{ c.address|default:"—" }}</td>
+                        <td>
+                            {% if c.is_enabled %}
+                                <span class="rv-badge rv-badge-success">Activa</span>
+                            {% else %}
+                                <span class="rv-badge rv-badge-muted">Inactiva</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <button type="button"
+                                    class="rv-btn rv-btn-outline rv-btn-sm btn-edit-company"
+                                    data-company-id="{{ c.id }}">
+                                <i class="fas fa-pen"></i> Editar
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            No hay empresas registradas.
+                            <button type="button" class="btn btn-link p-0" id="btn-new-company-empty">Crear la primera</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalCompany" tabindex="-1"></div>
+{% endblock %}
+
+{% block extrajs %}
+<script>
+    function openCompanyModal() {
+        $.get('{% url "users:get_company_form" %}', function (r) {
+            if (r.success) {
+                $('#modalCompany').html(r.grid);
+                $('#modalCompany').modal('show');
+            }
+        });
+    }
+
+    function openCompanyEditModal(companyId) {
+        const urlTmpl = '{% url "users:get_company_edit_form" company_id=0 %}';
+        const url = urlTmpl.replace('/0/', `/${companyId}/`);
+        $.get(url, function (r) {
+            if (r.success) {
+                $('#modalCompany').html(r.grid);
+                $('#modalCompany').modal('show');
+            }
+        });
+    }
+
+    $('#btn-new-company, #btn-new-company-empty').on('click', openCompanyModal);
+
+    $(document).on('click', '.btn-edit-company', function () {
+        openCompanyEditModal($(this).data('company-id'));
+    });
+
+    $(document).on('submit', '#company-modal-form', function (e) {
+        e.preventDefault();
+        $.post('{% url "users:save_company" %}', $(this).serialize(), function (r) {
+            toastr.success(r.message);
+            $('#modalCompany').modal('hide');
+            setTimeout(() => location.reload(), 600);
+        }).fail(function (jq) {
+            toastr.error(jq.responseJSON?.message || 'Error al guardar');
+        });
+    });
+
+    $(document).on('submit', '#company-edit-modal-form', function (e) {
+        e.preventDefault();
+        const action = $(this).data('action');
+        $.post(action, $(this).serialize(), function (r) {
+            toastr.success(r.message);
+            $('#modalCompany').modal('hide');
+            setTimeout(() => location.reload(), 600);
+        }).fail(function (jq) {
+            toastr.error(jq.responseJSON?.message || 'Error al guardar');
+        });
+    });
+</script>
+{% endblock %}

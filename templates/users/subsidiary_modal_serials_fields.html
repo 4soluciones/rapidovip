@@ -1,0 +1,102 @@
+<div class="rv-subsidiary-serial-form-grid">
+    <section class="rv-subsidiary-serial-form-card rv-subsidiary-serial-form-card-e">
+        <header class="rv-subsidiary-serial-form-card-head">
+            <span class="rv-subsidiary-serial-form-icon"><i class="fas fa-box"></i></span>
+            <div>
+                <h6>Encomienda</h6>
+                <p>Series por tipo de comprobante</p>
+            </div>
+        </header>
+        <div class="rv-subsidiary-serial-form-fields rv-subsidiary-serial-form-fields-3">
+            <div class="rv-form-group">
+                <label for="{% if series_form %}id_serial_ticket{% else %}serial_ticket{% endif %}">
+                    <span class="rv-doc-pill rv-doc-pill-t">T</span> Ticket
+                </label>
+                {% if series_form %}
+                    {{ series_form.serial_ticket }}
+                {% else %}
+                    <input class="rv-form-control" id="serial_ticket" name="serial_ticket" maxlength="10"
+                           value="{{ serial_ticket }}" placeholder="Ej: T001" autocomplete="off">
+                {% endif %}
+            </div>
+            <div class="rv-form-group">
+                <label for="{% if series_form %}id_serial_boleta{% else %}serial_boleta{% endif %}">
+                    <span class="rv-doc-pill rv-doc-pill-b">B</span> Boleta
+                </label>
+                {% if series_form %}
+                    {{ series_form.serial_boleta }}
+                {% else %}
+                    <input class="rv-form-control" id="serial_boleta" name="serial_boleta" maxlength="10"
+                           value="{{ serial_boleta }}" placeholder="Ej: B001" autocomplete="off">
+                {% endif %}
+            </div>
+            <div class="rv-form-group">
+                <label for="{% if series_form %}id_serial_factura{% else %}serial_factura{% endif %}">
+                    <span class="rv-doc-pill rv-doc-pill-f">F</span> Factura
+                </label>
+                {% if series_form %}
+                    {{ series_form.serial_factura }}
+                {% else %}
+                    <input class="rv-form-control" id="serial_factura" name="serial_factura" maxlength="10"
+                           value="{{ serial_factura }}" placeholder="Ej: F001" autocomplete="off">
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <section class="rv-subsidiary-serial-form-card rv-subsidiary-serial-form-card-services">
+        <header class="rv-subsidiary-serial-form-card-head">
+            <span class="rv-subsidiary-serial-form-icon"><i class="fas fa-file-invoice"></i></span>
+            <div>
+                <h6>Guías y programación</h6>
+                <p>Series de remisión y programación</p>
+            </div>
+        </header>
+        <div class="rv-subsidiary-serial-form-fields rv-subsidiary-serial-form-fields-2">
+            <div class="rv-form-group">
+                <label for="{% if series_form %}id_serial_sender_guide{% else %}serial_sender_guide{% endif %}">
+                    <span class="rv-service-pill rv-service-pill-r">R</span> Guía remitente
+                </label>
+                {% if series_form %}
+                    {{ series_form.serial_sender_guide }}
+                {% else %}
+                    <input class="rv-form-control" id="serial_sender_guide" name="serial_sender_guide" maxlength="10"
+                           value="{{ serial_sender_guide }}" placeholder="Ej: GR01" autocomplete="off">
+                {% endif %}
+            </div>
+            <div class="rv-form-group">
+                <label for="{% if series_form %}id_serial_carrier_guide{% else %}serial_carrier_guide{% endif %}">
+                    <span class="rv-service-pill rv-service-pill-t">T</span> Guía transportista
+                </label>
+                {% if series_form %}
+                    {{ series_form.serial_carrier_guide }}
+                {% else %}
+                    <input class="rv-form-control" id="serial_carrier_guide" name="serial_carrier_guide" maxlength="10"
+                           value="{{ serial_carrier_guide }}" placeholder="Ej: GT01" autocomplete="off">
+                {% endif %}
+            </div>
+            <div class="rv-form-group">
+                <label for="{% if series_form %}id_serial_cargo_manifest{% else %}serial_cargo_manifest{% endif %}">
+                    <span class="rv-service-pill rv-service-pill-a">A</span> Manifiesto de carga
+                </label>
+                {% if series_form %}
+                    {{ series_form.serial_cargo_manifest }}
+                {% else %}
+                    <input class="rv-form-control" id="serial_cargo_manifest" name="serial_cargo_manifest" maxlength="10"
+                           value="{{ serial_cargo_manifest }}" placeholder="Ej: MC01" autocomplete="off">
+                {% endif %}
+            </div>
+            <div class="rv-form-group">
+                <label for="{% if series_form %}id_serial_manifiesto{% else %}serial_manifiesto{% endif %}">
+                    <span class="rv-service-pill rv-service-pill-p">P</span> Programación
+                </label>
+                {% if series_form %}
+                    {{ series_form.serial_manifiesto }}
+                {% else %}
+                    <input class="rv-form-control" id="serial_manifiesto" name="serial_manifiesto" maxlength="10"
+                           value="{{ serial_manifiesto }}" placeholder="Ej: MF01" autocomplete="off">
+                {% endif %}
+            </div>
+        </div>
+    </section>
+</div>

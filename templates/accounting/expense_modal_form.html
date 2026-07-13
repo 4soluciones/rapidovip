@@ -1,0 +1,111 @@
+<div class="modal-dialog modal-dialog-scrollable" role="document">
+    <div class="modal-content rv-modal rv-finance-modal rv-expense-modal">
+        <div class="modal-header">
+            <div class="rv-prog-modal-header-content">
+                <div class="rv-prog-modal-icon rv-expense-modal-icon" aria-hidden="true">
+                    <i class="fas fa-receipt"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title">Registrar gasto</h5>
+                    <p class="rv-modal-subtitle mb-0">
+                        {% if cash_obj %}{{ cash_obj.name }} · {{ subsidiary_obj.name|default:"Sede" }}{% else %}Gasto operativo de sede{% endif %}
+                    </p>
+                </div>
+            </div>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+
+        <form id="new-expense-form" method="POST">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="rv-expense-modal-layout">
+                    <section class="rv-expense-modal-section">
+                        <h6 class="rv-expense-modal-section-title">Datos del gasto</h6>
+                        <div class="rv-form-grid">
+                            <div class="rv-form-group rv-form-group-required">
+                                <label for="id_expense_cash">Caja</label>
+                                <select class="rv-form-control" id="id_expense_cash" name="cash" required>
+                                    {% for c in cash_set %}
+                                        <option value="{{ c.id }}" {% if cash_obj and cash_obj.id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="rv-form-group rv-form-group-required">
+                                <label for="operation-date">Fecha</label>
+                                <input type="date" class="rv-form-control" id="operation-date" name="operation_date"
+                                       value="{{ formatdate }}" required>
+                            </div>
+                            <div class="rv-form-group rv-form-group-required rv-form-group-full">
+                                <label for="id_user">Registrado por</label>
+                                <select class="rv-form-control" id="id_user" name="user" required>
+                                    {% for us in user_subsidiary_set %}
+                                        <option value="{{ us.user.id }}" {% if us.user.id == request.user.id %}selected{% endif %}>{{ us.user.username|upper }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="rv-form-group rv-form-group-required rv-form-group-full">
+                                <label for="id-description">Concepto</label>
+                                <input type="text" class="rv-form-control text-uppercase" id="id-description"
+                                       name="description" maxlength="100" placeholder="Ej. Combustible, peaje, útiles..." required>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rv-expense-modal-amount-panel">
+                        <label for="id-total" class="rv-expense-amount-label">Monto del gasto</label>
+                        <div class="rv-expense-amount-field">
+                            <span class="rv-expense-currency">S/</span>
+                            <input type="number" step="0.01" min="0.01" class="rv-expense-total-input" id="id-total"
+                                   name="total" placeholder="0.00" required autofocus>
+                        </div>
+                        <p class="rv-expense-amount-hint mb-0">Se registrará como salida en la caja del día seleccionado.</p>
+                    </section>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
+                <button type="submit" class="rv-btn rv-btn-success" id="btn-expense-save">
+                    <i class="fas fa-save"></i> Registrar gasto
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script type="text/javascript">
+    (function () {
+        $('#new-expense-form').off('submit').on('submit', function (e) {
+            e.preventDefault();
+            var data = new FormData(this);
+            $('#btn-expense-save').prop('disabled', true);
+            $.ajax({
+                url: '{% url "accounting:new_expense" %}',
+                type: 'POST',
+                data: data,
+                cache: false,
+                processData: false,
+                contentType: false,
+                success: function (response) {
+                    $('#btn-expense-save').prop('disabled', false);
+                    $('#modal-expense').modal('hide');
+                    if (typeof reloadCashGrid === 'function') {
+                        reloadCashGrid(response);
+                    } else if (response.grid) {
+                        $('#account-grid-list').html(response.grid);
+                    }
+                    if ($('#search-form').length) {
+                        $('#search-form').trigger('submit');
+                    }
+                    toastr.success(response.message);
+                },
+                error: function (jqXhr) {
+                    $('#btn-expense-save').prop('disabled', false);
+                    toastr.error(jqXhr.responseJSON?.error || 'Error al registrar el gasto');
+                }
+            });
+        });
+    })();
+</script>

@@ -1,0 +1,300 @@
+{% extends 'home.html' %}
+
+{% block title %}Unidades{% endblock %}
+
+
+
+{% block body %}
+
+<div class="rv-page">
+
+    <div class="rv-page-header">
+
+        <div>
+
+            <h1><i class="fas fa-truck"></i> Unidades</h1>
+
+            <p class="rv-page-subtitle">Flota de vehículos y capacidad de carga</p>
+
+        </div>
+
+        <button type="button" class="rv-btn rv-btn-success btn-truck-form" data-pk="">
+
+            <i class="fas fa-plus"></i> Nueva unidad
+
+        </button>
+
+    </div>
+
+
+
+    {% if trucks %}
+
+    <div class="rv-form-section">
+
+        <div class="rv-table-wrap">
+
+            <table id="truck-data-grid" class="rv-table table table-hover">
+
+                <thead>
+
+                <tr>
+
+                    <th>Placa</th>
+
+                    <th>Marca / Modelo</th>
+
+                    <th>Tipo</th>
+
+                    <th>Capacidad</th>
+
+                    <th>Estado</th>
+
+                    <th></th>
+
+                </tr>
+
+                </thead>
+
+                <tbody>
+
+                {% for truck in trucks %}
+
+                    <tr>
+
+                        <td><strong class="rv-plate">{{ truck.license_plate }}</strong></td>
+
+                        <td>
+
+                            {% if truck.truck_model %}
+
+                                {{ truck.truck_model.truck_brand.name }} / {{ truck.truck_model.name }}
+
+                            {% else %}—{% endif %}
+
+                        </td>
+
+                        <td>{{ truck.get_drive_type_display }}</td>
+
+                        <td>
+
+                            <span class="small">{{ truck.capacidad_kg|floatformat:0 }} kg</span>
+
+                            <span class="text-muted mx-1">·</span>
+
+                            <span class="small">{{ truck.capacidad_m3|floatformat:1 }} m³</span>
+
+                        </td>
+
+                        <td>
+
+                            {% if truck.is_active %}
+
+                                <span class="rv-badge rv-badge-success">Activo</span>
+
+                            {% else %}
+
+                                <span class="rv-badge rv-badge-danger">Inactivo</span>
+
+                            {% endif %}
+
+                        </td>
+
+                        <td class="text-nowrap">
+
+                            <button type="button" class="rv-btn-icon btn-truck-form" pk="{{ truck.id }}" title="Editar">
+
+                                <i class="fas fa-pen"></i>
+
+                            </button>
+
+                        </td>
+
+                    </tr>
+
+                {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+    {% else %}
+
+    <div class="rv-alert-box rv-empty-trucks">
+
+        <strong>Sin unidades registradas.</strong>
+
+        <p class="mb-2 mt-1">Agrega la primera unidad de tu flota.</p>
+
+        <button type="button" class="rv-btn rv-btn-success btn-truck-form" data-pk="">
+
+            <i class="fas fa-plus"></i> Registrar unidad
+
+        </button>
+
+    </div>
+
+    {% endif %}
+
+</div>
+
+
+
+<div class="modal fade" id="modalTruck" tabindex="-1" aria-hidden="true"></div>
+
+{% endblock %}
+
+
+
+{% block extrajs %}
+
+<script type="text/javascript">
+
+    if ($('#truck-data-grid').length) {
+
+        $('#truck-data-grid').DataTable({ language: language, order: [[0, 'asc']] });
+
+    }
+
+
+
+    function openTruckModal(pk) {
+
+        $.ajax({
+
+            url: '{% url "comercial:get_truck_form" %}',
+
+            type: 'GET',
+
+            data: { pk: pk || '' },
+
+            success: function (response) {
+
+                if (response.success) {
+
+                    $('#modalTruck').html(response.grid);
+
+                    $('#modalTruck').modal('show');
+
+                }
+
+            },
+
+            error: function () {
+
+                toastr.error('No se pudo cargar el formulario.');
+
+            }
+
+        });
+
+    }
+
+
+
+    $(document).on('click', '.btn-truck-form', function () {
+
+        openTruckModal($(this).attr('pk') || $(this).data('pk') || '');
+
+    });
+
+
+
+    $(document).on('submit', '#truck-modal-form', function (event) {
+
+        event.preventDefault();
+
+        const $form = $(this);
+
+        const plate = $('#id_license_plate').val().trim();
+
+        const driveType = $('#id_drive_type').val();
+
+
+
+        $form.find('.rv-form-group-required').removeClass('rv-field-error');
+
+        let hasError = false;
+
+        if (!plate) {
+
+            $('#id_license_plate').closest('.rv-form-group-required').addClass('rv-field-error');
+
+            hasError = true;
+
+        }
+
+        if (!driveType) {
+
+            $('#id_drive_type').closest('.rv-form-group-required').addClass('rv-field-error');
+
+            hasError = true;
+
+        }
+
+        if (hasError) {
+
+            toastr.warning('Complete los campos obligatorios marcados en rojo.');
+
+            return;
+
+        }
+
+
+
+        const data = new FormData($form.get(0));
+
+        $('#btn-save-truck').prop('disabled', true);
+
+
+
+        $.ajax({
+
+            url: $form.attr('action'),
+
+            type: 'POST',
+
+            data: data,
+
+            cache: false,
+
+            processData: false,
+
+            contentType: false,
+
+            success: function (response) {
+
+                $('#btn-save-truck').prop('disabled', false);
+
+                if (response.success) {
+
+                    toastr.success(response.message);
+
+                    $('#modalTruck').modal('hide');
+
+                    setTimeout(() => location.reload(), 700);
+
+                }
+
+            },
+
+            error: function (jqXhr) {
+
+                $('#btn-save-truck').prop('disabled', false);
+
+                toastr.error(jqXhr.responseJSON?.message || 'Error al guardar la unidad');
+
+            }
+
+        });
+
+    });
+
+</script>
+
+{% endblock %}
+

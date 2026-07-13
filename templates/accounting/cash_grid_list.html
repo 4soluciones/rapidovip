@@ -1,0 +1,129 @@
+{% load app_filters %}
+{% if cash_flow_set %}
+<div class="rv-cash-movements">
+    <div class="rv-cash-movements-header">
+        <div>
+            <h2 class="rv-cash-movements-title">Movimientos del día</h2>
+            <p class="rv-cash-movements-meta mb-0">
+                <span><i class="fas fa-cash-register"></i> {{ cash_name }}</span>
+                <span><i class="fas fa-calendar-alt"></i> {{ report_date_display }}</span>
+                <span><i class="fas fa-list"></i> {{ movement_count }} movimiento(s)</span>
+            </p>
+        </div>
+        <button type="button" id="btn_export_cash_movements" class="rv-btn rv-btn-outline rv-btn-sm">
+            <i class="fas fa-file-export"></i> Exportar
+        </button>
+    </div>
+
+    {% with first=cash_flow_set.0 %}
+    <div class="rv-cash-day-summary">
+        <div class="rv-expense-summary rv-cash-kpi-row">
+            <div class="rv-expense-summary-card muted">
+                <span class="rv-expense-summary-label">Apertura</span>
+                <strong class="rv-expense-summary-value rv-cash-status-open">S/ {{ opening_amount|floatformat:2 }}</strong>
+            </div>
+            <div class="rv-expense-summary-card muted">
+                <span class="rv-expense-summary-label">Entradas</span>
+                <strong class="rv-expense-summary-value rv-cash-status-open">S/ {{ first.return_inputs|floatformat:2 }}</strong>
+            </div>
+            <div class="rv-expense-summary-card muted">
+                <span class="rv-expense-summary-label">Salidas</span>
+                <strong class="rv-expense-summary-value rv-cash-status-closed">S/ {{ first.return_outputs|floatformat:2 }}</strong>
+            </div>
+            <div class="rv-expense-summary-card rv-cash-kpi-balance">
+                <span class="rv-expense-summary-label">Saldo</span>
+                <strong class="rv-expense-summary-value">S/ {{ first.return_balance|floatformat:2 }}</strong>
+            </div>
+        </div>
+        <div class="rv-cash-actions">
+            <button type="button"
+                    class="rv-btn {% if first.return_status %}rv-btn-outline{% else %}rv-btn-success{% endif %} rv-btn-sm cash-update"
+                    status="{% if first.return_status %}A{% else %}C{% endif %}"
+                    date="{{ first.transaction_date|date:'Y-m-d' }}"
+                    pk="{{ first.pk }}">
+                {% if first.return_status %}
+                    <i class="fas fa-door-closed"></i> Caja cerrada — Reabrir
+                {% else %}
+                    <i class="fas fa-door-open"></i> Cerrar caja
+                {% endif %}
+            </button>
+        </div>
+    </div>
+    {% endwith %}
+
+    <div class="rv-cash-table-card">
+        <table class="rv-table rv-cash-table table table-hover table-sm mb-0" id="cash-movements-table">
+            <thead>
+            <tr>
+                <th>Operación</th>
+                <th>Descripción</th>
+                <th>Referencia</th>
+                <th>Usuario</th>
+                <th class="text-right">Monto</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for c in cash_flow_set %}
+                <tr class="rv-cash-row rv-cash-row-{{ c.type|lower }}">
+                    <td>
+                        <span class="rv-cash-type-badge rv-cash-type-{{ c.type|lower }}">
+                            {% if c.type == 'A' %}<i class="fas fa-door-open"></i>
+                            {% elif c.type == 'C' %}<i class="fas fa-door-closed"></i>
+                            {% elif c.type == 'E' %}<i class="fas fa-arrow-down"></i>
+                            {% elif c.type == 'S' %}<i class="fas fa-receipt"></i>
+                            {% else %}<i class="fas fa-exchange-alt"></i>{% endif %}
+                            {{ c.get_type_display }}
+                        </span>
+                    </td>
+                    <td class="rv-cash-desc">{{ c.description|upper }}</td>
+                    <td class="rv-cash-ref small">
+                        {% if c.order %}
+                            {% if c.order.type_order == 'P' %}
+                                {{ c.order.client.names|default_if_none:"-" }}
+                            {% else %}
+                                {{ c.order.serial|default_if_none:"" }}-{{ c.order.correlative_sale|zfill:6|default_if_none:"" }}
+                            {% endif %}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td class="rv-cash-user small">
+                        {% if c.user %}
+                            {{ c.user.worker_set.last.employee.full_name|upper|default:c.user.username|upper }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td class="text-right rv-cash-amount">
+                        {% if c.type == 'S' or c.type == 'C' %}
+                            <span class="rv-amount-out">- S/ {{ c.total|floatformat:2 }}</span>
+                        {% elif c.type == 'E' %}
+                            <span class="rv-amount-in">+ S/ {{ c.total|floatformat:2 }}</span>
+                        {% else %}
+                            <span class="rv-amount-base">S/ {{ c.total|floatformat:2 }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script type="text/javascript">
+    $('#btn_export_cash_movements').off('click').on('click', function () {
+        $('#cash-movements-table').table2excel({
+            exclude: '.noExl',
+            name: 'Movimientos de caja',
+            filename: 'Movimientos de caja',
+            fileext: '.xls',
+            preserveColors: true
+        });
+    });
+</script>
+{% else %}
+<div class="rv-cash-empty">
+    <i class="fas fa-inbox"></i>
+    <p>No hay movimientos para mostrar con los filtros seleccionados.</p>
+</div>
+{% endif %}

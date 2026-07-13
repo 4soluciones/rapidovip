@@ -1,0 +1,180 @@
+{% extends 'home.html' %}
+{% block title %}Programación de viajes{% endblock %}
+
+{% block body %}
+<div class="rv-page">
+    <div class="rv-page-header">
+        <div>
+            <h1><i class="fas fa-route"></i> Programación de viajes</h1>
+            <p class="rv-page-subtitle">Consulta y gestiona los viajes programados de la flota</p>
+        </div>
+        <button type="button" class="rv-btn rv-btn-success btn-open-programming" data-pk="">
+            <i class="fas fa-plus"></i> Programar viaje
+        </button>
+    </div>
+
+    <div class="rv-form-section rv-prog-toolbar">
+        <form class="rv-filter-bar" id="search-form" method="POST">
+            {% csrf_token %}
+            <div class="rv-form-grid rv-form-grid-4">
+                <div class="rv-form-group">
+                    <label for="id-subsidiary">Sede</label>
+                    <select class="rv-form-control" id="id-subsidiary" name="subsidiary" required>
+                        {% for subsidiary in subsidiary_set %}
+                            <option value="{{ subsidiary.pk }}" {% if subsidiary.pk == subsidiary_origin.id %}selected{% endif %}>
+                                {{ subsidiary.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="rv-form-group">
+                    <label for="id-start-date">Desde</label>
+                    <input type="date" class="rv-form-control" id="id-start-date" name="start-date" value="{{ formatdate }}">
+                </div>
+                <div class="rv-form-group">
+                    <label for="id-end-date">Hasta</label>
+                    <input type="date" class="rv-form-control" id="id-end-date" name="end-date" value="{{ formatdate }}">
+                </div>
+                <div class="rv-form-group">
+                    <label for="filter-service-type">Servicio</label>
+                    <select class="rv-form-control" id="filter-service-type" name="service_type">
+                        <option value="">Todos</option>
+                        {% for code, label in service_types %}
+                            <option value="{{ code }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="rv-form-group">
+                    <label for="filter-status">Estado</label>
+                    <select class="rv-form-control" id="filter-status" name="status">
+                        <option value="">Todos</option>
+                        {% for code, label in choices_status %}
+                            <option value="{{ code }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="rv-form-group rv-form-group-action">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="rv-btn rv-btn-search" id="btn-search">
+                        <i class="fas fa-search"></i> Buscar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="rv-form-section">
+        <div id="programmings" class="rv-table-wrap">
+            {% include "comercial/programming_list.html" with show_edit=show_edit show_plan=show_plan show_lp=show_lp %}
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalProgramming" tabindex="-1" aria-hidden="true"></div>
+{% endblock %}
+
+{% block extrajs %}
+<script type="text/javascript">
+    function destroyProgrammingTable() {
+        if ($.fn.DataTable && $.fn.DataTable.isDataTable('#programming-data-grid')) {
+            $('#programming-data-grid').DataTable().destroy();
+        }
+    }
+
+    function initProgrammingTable() {
+        destroyProgrammingTable();
+        const $table = $('#programming-data-grid');
+        if (!$table.length || !$table.find('tbody tr').length) {
+            return;
+        }
+        $table.DataTable({
+            order: [[5, 'desc']],
+            language: language,
+            pageLength: 15,
+            autoWidth: false,
+        });
+    }
+    initProgrammingTable();
+
+    function reloadProgrammingGrid(html) {
+        destroyProgrammingTable();
+        $('#programmings').html(html);
+        initProgrammingTable();
+    }
+
+    function openProgrammingModal(pk) {
+        $.get('{% url "comercial:get_programming_form" %}', { programming: pk || '' }, function (response) {
+            if (response.success) {
+                $('#modalProgramming').html(response.grid);
+                $('#modalProgramming').modal('show');
+                $('#id_truck, #id_pilot').select2({ theme: 'bootstrap4', width: '100%' });
+            }
+        });
+    }
+
+    $(document).on('click', '.btn-open-programming', function () {
+        openProgrammingModal($(this).data('pk') || '');
+    });
+
+    $(document).on('click', '.programming-edit', function () {
+        openProgrammingModal($(this).attr('pk'));
+    });
+
+    $(document).on('submit', '#programming-modal-form', function (e) {
+        e.preventDefault();
+        const isEdit = $('#id_programming').val();
+        const url = isEdit ? '{% url "comercial:update_programming" %}' : '{% url "comercial:new_programming" %}';
+        const data = new FormData(this);
+        $('#btn-save-programming').prop('disabled', true);
+        $.ajax({
+            url: url,
+            type: 'POST',
+            data: data,
+            cache: false,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                $('#btn-save-programming').prop('disabled', false);
+                if (response.error) {
+                    toastr.error(response.message);
+                } else {
+                    toastr.success(response.message);
+                    $('#modalProgramming').modal('hide');
+                    if (response.grid) {
+                        reloadProgrammingGrid(response.grid);
+                    } else {
+                        location.reload();
+                    }
+                }
+            },
+            error: function (jq) {
+                $('#btn-save-programming').prop('disabled', false);
+                toastr.error(jq.responseJSON?.message || 'Error al guardar');
+            }
+        });
+    });
+
+    $('#search-form').submit(function (event) {
+        event.preventDefault();
+        const _data = new FormData(this);
+        $('#btn-search').prop('disabled', true);
+        $.ajax({
+            url: '{% url "comercial:get_programming_query_list" %}',
+            type: 'POST',
+            data: _data,
+            cache: false,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                $('#btn-search').prop('disabled', false);
+                reloadProgrammingGrid(response.grid);
+                toastr.info(response.message);
+            },
+            error: function (jq) {
+                $('#btn-search').prop('disabled', false);
+                toastr.warning(jq.responseJSON?.error || 'Sin resultados');
+            }
+        });
+    });
+</script>
+{% endblock %}

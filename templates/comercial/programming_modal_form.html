@@ -1,0 +1,55 @@
+<div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+    <div class="modal-content rv-modal rv-prog-modal">
+        <div class="modal-header">
+            <div class="rv-prog-modal-header-content">
+                <div class="rv-prog-modal-icon" aria-hidden="true">
+                    {% if is_edit %}
+                        <i class="fas fa-pen"></i>
+                    {% else %}
+                        <i class="fas fa-route"></i>
+                    {% endif %}
+                </div>
+                <div>
+                    <h5 class="modal-title">
+                        {% if is_edit %}Editar programación{% else %}Programar viaje{% endif %}
+                    </h5>
+                    <p class="rv-modal-subtitle mb-0">
+                        {% if is_edit %}
+                            Actualice los datos del viaje programado
+                        {% else %}
+                            Asigne unidad, conductor, ruta y servicio
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+
+        <form id="programming-modal-form" method="POST">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="rv-modal-hint">
+                    <i class="fas fa-info-circle"></i>
+                    Complete los datos del viaje. Los campos con <span class="rv-required-mark">*</span> son obligatorios.
+                </div>
+                {% include "comercial/programming_form.html" %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
+                <button type="submit" id="btn-save-programming" class="rv-btn rv-btn-success">
+                    <i class="fas fa-save"></i>
+                    {% if is_edit %}Guardar cambios{% else %}Programar viaje{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script type="text/javascript">
+    (function () {
+        $('#programming-modal-form .rv-form-control, #programming-modal-form select').addClass('rv-form-control');
+        $('#id_service_type, #id_truck, #id_pilot, #id_departure_date').closest('.rv-form-group').addClass('rv-form-group-required');
+    })();
+</script>

@@ -1,0 +1,61 @@
+{% load static %}
+<header class="rv-header d-lg-none">
+    <div class="rv-header-inner">
+        <a href="{% url 'dashboard' %}" class="logo-link">
+            <img src="{% static 'assets/rapidovip_logo.png' %}" alt="RapidoVip"/>
+        </a>
+        <button class="rv-mobile-toggle" id="rv-menu-toggle" aria-label="Abrir menú" aria-expanded="false">
+            <i class="fas fa-bars"></i>
+        </button>
+    </div>
+    <nav class="rv-mobile-nav" id="rv-mobile-nav" aria-hidden="true">
+        <div class="rv-mobile-nav-header">
+            <strong>{{ user_display_name }}</strong>
+            <span class="rv-mobile-context-company">
+                {% if company_rotation %}{{ company_rotation.business_name }}{% else %}RapidoVip{% endif %}
+            </span>
+            <span class="rv-mobile-context-subsidiary">
+                <i class="fas fa-map-marker-alt"></i>
+                {% if current_subsidiary %}{{ current_subsidiary.name }}{% else %}Sin sede{% endif %}
+            </span>
+        </div>
+
+        <div class="nav-section">Servicios</div>
+        <a href="{% url 'comercial:new_guide' %}?service_type=E"><i class="fas fa-box"></i> Encomiendas</a>
+        <a href="{% url 'comercial:guide_assignment' %}"><i class="fas fa-file-invoice"></i> Asignación y guías</a>
+
+        <div class="nav-section">Operaciones</div>
+        <a href="{% url 'comercial:programming_list' %}"><i class="fas fa-calendar-alt"></i> Programación de viajes</a>
+        <a href="{% url 'comercial:truck_list' %}"><i class="fas fa-truck"></i> Unidades</a>
+        <a href="{% url 'comercial:guide_assignment' %}"><i class="fas fa-clipboard-list"></i> Guías de remisión</a>
+
+        <div class="nav-section">Finanzas</div>
+        <a href="{% url 'accounting:get_cash_control_list' %}"><i class="fas fa-cash-register"></i> Caja y gastos</a>
+
+        {% if can_see_reports %}
+        <div class="nav-section">Reportes</div>
+        <a href="{% url 'comercial:report_comodity_grid' %}"><i class="fas fa-file-alt"></i> Reporte de servicios</a>
+        {% endif %}
+
+        {% if can_see_admin %}
+        <div class="nav-section">Gestión</div>
+        <a href="{% url 'users:user_list' %}"><i class="fas fa-users"></i> Usuarios</a>
+        <a href="{% url 'users:company_list' %}"><i class="fas fa-industry"></i> Empresas</a>
+        <a href="{% url 'users:subsidiary_list' %}"><i class="fas fa-building"></i> Sedes y series</a>
+
+        {% if all_subsidiaries %}
+        <div class="nav-section">Cambiar sede</div>
+        {% for s in all_subsidiaries %}
+        <a href="#"
+           class="switch-subsidiary-item{% if current_subsidiary and current_subsidiary.id == s.id %} active{% endif %}"
+           data-subsidiary-id="{{ s.id }}">
+            <i class="fas fa-building"></i> {{ s.name }}
+        </a>
+        {% endfor %}
+        {% endif %}
+        {% endif %}
+
+        <div class="nav-section">Cuenta</div>
+        <a href="{% url 'logout' %}"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
+    </nav>
+</header>

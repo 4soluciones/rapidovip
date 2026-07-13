@@ -1,0 +1,303 @@
+<div class="rv-guide-service rv-guide-service-e">
+    <div class="rv-guide-e-top">
+        <div class="rv-guide-card rv-guide-e-doc">
+            <div class="rv-guide-card-head"><i class="fas fa-file-invoice"></i><span>Documento y pago</span></div>
+            <div class="rv-guide-e-doc-fields">
+                <div class="rv-form-group">
+                    <label for="e_issue_date">Fecha de emisión</label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-calendar-alt rv-e-input-icon"></i>
+                        <input type="date" id="e_issue_date" class="rv-form-control rv-e-input-pad" value="{{ date }}">
+                    </div>
+                </div>
+                <div class="rv-form-group">
+                    <label for="e_user_display">Usuario</label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-user-lock rv-e-input-icon"></i>
+                        <input type="text" id="e_user_display" class="rv-form-control rv-e-input-pad text-uppercase" value="{{ user.username }}" disabled readonly>
+                    </div>
+                </div>
+                <div class="rv-form-group">
+                    <label for="e_way_to_pay">Forma de pago</label>
+                    <select id="e_way_to_pay" class="rv-form-control">
+                        {% for item in choices_type_payments %}
+                            <option value="{{ item.0 }}">{{ item.1 }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="rv-form-group">
+                    <label for="e_type_bill">Tipo de documento</label>
+                    <select id="e_type_bill" class="rv-form-control text-uppercase">
+                        <option value="T">Ticket encomienda</option>
+                        <option value="B">Boleta</option>
+                        <option value="F">Factura</option>
+                    </select>
+                </div>
+                <div class="rv-form-group">
+                    <label for="e_arrival_time">Hora llegada</label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-clock rv-e-input-icon"></i>
+                        <input type="time" id="e_arrival_time" class="rv-form-control rv-e-input-pad" value="{{ time }}">
+                    </div>
+                </div>
+                <div class="rv-form-group">
+                    <label for="e_code">Código de seguridad <span class="rv-text-muted">(opcional)</span></label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-shield-alt rv-e-input-icon"></i>
+                        <input type="password" id="e_code" class="rv-form-control rv-e-input-pad text-center" maxlength="4" placeholder="0000" autocomplete="off">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="rv-guide-card rv-guide-e-route">
+            <div class="rv-guide-card-head"><i class="fas fa-route"></i><span>Ruta de encomienda</span></div>
+            <div class="rv-guide-e-route-grid">
+                <div class="rv-form-group rv-form-group-required">
+                    <label for="e_subsidiary_origin">Punto de partida</label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-map-marker-alt rv-e-input-icon"></i>
+                        <select id="e_subsidiary_origin" class="rv-form-control rv-e-input-pad">
+                            <option value="0">Seleccione...</option>
+                            {% for s in subsidiaries %}
+                                <option {% if user.worker_set.last.establishment_set.last.subsidiary.id == s.id %}selected{% endif %} value="{{ s.id }}">{{ s.short_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="rv-form-group">
+                    <label for="e_address_subsidiary">Dirección de partida</label>
+                    <input type="text" id="e_address_subsidiary" class="rv-form-control text-uppercase">
+                </div>
+                <div class="rv-form-group rv-form-group-required">
+                    <label for="e_subsidiary_destiny">Punto de llegada</label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-map-marker-alt rv-e-input-icon"></i>
+                        <select id="e_subsidiary_destiny" class="rv-form-control rv-e-input-pad">
+                            <option value="0">Seleccione...</option>
+                            {% for s in subsidiaries %}
+                                <option value="{{ s.id }}">{{ s.short_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="rv-form-group">
+                    <label for="e_address_destiny">Dirección de llegada</label>
+                    <input type="text" id="e_address_destiny" class="rv-form-control text-uppercase" placeholder="Destino">
+                </div>
+                <div class="rv-form-group">
+                    <label for="e_type_guide">Tipo de encomienda</label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-box rv-e-input-icon"></i>
+                        <select id="e_type_guide" class="rv-form-control rv-e-input-pad">
+                            {% for item in choices_type_guide %}
+                                <option value="{{ item.0 }}">{{ item.1 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="rv-form-group">
+                    <label for="e_address_delivery">Dirección de reparto</label>
+                    <input type="text" id="e_address_delivery" class="rv-form-control text-uppercase" placeholder="Dirección de reparto (opcional)" readonly>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="rv-guide-card rv-guide-e-people">
+        <div class="rv-guide-card-head"><i class="fas fa-users"></i><span>Remitente y destinatarios</span></div>
+
+        <div class="rv-guide-e-person-block">
+            <div class="rv-guide-e-person-label"><span><i class="fas fa-user"></i> Remitente</span></div>
+            <div class="rv-guide-e-party-fields rv-guide-e-party-row">
+                <div class="rv-form-group rv-guide-e-field-sm">
+                    <label for="e_document_type_sender">Documento</label>
+                    <select id="e_document_type_sender" class="rv-form-control">
+                        <option value="01">DNI</option>
+                        <option value="06">RUC</option>
+                        <option value="04">C. EXTRANJERÍA</option>
+                        <option value="07">PASAPORTE</option>
+                    </select>
+                </div>
+                <div class="rv-form-group rv-guide-e-field-sm">
+                    <label for="e_nro_document_sender">Número</label>
+                    <div class="rv-input-group rv-doc-search-group" id="e_sender_doc_group">
+                        <div class="rv-doc-search-field">
+                            <input type="text" id="e_nro_document_sender" class="rv-form-control text-uppercase">
+                            <div class="rv-doc-search-overlay" role="status" aria-live="polite" aria-busy="false">
+                                <span class="rv-doc-search-overlay-inner">
+                                    <i class="fas fa-id-card rv-doc-search-overlay-icon" aria-hidden="true"></i>
+                                    <span class="rv-doc-search-ring" aria-hidden="true"></span>
+                                </span>
+                            </div>
+                        </div>
+                        <button type="button" class="rv-btn rv-btn-outline rv-btn-sm rv-doc-search-btn" id="e_btn_search_sender" title="Buscar documento">
+                            <i class="fas fa-search rv-doc-search-btn-icon"></i>
+                            <span class="rv-doc-search-btn-spinner" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                </div>
+                <div class="rv-form-group rv-guide-e-field-name">
+                    <label for="e_sender">Nombre / Razón social</label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-user rv-e-input-icon"></i>
+                        <input type="text" id="e_sender" class="rv-form-control rv-e-input-pad text-uppercase">
+                    </div>
+                </div>
+                <div class="rv-form-group rv-guide-e-field-sm">
+                    <label for="e_phone_sender">Teléfono</label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-phone rv-e-input-icon"></i>
+                        <input type="text" id="e_phone_sender" class="rv-form-control rv-e-input-pad" maxlength="9">
+                    </div>
+                </div>
+            </div>
+            <div class="rv-guide-e-party-fields rv-guide-e-party-row e-address-sender-wrap" style="display:none">
+                <div class="rv-form-group rv-guide-e-field-full">
+                    <label for="e_address_sender">Dirección remitente</label>
+                    <input type="text" id="e_address_sender" class="rv-form-control text-uppercase">
+                </div>
+            </div>
+        </div>
+
+        <div class="rv-guide-e-person-block rv-guide-e-addressees-block">
+            <div class="rv-guide-e-person-label">
+                <span><i class="fas fa-user-check"></i> Destinatarios</span>
+                <button type="button" class="rv-btn rv-btn-outline rv-btn-success rv-btn-sm" id="e_add_addressee" title="Agregar destinatario">
+                    <i class="fas fa-plus"></i> Agregar destinatario
+                </button>
+            </div>
+            <div class="e-addressee-rows">
+                <div class="rv-guide-e-party-fields e-addressee-row rv-guide-e-party-row">
+                    <div class="rv-form-group rv-guide-e-field-sm">
+                        <label>Documento</label>
+                        <select class="rv-form-control e-document-type-addressee">
+                            <option value="01">DNI</option><option value="06">RUC</option>
+                            <option value="04">C. EXTRANJERÍA</option><option value="07">PASAPORTE</option>
+                        </select>
+                    </div>
+                    <div class="rv-form-group rv-guide-e-field-sm">
+                        <label>Número</label>
+                        <div class="rv-input-group rv-doc-search-group e-addressee-doc-group">
+                            <div class="rv-doc-search-field">
+                                <input type="text" class="rv-form-control text-uppercase e-nro-document-addressee">
+                                <div class="rv-doc-search-overlay" role="status" aria-live="polite" aria-busy="false">
+                                    <span class="rv-doc-search-overlay-inner">
+                                        <i class="fas fa-id-card rv-doc-search-overlay-icon" aria-hidden="true"></i>
+                                        <span class="rv-doc-search-ring" aria-hidden="true"></span>
+                                    </span>
+                                </div>
+                            </div>
+                            <button type="button" class="rv-btn rv-btn-outline rv-btn-sm rv-doc-search-btn e-btn-search-addressee" title="Buscar documento">
+                                <i class="fas fa-search rv-doc-search-btn-icon"></i>
+                                <span class="rv-doc-search-btn-spinner" aria-hidden="true"></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="rv-form-group rv-guide-e-field-name">
+                        <label>Nombre / Razón social</label>
+                        <div class="rv-e-input-wrap">
+                            <i class="fas fa-user rv-e-input-icon"></i>
+                            <input type="text" class="rv-form-control rv-e-input-pad text-uppercase e-name-addressee">
+                        </div>
+                    </div>
+                    <div class="rv-form-group rv-guide-e-field-sm">
+                        <label>Teléfono</label>
+                        <div class="rv-e-input-wrap">
+                            <i class="fas fa-phone rv-e-input-icon"></i>
+                            <input type="text" class="rv-form-control rv-e-input-pad e-phone-addressee" maxlength="9">
+                        </div>
+                    </div>
+                    <div class="rv-form-group rv-form-group-action rv-guide-e-field-action"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="rv-guide-card rv-guide-card-full rv-guide-e-detail">
+        <div class="rv-guide-card-head">
+            <span><i class="fas fa-boxes"></i> Detalle de encomienda</span>
+            <span class="rv-guide-e-detail-count" id="e_detail_count">0 ítems</span>
+        </div>
+
+        <div class="rv-guide-e-detail-compose">
+            <div class="rv-form-group rv-guide-e-detail-qty">
+                <label for="e_detail_qty">Cant.</label>
+                <input type="number" id="e_detail_qty" class="rv-form-control text-center" min="1" step="1" value="1">
+            </div>
+            <div class="rv-form-group rv-guide-e-detail-desc">
+                <label for="e_detail_desc">Descripción</label>
+                <div class="rv-e-input-wrap">
+                    <i class="fas fa-tag rv-e-input-icon"></i>
+                    <input type="text" id="e_detail_desc" class="rv-form-control rv-e-input-pad text-uppercase" placeholder="Ej. DOCUMENTOS, CAJA, ELECTRODOMÉSTICO">
+                </div>
+            </div>
+            <div class="rv-form-group rv-guide-e-detail-price">
+                <label for="e_detail_price">P. unitario</label>
+                <div class="rv-e-input-wrap">
+                    <span class="rv-e-input-prefix">S/</span>
+                    <input type="number" id="e_detail_price" class="rv-form-control rv-e-input-prefix-pad" min="0" step="0.01" placeholder="0.00">
+                </div>
+            </div>
+            <div class="rv-form-group rv-guide-e-detail-amount">
+                <label for="e_detail_amount">Importe</label>
+                <div class="rv-e-input-wrap">
+                    <span class="rv-e-input-prefix">S/</span>
+                    <input type="number" id="e_detail_amount" class="rv-form-control rv-e-input-prefix-pad" min="0" step="0.01" placeholder="0.00">
+                </div>
+            </div>
+            <div class="rv-form-group rv-guide-e-detail-add">
+                <label>&nbsp;</label>
+                <button type="button" class="rv-btn rv-btn-success" id="e_add_detail">
+                    <i class="fas fa-plus"></i> Agregar
+                </button>
+            </div>
+        </div>
+
+        <div class="rv-guide-e-detail-body">
+            <div class="rv-guide-e-detail-list-head">
+                <span>Cant.</span>
+                <span>Descripción</span>
+                <span class="text-right">P. unitario</span>
+                <span class="text-right">Importe</span>
+                <span></span>
+            </div>
+            <div class="rv-guide-e-detail-list" id="e_details_body"></div>
+            <div class="rv-guide-e-detail-empty" id="e_details_empty">
+                <i class="fas fa-box-open"></i>
+                <p>Agrega los ítems de la encomienda</p>
+            </div>
+        </div>
+
+        <div class="rv-guide-e-detail-summary">
+            <div class="rv-guide-e-summary-item">
+                <span>Subtotal</span>
+                <strong>S/ <span class="e-subtotal">0.00</span></strong>
+            </div>
+            <div class="rv-guide-e-summary-item">
+                <span>IGV (18%)</span>
+                <strong>S/ <span class="e-igv">0.00</span></strong>
+            </div>
+            <div class="rv-guide-e-summary-item rv-guide-e-summary-total">
+                <span>Total</span>
+                <strong>S/ <span class="e-total">0.00</span></strong>
+            </div>
+        </div>
+    </div>
+
+    <div class="rv-guide-e-footer rv-guide-service-footer">
+        <div class="rv-guide-e-footer-left">
+            <button type="button" class="rv-btn rv-btn-outline rv-guide-e-btn-clear" id="e_btn_clear">
+                <i class="fas fa-eraser"></i> Limpiar
+            </button>
+            <button type="button" class="rv-btn rv-btn-outline rv-guide-e-btn-cancel" id="e_btn_cancel">
+                <i class="fas fa-times"></i> Cancelar
+            </button>
+        </div>
+        <div class="rv-guide-e-footer-right">
+            <button type="submit" class="rv-btn rv-btn-primary rv-guide-e-btn-save" id="e_btn_save_encomienda">
+                <i class="fas fa-save"></i> Guardar encomienda
+            </button>
+        </div>
+    </div>
+</div>

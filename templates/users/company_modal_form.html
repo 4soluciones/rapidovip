@@ -1,0 +1,47 @@
+<div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content rv-modal">
+        <div class="modal-header">
+            <div>
+                <h5 class="modal-title"><i class="fas fa-industry"></i> Nueva empresa</h5>
+                <p class="rv-modal-subtitle mb-0">Registre una empresa de transporte</p>
+            </div>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <form id="company-modal-form">
+            {% csrf_token %}
+            <div class="modal-body">
+                <h6 class="rv-section-label">Datos de la empresa</h6>
+                <div class="rv-form-grid">
+                    <div class="rv-form-group rv-form-group-full">
+                        <label>{{ form.business_name.label }}</label>
+                        {{ form.business_name }}
+                    </div>
+                    <div class="rv-form-group">
+                        <label>{{ form.short_name.label }}</label>
+                        {{ form.short_name }}
+                    </div>
+                    <div class="rv-form-group">
+                        <label>{{ form.ruc.label }}</label>
+                        {{ form.ruc }}
+                    </div>
+                    <div class="rv-form-group">
+                        <label>{{ form.phone.label }}</label>
+                        {{ form.phone }}
+                    </div>
+                    <div class="rv-form-group rv-form-group-full">
+                        <label>{{ form.address.label }}</label>
+                        {{ form.address }}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
+                <button type="submit" class="rv-btn rv-btn-success">
+                    <i class="fas fa-save"></i> Guardar empresa
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
