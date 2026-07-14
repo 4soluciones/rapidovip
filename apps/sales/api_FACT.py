@@ -8,7 +8,7 @@ GRAPHQL_URL = "https://ng.tuf4ctur4.net.pe/graphql"
 # GRAPHQL_URL = "http://192.168.1.80:9050/graphql"
 
 tokens = {
-    "20616147375": "gAAAAABqT_l8q0dToIn7AlWTMnlBn6mQlCTss1Bn_GoN1wMTUdCR-Ql-RzMcKY1Yrbacuf2nWlvTBLMDYVfSrdwzQy2Xq-cYjw==",
+    "20616147375": "gAAAAABqTA0cJ5usLHk_6QxdRNsphXDcm_utYdSdMFagg2k2ww_-xFAaV7JoZw7b3_NpXxO25lXfxYUFR4Yewkm_zpFDTCkwzA==",
 }
 
 
