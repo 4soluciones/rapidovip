@@ -288,6 +288,10 @@ var GuideServices = (function ($) {
         var defaultIssueDate = $('#e_issue_date').data('default-date') || $('#e_issue_date').attr('value') || '';
         $('#e_issue_date').val(defaultIssueDate);
         $('#id_traslate_date').val(defaultIssueDate);
+        var originDefault = $('#e_subsidiary_origin').data('default');
+        if (originDefault) {
+            $('#e_subsidiary_origin').val(String(originDefault));
+        }
         $('#e_subsidiary_destiny').val('0');
         $('#e_address_subsidiary, #e_address_destiny, #e_address_delivery, #e_address_sender').val('');
         $('#e_address_destiny').css('background-color', '');
@@ -299,7 +303,7 @@ var GuideServices = (function ($) {
         $('.e-addressee-row:first').find('input').val('');
         $('.e-addressee-row:first').find('select').prop('selectedIndex', 0);
         $('#e_details_body').empty();
-        $('#e_detail_desc, #e_detail_price, #e_detail_amount').val('');
+        $('#e_detail_desc, #e_detail_price, #e_detail_amount, #e_detail_weight').val('');
         $('#e_detail_qty').val('1');
         recalcEncomiendaTotals();
         $('#e_subsidiary_origin').trigger('change');
@@ -442,14 +446,23 @@ var GuideServices = (function ($) {
     function addEncomiendaDetail() {
         var qty = parseFloat($('#e_detail_qty').val()) || 0;
         var desc = ($('#e_detail_desc').val() || '').trim();
+        var weightRaw = ($('#e_detail_weight').val() || '').trim();
+        var weight = weightRaw === '' ? null : parseFloat(weightRaw);
         var price = parseFloat($('#e_detail_price').val()) || 0;
         var amount = parseFloat($('#e_detail_amount').val()) || 0;
         if (!desc) { toastr.warning('Ingrese descripción'); return; }
         if (qty <= 0) { toastr.warning('Cantidad inválida'); return; }
+        if (weight !== null && (isNaN(weight) || weight < 0)) {
+            toastr.warning('Peso inválido');
+            return;
+        }
+        var weightDisplay = weight === null ? '—' : weight.toFixed(2) + ' kg';
+        var weightValue = weight === null ? '' : weight.toFixed(2);
         $('#e_details_body').append(
             '<div class="rv-guide-e-detail-row">' +
                 '<span class="e-item-qty">' + qty + '</span>' +
                 '<span class="e-item-desc">' + desc.toUpperCase() + '</span>' +
+                '<span class="e-item-weight text-right" data-weight="' + weightValue + '">' + weightDisplay + '</span>' +
                 '<span class="e-item-price text-right item-price">' + price.toFixed(2) + '</span>' +
                 '<span class="e-item-amount text-right item-amount">' + amount.toFixed(2) + '</span>' +
                 '<button type="button" class="rv-btn rv-btn-outline rv-btn-sm e-remove-detail" title="Quitar">' +
@@ -457,7 +470,7 @@ var GuideServices = (function ($) {
                 '</button>' +
             '</div>'
         );
-        $('#e_detail_desc, #e_detail_price, #e_detail_amount').val('');
+        $('#e_detail_desc, #e_detail_price, #e_detail_amount, #e_detail_weight').val('');
         $('#e_detail_qty').val('1');
         $('#e_detail_desc').focus();
         recalcEncomiendaTotals();
@@ -672,6 +685,7 @@ var GuideServices = (function ($) {
                 payload.Details.push({
                     Quantity: $(this).find('.e-item-qty').text(),
                     Description: $(this).find('.e-item-desc').text(),
+                    Weight: $(this).find('.e-item-weight').attr('data-weight') || '',
                     Price_unit: $(this).find('.item-price').text(),
                     Amount: $(this).find('.item-amount').text(),
                     Unit: 1

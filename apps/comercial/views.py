@@ -62,7 +62,7 @@ from apps.users.models import DocumentType, Employee, Nationality, Subsidiary, U
 from apps.users.subsidiary_serial_helpers import get_serial
 from apps.users.roles import user_is_administrator
 from apps.users.views import CompanyUser, get_subsidiary_by_user
-from .forms import FormProgramming, FormTruck
+from .forms import FormDriver, FormProgramming, FormTruck
 from .guide_assignment import (
     assign_order_to_programming,
     create_cargo_manifest_for_programming,
@@ -72,6 +72,7 @@ from .guide_assignment import (
 from .models import (
     CargoManifest,
     CarrierRemissionGuide,
+    Driver,
     Owner,
     Programming,
     SenderRemissionGuide,
@@ -205,6 +206,69 @@ class TruckUpdate(UpdateView):
         return redirect('comercial:truck_list')
 
 
+# ---------------------------------------Driver-----------------------------------
+
+
+class DriverList(View):
+    model = Driver
+    form_class = FormDriver
+    template_name = 'comercial/driver_list.html'
+
+    def get(self, request, *args, **kwargs):
+        drivers = self.model.objects.all()
+        return render(request, self.template_name, {
+            'drivers': drivers,
+            'form': self.form_class,
+            'drivers_active_count': drivers.filter(is_active=True).count(),
+            'drivers_total_count': drivers.count(),
+        })
+
+
+def get_driver_form(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': True, 'message': 'Método no permitido.'}, status=405)
+
+    pk = request.GET.get('pk', '')
+    driver_obj = None
+    if pk:
+        driver_obj = Driver.objects.get(pk=int(pk))
+        form = FormDriver(instance=driver_obj)
+    else:
+        form = FormDriver(initial={'is_active': True, 'license_type': 'A3b'})
+
+    tpl = loader.get_template('comercial/driver_modal_form.html')
+    context = {
+        'form': form,
+        'driver_obj': driver_obj,
+        'driver_id': pk,
+    }
+    return JsonResponse({'success': True, 'grid': tpl.render(context, request)})
+
+
+@csrf_exempt
+def save_driver(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': True, 'message': 'Método no permitido.'}, status=405)
+
+    pk = request.POST.get('driver_id', '')
+    driver_obj = None
+    if pk:
+        driver_obj = Driver.objects.get(pk=int(pk))
+
+    form = FormDriver(request.POST, instance=driver_obj)
+    if not form.is_valid():
+        errors = '; '.join(
+            f'{field}: {", ".join(msg_list)}' for field, msg_list in form.errors.items()
+        )
+        return JsonResponse({'error': True, 'message': errors or 'Datos inválidos.'}, status=400)
+
+    form.save()
+    return JsonResponse({
+        'success': True,
+        'message': 'Conductor guardado correctamente.',
+    })
+
+
 # ----------------------------------------Programming-------------------------------
 
 
@@ -234,7 +298,7 @@ class ProgrammingList(View):
         my_date = datetime.now()
         formatdate = my_date.strftime("%Y-%m-%d")
         context = {
-            'employees': Employee.objects.all(),
+            'drivers': Driver.objects.filter(is_active=True),
             'trucks': Truck.objects.filter(
                 is_active=True,
                 owner__ruc=company_obj.ruc
@@ -290,11 +354,18 @@ def new_programming(request):
         if not pilot or not truck:
             return JsonResponse({'error': True, 'message': 'Seleccione vehículo y conductor.'})
 
-        pilot_obj = Employee.objects.get(pk=int(pilot))
+        try:
+            pilot_obj = Driver.objects.get(pk=int(pilot), is_active=True)
+        except (Driver.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({'error': True, 'message': 'Conductor no válido.'})
+
         truck_obj = Truck.objects.get(id=truck)
         copilot_name = ''
         if copilot:
-            copilot_name = Employee.objects.get(pk=int(copilot)).full_name
+            try:
+                copilot_name = Driver.objects.get(pk=int(copilot), is_active=True).full_name
+            except (Driver.DoesNotExist, ValueError, TypeError):
+                return JsonResponse({'error': True, 'message': 'Copiloto no válido.'})
 
         data_programming = {
             'departure_date': departure_date,
@@ -326,6 +397,29 @@ def new_programming(request):
     return JsonResponse({'error': True, 'message': 'Error de peticion.'})
 
 
+def _match_driver_by_stored_name(full_name):
+    """Resuelve un Driver a partir del nombre guardado en Programming."""
+    if not full_name:
+        return None
+    name = str(full_name).strip()
+    if not name:
+        return None
+    drivers = Driver.objects.filter(is_active=True)
+    name_upper = name.upper()
+    for driver in drivers:
+        if driver.full_name.upper() == name_upper:
+            return driver
+    token = name.split()[0]
+    if token:
+        match = drivers.filter(names__icontains=token).first()
+        if match:
+            return match
+        match = drivers.filter(paternal_last_name__icontains=token).first()
+        if match:
+            return match
+    return None
+
+
 def _programming_form_context(user_obj, programming_obj=None):
     subsidiary_obj = get_subsidiary_by_user(user_obj)
     company_ruc = user_obj.companyuser.company_rotation.ruc
@@ -339,25 +433,28 @@ def _programming_form_context(user_obj, programming_obj=None):
     if programming_obj and programming_obj.correlative:
         correlative_manifest = programming_obj.correlative
     my_date = datetime.now()
+    drivers = Driver.objects.filter(is_active=True).order_by('paternal_last_name', 'names')
     selected_pilot_id = None
     selected_copilot_id = None
+    selected_pilot_license = ''
+    selected_copilot_license = ''
     if programming_obj and programming_obj.support_pilot:
-        pilot_match = Employee.objects.filter(
-            names__icontains=programming_obj.support_pilot.split(',')[0].strip()
-        ).first()
+        pilot_match = _match_driver_by_stored_name(programming_obj.support_pilot)
         if pilot_match:
             selected_pilot_id = pilot_match.id
+            selected_pilot_license = pilot_match.license_number
     if programming_obj and programming_obj.support_copilot:
-        copilot_match = Employee.objects.filter(
-            names__icontains=programming_obj.support_copilot.split(',')[0].strip()
-        ).first()
+        copilot_match = _match_driver_by_stored_name(programming_obj.support_copilot)
         if copilot_match:
             selected_copilot_id = copilot_match.id
+            selected_copilot_license = copilot_match.license_number
     return {
         'programming_obj': programming_obj,
         'selected_pilot_id': selected_pilot_id,
         'selected_copilot_id': selected_copilot_id,
-        'employees': Employee.objects.filter(is_enabled=True).order_by('names'),
+        'selected_pilot_license': selected_pilot_license,
+        'selected_copilot_license': selected_copilot_license,
+        'drivers': drivers,
         'subsidiary_origin': subsidiary_obj,
         'trucks': Truck.objects.filter(is_active=True, owner__ruc=company_ruc),
         'choices_status': Programming.STATUS_CHOICES,
@@ -400,11 +497,17 @@ def update_programming(request):
         price = request.POST.get('price', '0.00')
 
         if id_pilot:
-            pilot_obj = Employee.objects.get(pk=int(id_pilot))
-            programming_obj.support_pilot = pilot_obj.full_name
+            try:
+                pilot_obj = Driver.objects.get(pk=int(id_pilot))
+                programming_obj.support_pilot = pilot_obj.full_name
+            except (Driver.DoesNotExist, ValueError, TypeError):
+                return JsonResponse({'error': True, 'message': 'Conductor no válido.'})
 
         if id_copilot:
-            programming_obj.support_copilot = Employee.objects.get(pk=int(id_copilot)).full_name
+            try:
+                programming_obj.support_copilot = Driver.objects.get(pk=int(id_copilot)).full_name
+            except (Driver.DoesNotExist, ValueError, TypeError):
+                return JsonResponse({'error': True, 'message': 'Copiloto no válido.'})
         else:
             programming_obj.support_copilot = None
 
@@ -496,6 +599,7 @@ def new_guide(request):
     return render(request, 'comercial/guide.html', {
         'document_types': document_types,
         'subsidiaries': Subsidiary.objects.all().order_by('id'),
+        'subsidiary_origin': subsidiary_obj,
         'choices_type_payments': Order._meta.get_field('way_to_pay').choices,
         'choices_type_guide': OrderCommodity._meta.get_field('type_guide').choices,
         'cash_set': cash_set,
@@ -799,7 +903,11 @@ def create_order(request):
             price_unit = decimal.Decimal(detail['Price_unit'])
             description = str(detail['Description'])
             amount = decimal.Decimal(detail['Amount'])
-            # weight = decimal.Decimal(detail['Weight'])
+            raw_weight = detail.get('Weight', '')
+            try:
+                weight = decimal.Decimal(str(raw_weight).strip() or '0')
+            except (decimal.InvalidOperation, TypeError, ValueError):
+                weight = decimal.Decimal('0')
             unit_obj = resolve_order_unit(detail.get('Unit'))
 
             new_item_order = OrderDetail(
@@ -808,7 +916,7 @@ def create_order(request):
                 price_unit=price_unit,
                 description=description,
                 amount=amount,
-                # weight=weight,
+                weight=weight,
                 unit=unit_obj,
             )
             new_item_order.save()
@@ -1891,10 +1999,9 @@ def assign_order_guide(request):
         guide = assign_order_to_programming(order_obj, programming_obj, request.user)
         return JsonResponse({
             'success': True,
-            'message': f'Guía remitente {guide.document_number()} emitida.',
+            'message': 'Asignado.',
             'guide_id': guide.id,
             'document_number': guide.document_number(),
-            'print_url': f'/comercial/print_guide_format_tk/{guide.id}/',
         }, status=HTTPStatus.OK)
     except Order.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Orden no encontrada.'}, status=HTTPStatus.NOT_FOUND)

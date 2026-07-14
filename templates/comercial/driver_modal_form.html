@@ -1,0 +1,90 @@
+<div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+    <div class="modal-content rv-modal rv-driver-modal">
+        <div class="modal-header">
+            <div class="rv-driver-modal-header-content">
+                <div class="rv-driver-modal-icon">
+                    <i class="fas fa-{% if driver_obj %}pen{% else %}id-card{% endif %}"></i>
+                </div>
+                <div>
+                    <h5 class="modal-title">
+                        {% if driver_obj %}Editar conductor{% else %}Registrar conductor{% endif %}
+                    </h5>
+                    <p class="rv-modal-subtitle mb-0">
+                        {% if driver_obj %}
+                            {{ driver_obj.full_name }} · Lic. {{ driver_obj.license_number }}
+                        {% else %}
+                            Datos del personal de manejo para operaciones
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+
+        <form id="driver-modal-form" method="POST" action="{% url 'comercial:save_driver' %}">
+            {% csrf_token %}
+            <input type="hidden" name="driver_id" id="driver_id" value="{{ driver_id }}">
+
+            <div class="modal-body">
+                <div class="rv-modal-hint">
+                    <i class="fas fa-info-circle"></i>
+                    Los campos marcados en <span class="rv-required-mark">rojo</span> son obligatorios.
+                    Este registro es independiente de los usuarios del sistema.
+                </div>
+
+                <h6 class="rv-driver-form-section-title"><i class="fas fa-user"></i> Datos personales</h6>
+                <div class="rv-form-grid">
+                    <div class="rv-form-group rv-form-group-required">
+                        <label for="id_names">{{ form.names.label }}</label>
+                        {{ form.names }}
+                    </div>
+                    <div class="rv-form-group rv-form-group-required">
+                        <label for="id_paternal_last_name">{{ form.paternal_last_name.label }}</label>
+                        {{ form.paternal_last_name }}
+                    </div>
+                    <div class="rv-form-group">
+                        <label for="id_maternal_last_name">{{ form.maternal_last_name.label }}</label>
+                        {{ form.maternal_last_name }}
+                    </div>
+                    <div class="rv-form-group">
+                        <label for="id_phone">{{ form.phone.label }}</label>
+                        {{ form.phone }}
+                    </div>
+                    <div class="rv-form-group rv-form-group-full">
+                        <label for="id_address">{{ form.address.label }}</label>
+                        {{ form.address }}
+                    </div>
+                </div>
+
+                <h6 class="rv-driver-form-section-title"><i class="fas fa-id-badge"></i> Licencia de conducir</h6>
+                <div class="rv-form-grid">
+                    <div class="rv-form-group rv-form-group-required">
+                        <label for="id_license_number">{{ form.license_number.label }}</label>
+                        {{ form.license_number }}
+                    </div>
+                    <div class="rv-form-group rv-form-group-required">
+                        <label for="id_license_type">{{ form.license_type.label }}</label>
+                        {{ form.license_type }}
+                        <small class="rv-field-hint">Categoría MTC (Perú)</small>
+                    </div>
+                    <div class="rv-form-group rv-form-group-checkbox">
+                        <label class="rv-checkbox-label">
+                            {{ form.is_active }}
+                            <span>{{ form.is_active.label }}</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
+                <button type="submit" class="rv-btn rv-btn-success" id="btn-save-driver">
+                    <i class="fas fa-save"></i>
+                    {% if driver_obj %}Guardar cambios{% else %}Registrar conductor{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

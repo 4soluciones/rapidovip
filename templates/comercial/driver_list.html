@@ -1,0 +1,195 @@
+{% extends 'home.html' %}
+{% block title %}Conductores{% endblock %}
+
+{% block body %}
+<div class="rv-page rv-drivers-page">
+    <div class="rv-page-header">
+        <div>
+            <h1><i class="fas fa-id-card"></i> Conductores</h1>
+            <p class="rv-page-subtitle">Personal de manejo autorizado para operaciones de transporte</p>
+        </div>
+        <button type="button" class="rv-btn rv-btn-success btn-driver-form" data-pk="">
+            <i class="fas fa-plus"></i> Nuevo conductor
+        </button>
+    </div>
+
+    <div class="rv-driver-toolbar">
+        <div class="rv-driver-stats">
+            <div class="rv-driver-stat">
+                <span class="rv-driver-stat-label">Registrados</span>
+                <strong class="rv-driver-stat-value">{{ drivers_total_count }}</strong>
+            </div>
+            <div class="rv-driver-stat rv-driver-stat-active">
+                <span class="rv-driver-stat-label">Activos</span>
+                <strong class="rv-driver-stat-value">{{ drivers_active_count }}</strong>
+            </div>
+        </div>
+        {% if drivers %}
+        <div class="rv-driver-search">
+            <i class="fas fa-search"></i>
+            <input type="search" id="driver-search" class="rv-form-control"
+                   placeholder="Buscar por nombre, licencia o teléfono…" autocomplete="off">
+        </div>
+        {% endif %}
+    </div>
+
+    {% if drivers %}
+    <div class="rv-driver-grid" id="driver-grid">
+        {% for driver in drivers %}
+        <article class="rv-driver-card{% if not driver.is_active %} rv-driver-card-inactive{% endif %}"
+                 data-search="{{ driver.full_name }} {{ driver.license_number }} {{ driver.phone }} {{ driver.address }}">
+            <div class="rv-driver-card-head">
+                <span class="rv-driver-avatar" aria-hidden="true">
+                    {{ driver.names|slice:":1"|upper }}{{ driver.paternal_last_name|slice:":1"|upper }}
+                </span>
+                <div class="rv-driver-card-title-wrap">
+                    <h2 class="rv-driver-card-name">{{ driver.full_name }}</h2>
+                    <div class="rv-driver-card-badges">
+                        <span class="rv-badge rv-badge-license">{{ driver.get_license_type_display }}</span>
+                        {% if driver.is_active %}
+                            <span class="rv-badge rv-badge-success">Activo</span>
+                        {% else %}
+                            <span class="rv-badge rv-badge-danger">Inactivo</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <button type="button"
+                        class="rv-btn rv-btn-outline rv-btn-sm btn-driver-form"
+                        data-pk="{{ driver.id }}"
+                        title="Editar conductor">
+                    <i class="fas fa-pen"></i> Editar
+                </button>
+            </div>
+
+            <div class="rv-driver-card-body">
+                <div class="rv-driver-info-item">
+                    <span class="rv-driver-info-label"><i class="fas fa-id-badge"></i> Licencia</span>
+                    <strong class="rv-plate">{{ driver.license_number }}</strong>
+                </div>
+                <div class="rv-driver-info-item">
+                    <span class="rv-driver-info-label"><i class="fas fa-phone-alt"></i> Teléfono</span>
+                    <span>{% if driver.phone %}{{ driver.phone }}{% else %}—{% endif %}</span>
+                </div>
+                <div class="rv-driver-info-item rv-driver-info-full">
+                    <span class="rv-driver-info-label"><i class="fas fa-map-marker-alt"></i> Dirección</span>
+                    <span>{% if driver.address %}{{ driver.address }}{% else %}Sin dirección registrada{% endif %}</span>
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    <p class="rv-driver-no-results d-none" id="driver-no-results">No hay conductores que coincidan con la búsqueda.</p>
+    {% else %}
+    <div class="rv-alert-box rv-empty-drivers">
+        <div class="rv-empty-drivers-icon"><i class="fas fa-id-card"></i></div>
+        <strong>Sin conductores registrados.</strong>
+        <p class="mb-2 mt-1">Registra al personal de manejo para asignarlo en la programación de viajes.</p>
+        <button type="button" class="rv-btn rv-btn-success btn-driver-form" data-pk="">
+            <i class="fas fa-plus"></i> Registrar conductor
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+<div class="modal fade" id="modalDriver" tabindex="-1" aria-hidden="true"></div>
+{% endblock %}
+
+{% block extrajs %}
+<script type="text/javascript">
+    (function () {
+        const $search = $('#driver-search');
+        const $cards = $('.rv-driver-card');
+        const $empty = $('#driver-no-results');
+
+        $search.on('input', function () {
+            const q = ($(this).val() || '').toLowerCase().trim();
+            let visible = 0;
+            $cards.each(function () {
+                const hay = (($(this).data('search') || '') + '').toLowerCase();
+                const show = !q || hay.indexOf(q) !== -1;
+                $(this).toggleClass('d-none', !show);
+                if (show) visible += 1;
+            });
+            $empty.toggleClass('d-none', visible > 0);
+        });
+    })();
+
+    function openDriverModal(pk) {
+        $.ajax({
+            url: '{% url "comercial:get_driver_form" %}',
+            type: 'GET',
+            data: { pk: pk || '' },
+            success: function (response) {
+                if (response.success) {
+                    $('#modalDriver').html(response.grid);
+                    $('#modalDriver').modal('show');
+                }
+            },
+            error: function () {
+                toastr.error('No se pudo cargar el formulario.');
+            }
+        });
+    }
+
+    $(document).on('click', '.btn-driver-form', function () {
+        openDriverModal($(this).data('pk') || '');
+    });
+
+    $(document).on('submit', '#driver-modal-form', function (event) {
+        event.preventDefault();
+        const $form = $(this);
+        const names = $('#id_names').val().trim();
+        const paternal = $('#id_paternal_last_name').val().trim();
+        const licenseNumber = $('#id_license_number').val().trim();
+        const licenseType = $('#id_license_type').val();
+
+        $form.find('.rv-form-group-required').removeClass('rv-field-error');
+        let hasError = false;
+
+        if (!names) {
+            $('#id_names').closest('.rv-form-group-required').addClass('rv-field-error');
+            hasError = true;
+        }
+        if (!paternal) {
+            $('#id_paternal_last_name').closest('.rv-form-group-required').addClass('rv-field-error');
+            hasError = true;
+        }
+        if (!licenseNumber) {
+            $('#id_license_number').closest('.rv-form-group-required').addClass('rv-field-error');
+            hasError = true;
+        }
+        if (!licenseType) {
+            $('#id_license_type').closest('.rv-form-group-required').addClass('rv-field-error');
+            hasError = true;
+        }
+        if (hasError) {
+            toastr.warning('Complete los campos obligatorios marcados en rojo.');
+            return;
+        }
+
+        const data = new FormData($form.get(0));
+        $('#btn-save-driver').prop('disabled', true);
+
+        $.ajax({
+            url: $form.attr('action'),
+            type: 'POST',
+            data: data,
+            cache: false,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                $('#btn-save-driver').prop('disabled', false);
+                if (response.success) {
+                    toastr.success(response.message);
+                    $('#modalDriver').modal('hide');
+                    setTimeout(() => location.reload(), 700);
+                }
+            },
+            error: function (jqXhr) {
+                $('#btn-save-driver').prop('disabled', false);
+                toastr.error((jqXhr.responseJSON && jqXhr.responseJSON.message) || 'Error al guardar el conductor');
+            }
+        });
+    });
+</script>
+{% endblock %}

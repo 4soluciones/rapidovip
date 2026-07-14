@@ -22,6 +22,7 @@ class Subsidiary(models.Model):
     name = models.CharField('Nombre', max_length=100)
     short_name = models.CharField('Nombre corto', max_length=20)
     address = models.CharField('Dirección', max_length=250, null=True, blank=True)
+    ubigeo = models.CharField('Ubigeo', max_length=6, blank=True, default='')
     color = models.CharField('Color', max_length=20, default='#0d3b66')
     phone = models.CharField('Teléfono', max_length=20, null=True, blank=True)
     is_enabled = models.BooleanField(default=True)

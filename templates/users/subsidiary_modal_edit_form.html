@@ -35,6 +35,9 @@
                             <div class="rv-form-group {% if field.name == 'address' %}rv-form-group-full{% endif %}">
                                 <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                                 {{ field }}
+                                {% if field.name == 'ubigeo' %}
+                                <span class="rv-field-hint">Código SUNAT de 6 dígitos (distrito de la sede).</span>
+                                {% endif %}
                             </div>
                             {% endfor %}
                         </div>

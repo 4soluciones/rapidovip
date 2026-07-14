@@ -414,8 +414,10 @@ def print_guide_format_tk(request, pk=None):  # Guia de Remision Remitente Elect
     )
     doc.build(_dictionary)
 
+    disposition = 'attachment' if request and request.GET.get('download') else 'inline'
     response = HttpResponse(content_type='application/pdf')
-    response['Content-Disposition'] = 'inline; filename="GuiaRemisionRemitente_[{}].pdf"'.format(
+    response['Content-Disposition'] = '{}; filename="GuiaRemisionRemitente_[{}].pdf"'.format(
+        disposition,
         document_number,
     )
     response.write(buff.getvalue())

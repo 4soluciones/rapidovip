@@ -2,6 +2,61 @@ from django import forms
 from .models import *
 
 
+class FormDriver(forms.ModelForm):
+    class Meta:
+        model = Driver
+        fields = [
+            'names', 'paternal_last_name', 'maternal_last_name',
+            'address', 'phone', 'license_number', 'license_type', 'is_active',
+        ]
+        labels = {
+            'names': 'Nombres',
+            'paternal_last_name': 'Apellido paterno',
+            'maternal_last_name': 'Apellido materno',
+            'address': 'Dirección',
+            'phone': 'Teléfono',
+            'license_number': 'N° licencia de conducir',
+            'license_type': 'Tipo de licencia',
+            'is_active': 'Conductor activo',
+        }
+        widgets = {
+            'names': forms.TextInput(attrs={
+                'class': 'rv-form-control rv-input-required',
+                'placeholder': 'Ej: Juan Carlos',
+                'autocomplete': 'off',
+            }),
+            'paternal_last_name': forms.TextInput(attrs={
+                'class': 'rv-form-control rv-input-required',
+                'placeholder': 'Apellido paterno',
+                'autocomplete': 'off',
+            }),
+            'maternal_last_name': forms.TextInput(attrs={
+                'class': 'rv-form-control',
+                'placeholder': 'Apellido materno',
+                'autocomplete': 'off',
+            }),
+            'address': forms.TextInput(attrs={
+                'class': 'rv-form-control',
+                'placeholder': 'Dirección completa',
+                'autocomplete': 'off',
+            }),
+            'phone': forms.TextInput(attrs={
+                'class': 'rv-form-control',
+                'placeholder': 'Ej: 999 888 777',
+                'autocomplete': 'off',
+            }),
+            'license_number': forms.TextInput(attrs={
+                'class': 'rv-form-control rv-input-required',
+                'placeholder': 'N° de licencia',
+                'autocomplete': 'off',
+            }),
+            'license_type': forms.Select(attrs={
+                'class': 'rv-form-control rv-input-required',
+            }),
+            'is_active': forms.CheckboxInput(attrs={'class': 'rv-checkbox'}),
+        }
+
+
 class FormTruck(forms.ModelForm):
     class Meta:
         model = Truck

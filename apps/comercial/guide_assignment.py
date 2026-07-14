@@ -10,6 +10,7 @@ from apps.users.subsidiary_serial_helpers import get_serial_record
 from .models import (
     CargoManifest,
     CarrierRemissionGuide,
+    Driver,
     Programming,
     SenderRemissionGuide,
 )
@@ -43,9 +44,20 @@ def _next_guide_serial(subsidiary, company, service_type):
 
 
 def _employee_license_by_name(full_name):
+    """Busca licencia primero en Driver, luego en Employee (compatibilidad)."""
     if not full_name:
         return ''
-    first = full_name.split(',')[0].strip()
+    name = str(full_name).strip()
+    name_upper = name.upper()
+    for driver in Driver.objects.filter(is_active=True):
+        if driver.full_name.upper() == name_upper:
+            return driver.license_number or ''
+    token = name.split()[0] if name else ''
+    if token:
+        driver = Driver.objects.filter(names__icontains=token, is_active=True).first()
+        if driver:
+            return driver.license_number or ''
+    first = name.split(',')[0].strip()
     employee = Employee.objects.filter(names__icontains=first.split()[0], is_enabled=True).first()
     if not employee:
         employee = Employee.objects.filter(names__icontains=first[:20], is_enabled=True).first()

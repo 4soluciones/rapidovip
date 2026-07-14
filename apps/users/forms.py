@@ -216,11 +216,12 @@ class AdminUserEditForm(forms.ModelForm):
 class SubsidiaryForm(forms.ModelForm):
     class Meta:
         model = Subsidiary
-        fields = ('name', 'short_name', 'address', 'color', 'phone')
+        fields = ('name', 'short_name', 'address', 'ubigeo', 'color', 'phone')
         labels = {
             'name': 'Nombre de la sede',
             'short_name': 'Código corto',
             'address': 'Dirección',
+            'ubigeo': 'Ubigeo',
             'color': 'Color identificador',
             'phone': 'Teléfono',
         }
@@ -228,9 +229,22 @@ class SubsidiaryForm(forms.ModelForm):
             'name': forms.TextInput(attrs={'class': 'rv-form-control', 'placeholder': 'Ej: Sede Lima Centro'}),
             'short_name': forms.TextInput(attrs={'class': 'rv-form-control', 'placeholder': 'Ej: LIM'}),
             'address': forms.TextInput(attrs={'class': 'rv-form-control'}),
+            'ubigeo': forms.TextInput(attrs={
+                'class': 'rv-form-control',
+                'placeholder': 'Ej: 150101',
+                'maxlength': '6',
+                'pattern': '[0-9]{6}',
+                'title': 'Código ubigeo SUNAT de 6 dígitos',
+            }),
             'color': forms.TextInput(attrs={'class': 'rv-form-control', 'type': 'color'}),
             'phone': forms.TextInput(attrs={'class': 'rv-form-control'}),
         }
+
+    def clean_ubigeo(self):
+        ubigeo = (self.cleaned_data.get('ubigeo') or '').strip()
+        if ubigeo and (not ubigeo.isdigit() or len(ubigeo) != 6):
+            raise forms.ValidationError('El ubigeo debe tener exactamente 6 dígitos numéricos.')
+        return ubigeo
 
 
 class SubsidiarySeriesForm(forms.Form):

@@ -33,6 +33,15 @@ class TruckAdmin(ImportExportModelAdmin):
 admin.site.register(models.Truck, TruckAdmin)
 
 
+class DriverAdmin(ImportExportModelAdmin):
+    list_display = ('names', 'paternal_last_name', 'license_number', 'license_type', 'phone', 'is_active')
+    list_filter = ('license_type', 'is_active')
+    search_fields = ('names', 'paternal_last_name', 'maternal_last_name', 'license_number', 'phone')
+
+
+admin.site.register(models.Driver, DriverAdmin)
+
+
 class ProgrammingAdmin(ImportExportModelAdmin):
     list_display = ('id', 'departure_date', 'service_type', 'status', 'truck', 'subsidiary')
     list_filter = ('service_type', 'status', 'departure_date')

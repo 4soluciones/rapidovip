@@ -1,228 +1,154 @@
 <input type="hidden" id="id_programming" name="programming" value="{% if programming_obj %}{{ programming_obj.id }}{% endif %}">
 
-
-
 <div class="rv-prog-form-sections">
-
     <section class="rv-prog-form-block">
-
         <h6 class="rv-prog-form-block-title"><i class="fas fa-shipping-fast"></i> Servicio y sede</h6>
-
         <div class="rv-form-grid">
-
             <div class="rv-form-group rv-form-group-required">
-
                 <label for="id_service_type">Servicio</label>
-
                 <select class="rv-form-control" id="id_service_type" name="service_type" required>
-
                     {% for code, label in service_types %}
-
                         <option value="{{ code }}"
-
                             {% if programming_obj and programming_obj.service_type == code %}selected{% elif not programming_obj and code == 'E' %}selected{% endif %}>
-
                             {{ label }}
-
                         </option>
-
                     {% endfor %}
-
                 </select>
-
             </div>
 
-
-
             <div class="rv-form-group rv-form-group-required">
-
                 <label for="id_origin">Sede origen</label>
-
                 <select class="rv-form-control" id="id_origin" name="origin" required>
-
                     <option selected value="{{ subsidiary_origin.id }}">{{ subsidiary_origin.name }}</option>
-
                 </select>
-
             </div>
-
         </div>
-
     </section>
 
-
-
-    <section class="rv-prog-form-block">
-
-        <h6 class="rv-prog-form-block-title"><i class="fas fa-truck"></i> Unidad y conductor</h6>
-
+    <section class="rv-prog-form-block rv-prog-crew-block">
+        <h6 class="rv-prog-form-block-title"><i class="fas fa-truck"></i> Unidad y tripulación</h6>
         <div class="rv-form-grid">
-
-            <div class="rv-form-group rv-form-group-required">
-
+            <div class="rv-form-group rv-form-group-required rv-form-group-full">
                 <label for="id_truck">Vehículo</label>
-
                 <select class="rv-form-control" id="id_truck" name="truck" required>
-
                     <option value="" disabled {% if not programming_obj %}selected{% endif %}>Seleccione placa</option>
-
                     {% for truck in trucks %}
-
                         <option value="{{ truck.id }}" {% if programming_obj and programming_obj.truck_id == truck.id %}selected{% endif %}>
-
                             {{ truck.license_plate }} — {{ truck.get_drive_type_display }}
-
                         </option>
-
                     {% endfor %}
-
                 </select>
-
             </div>
-
-
-
-            <div class="rv-form-group rv-form-group-required">
-
-                <label for="id_pilot">Conductor</label>
-
-                <select class="rv-form-control" id="id_pilot" name="pilot" required>
-
-                    <option value="" disabled {% if not selected_pilot_id %}selected{% endif %}>Seleccione conductor</option>
-
-                    {% for employee in employees %}
-
-                        <option value="{{ employee.id }}" {% if selected_pilot_id == employee.id %}selected{% endif %}>
-
-                            {{ employee.full_name }}
-
-                        </option>
-
-                    {% endfor %}
-
-                </select>
-
-            </div>
-
-
-
-            <div class="rv-form-group">
-
-                <label for="id_copilot">Copiloto <span class="rv-prog-optional">(opcional)</span></label>
-
-                <select class="rv-form-control" id="id_copilot" name="copilot">
-
-                    <option value="" {% if not selected_copilot_id %}selected{% endif %}>Sin copiloto</option>
-
-                    {% for employee in employees %}
-
-                        <option value="{{ employee.id }}" {% if selected_copilot_id == employee.id %}selected{% endif %}>
-
-                            {{ employee.full_name }}
-
-                        </option>
-
-                    {% endfor %}
-
-                </select>
-
-            </div>
-
         </div>
 
+        <div class="rv-prog-crew-grid">
+            <div class="rv-prog-crew-card rv-prog-crew-pilot">
+                <div class="rv-prog-crew-card-head">
+                    <span class="rv-prog-crew-icon"><i class="fas fa-id-card"></i></span>
+                    <div>
+                        <strong>Conductor</strong>
+                        <span>Responsable principal del viaje</span>
+                    </div>
+                </div>
+                <div class="rv-form-group rv-form-group-required mb-0">
+                    <label for="id_pilot" class="sr-only">Conductor</label>
+                    <select class="rv-form-control" id="id_pilot" name="pilot" required>
+                        <option value="" disabled {% if not selected_pilot_id %}selected{% endif %}>Seleccione conductor</option>
+                        {% for driver in drivers %}
+                            <option value="{{ driver.id }}"
+                                    data-license="{{ driver.license_number }}"
+                                    data-license-type="{{ driver.get_license_type_display }}"
+                                    {% if selected_pilot_id == driver.id %}selected{% endif %}>
+                                {{ driver.full_name }} · {{ driver.license_number }}
+                            </option>
+                        {% empty %}
+                            <option value="" disabled>No hay conductores activos</option>
+                        {% endfor %}
+                    </select>
+                    <small class="rv-field-hint" id="pilot-license-hint">
+                        {% if selected_pilot_license %}Lic. {{ selected_pilot_license }}{% else %}Se mostrará la licencia al seleccionar{% endif %}
+                    </small>
+                </div>
+            </div>
+
+            <div class="rv-prog-crew-card rv-prog-crew-copilot">
+                <div class="rv-prog-crew-card-head">
+                    <span class="rv-prog-crew-icon"><i class="fas fa-user-friends"></i></span>
+                    <div>
+                        <strong>Copiloto <span class="rv-prog-optional">(opcional)</span></strong>
+                        <span>Apoyo en ruta</span>
+                    </div>
+                </div>
+                <div class="rv-form-group mb-0">
+                    <label for="id_copilot" class="sr-only">Copiloto</label>
+                    <select class="rv-form-control" id="id_copilot" name="copilot">
+                        <option value="" {% if not selected_copilot_id %}selected{% endif %}>Sin copiloto</option>
+                        {% for driver in drivers %}
+                            <option value="{{ driver.id }}"
+                                    data-license="{{ driver.license_number }}"
+                                    {% if selected_copilot_id == driver.id %}selected{% endif %}>
+                                {{ driver.full_name }} · {{ driver.license_number }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <small class="rv-field-hint" id="copilot-license-hint">
+                        {% if selected_copilot_license %}Lic. {{ selected_copilot_license }}{% else %}Opcional{% endif %}
+                    </small>
+                </div>
+            </div>
+        </div>
+        {% if not drivers %}
+        <div class="rv-prog-drivers-empty">
+            <i class="fas fa-exclamation-circle"></i>
+            No hay conductores activos.
+            <a href="{% url 'comercial:driver_list' %}" target="_blank">Registrar conductores</a>
+        </div>
+        {% endif %}
     </section>
-
-
 
     <section class="rv-prog-form-block">
-
         <h6 class="rv-prog-form-block-title"><i class="fas fa-calendar-alt"></i> Fechas y estado</h6>
-
         <div class="rv-form-grid">
-
             <div class="rv-form-group rv-form-group-required">
-
                 <label for="id_departure_date">Fecha salida</label>
-
                 <input type="date" class="rv-form-control" id="id_departure_date" name="departure_date"
-
                        value="{% if programming_obj and programming_obj.departure_date %}{{ programming_obj.departure_date|date:'Y-m-d' }}{% else %}{{ current_date }}{% endif %}" required>
-
             </div>
 
-
-
             <div class="rv-form-group">
-
                 <label for="id_arrival_date">Fecha llegada</label>
-
                 <input type="date" class="rv-form-control" id="id_arrival_date" name="arrival_date"
-
                        value="{% if programming_obj and programming_obj.arrival_date %}{{ programming_obj.arrival_date|date:'Y-m-d' }}{% endif %}">
-
             </div>
-
-
 
             <div class="rv-form-group">
-
                 <label for="id_status">Estado</label>
-
                 <select class="rv-form-control" id="id_status" name="status">
-
                     {% for code, label in choices_status %}
-
                         <option value="{{ code }}"
-
                             {% if programming_obj and programming_obj.status == code %}selected{% elif not programming_obj and code == 'P' %}selected{% endif %}>
-
                             {{ label }}
-
                         </option>
-
                     {% endfor %}
-
                 </select>
-
             </div>
-
         </div>
-
     </section>
-
-
 
     <section class="rv-prog-form-block rv-prog-form-block-muted">
-
         <h6 class="rv-prog-form-block-title"><i class="fas fa-file-alt"></i> Manifiesto <span class="rv-prog-optional">(opcional)</span></h6>
-
         <div class="rv-form-grid">
-
             <div class="rv-form-group">
-
                 <label for="id_serial">Serie</label>
-
                 <input type="text" class="rv-form-control" id="id_serial" name="serial"
-
                        value="{{ serial|default_if_none:'' }}" placeholder="Ej. T001">
-
             </div>
-
-
 
             <div class="rv-form-group">
-
                 <label for="id_correlative">Correlativo</label>
-
                 <input type="text" class="rv-form-control" id="id_correlative" name="correlative"
-
                        value="{{ correlative|default_if_none:'' }}" placeholder="Ej. 00001">
-
             </div>
-
         </div>
-
     </section>
-
 </div>
-

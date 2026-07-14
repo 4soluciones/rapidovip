@@ -51,5 +51,23 @@
     (function () {
         $('#programming-modal-form .rv-form-control, #programming-modal-form select').addClass('rv-form-control');
         $('#id_service_type, #id_truck, #id_pilot, #id_departure_date').closest('.rv-form-group').addClass('rv-form-group-required');
+
+        function updateLicenseHint(selectId, hintId, emptyText) {
+            var $opt = $('#' + selectId + ' option:selected');
+            var license = ($opt.data('license') || '').toString().trim();
+            var type = ($opt.data('license-type') || '').toString().trim();
+            var text = emptyText;
+            if ($opt.val() && license) {
+                text = 'Lic. ' + license + (type ? ' · ' + type : '');
+            }
+            $('#' + hintId).text(text);
+        }
+
+        $('#id_pilot').on('change', function () {
+            updateLicenseHint('id_pilot', 'pilot-license-hint', 'Se mostrará la licencia al seleccionar');
+        });
+        $('#id_copilot').on('change', function () {
+            updateLicenseHint('id_copilot', 'copilot-license-hint', 'Opcional');
+        });
     })();
 </script>

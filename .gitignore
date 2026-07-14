@@ -6,7 +6,7 @@ __pycache__
 
 # Backup files #
 *.bak
-nalu/settings.py
+rapidovip/settings.py
 /staticfiles
 migrations
 .idea

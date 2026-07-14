@@ -81,6 +81,48 @@ class Truck(models.Model):
         verbose_name_plural = 'Unidades'
 
 
+class Driver(models.Model):
+    """Conductor operativo (no es usuario del sistema)."""
+    LICENSE_TYPE_CHOICES = (
+        ('A1', 'A-I'),
+        ('A2a', 'A-IIa'),
+        ('A2b', 'A-IIb'),
+        ('A3a', 'A-IIIa'),
+        ('A3b', 'A-IIIb'),
+        ('A3c', 'A-IIIc'),
+        ('B1', 'B-I'),
+        ('B2a', 'B-IIa'),
+        ('B2b', 'B-IIb'),
+        ('B2c', 'B-IIc'),
+    )
+    id = models.AutoField(primary_key=True)
+    names = models.CharField('Nombres', max_length=100)
+    paternal_last_name = models.CharField('Apellido paterno', max_length=100)
+    maternal_last_name = models.CharField('Apellido materno', max_length=100, blank=True, default='')
+    address = models.CharField('Dirección', max_length=250, blank=True, default='')
+    phone = models.CharField('Teléfono', max_length=20, blank=True, default='')
+    license_number = models.CharField('N° licencia', max_length=30)
+    license_type = models.CharField(
+        'Tipo de licencia', max_length=5, choices=LICENSE_TYPE_CHOICES, default='A3b',
+    )
+    is_active = models.BooleanField('Activo', default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def full_name(self):
+        parts = [self.names, self.paternal_last_name, self.maternal_last_name or '']
+        return ' '.join(p.strip() for p in parts if p and p.strip())
+
+    def __str__(self):
+        return self.full_name
+
+    class Meta:
+        verbose_name = 'Conductor'
+        verbose_name_plural = 'Conductores'
+        ordering = ['paternal_last_name', 'names']
+
+
 class Programming(models.Model):
     SERVICE_TYPE_CHOICES = (
         ('E', 'Encomiendas'),

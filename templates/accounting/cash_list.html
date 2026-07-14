@@ -24,8 +24,8 @@
     <div class="rv-form-section rv-finance-toolbar">
         <form class="rv-filter-bar" id="search-form" method="POST">
             {% csrf_token %}
-            <div class="rv-form-grid rv-form-grid-4">
-                <div class="rv-form-group rv-form-group-required">
+            <div class="rv-cash-filters">
+                <div class="rv-form-group rv-cash-filter-cash">
                     <label for="id-cash">Caja</label>
                     <select class="rv-form-control" id="id-cash" name="cash" required>
                         {% for c in only_cash_set %}
@@ -35,19 +35,19 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="rv-form-group">
+                <div class="rv-form-group rv-cash-filter-date">
                     <label for="id-start-date">Fecha</label>
                     <input type="date" class="rv-form-control" id="id-start-date" name="start-date" value="{{ formatdate }}">
                 </div>
-                <div class="rv-form-group">
+                <div class="rv-form-group rv-cash-filter-user">
                     <label for="id-user">Usuario</label>
                     <select class="rv-form-control" id="id-user" name="user" required>
                         <option value="1">Todos</option>
                         <option value="2">Solo mi usuario</option>
                     </select>
                 </div>
-                <div class="rv-form-group rv-form-group-action">
-                    <label>&nbsp;</label>
+                <div class="rv-form-group rv-cash-filter-action">
+                    <label class="rv-cash-filter-action-label" for="btn-search">Buscar</label>
                     <button type="submit" class="rv-btn rv-btn-search" id="btn-search">
                         <i class="fas fa-search"></i> Buscar
                     </button>

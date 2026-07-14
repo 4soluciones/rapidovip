@@ -1,7 +1,19 @@
 <div class="rv-guide-service rv-guide-service-e">
     <div class="rv-guide-e-top">
         <div class="rv-guide-card rv-guide-e-doc">
-            <div class="rv-guide-card-head"><i class="fas fa-file-invoice"></i><span>Documento y pago</span></div>
+            <div class="rv-guide-card-head">
+                <span><i class="fas fa-file-invoice"></i> Documento y pago</span>
+                <div class="rv-guide-doc-inline" title="Serie y correlativo del documento">
+                    <div class="rv-guide-doc-field">
+                        <label for="id_serie">Serie</label>
+                        <input type="text" class="rv-form-control text-center rv-guide-doc-locked" id="id_serie" readonly value="{{ service_docs.E.T.serial }}">
+                    </div>
+                    <div class="rv-guide-doc-field">
+                        <label for="id_correlative">N°</label>
+                        <input type="text" class="rv-form-control text-center rv-guide-doc-locked" id="id_correlative" readonly value="{{ service_docs.E.T.correlative }}">
+                    </div>
+                </div>
+            </div>
             <div class="rv-guide-e-doc-fields">
                 <div class="rv-form-group">
                     <label for="e_issue_date">Fecha de emisión</label>
@@ -53,14 +65,13 @@
         <div class="rv-guide-card rv-guide-e-route">
             <div class="rv-guide-card-head"><i class="fas fa-route"></i><span>Ruta de encomienda</span></div>
             <div class="rv-guide-e-route-grid">
-                <div class="rv-form-group rv-form-group-required">
+                <div class="rv-form-group">
                     <label for="e_subsidiary_origin">Punto de partida</label>
                     <div class="rv-e-input-wrap">
                         <i class="fas fa-map-marker-alt rv-e-input-icon"></i>
-                        <select id="e_subsidiary_origin" class="rv-form-control rv-e-input-pad">
-                            <option value="0">Seleccione...</option>
+                        <select id="e_subsidiary_origin" class="rv-form-control rv-e-input-pad" data-default="{{ subsidiary_origin.id }}">
                             {% for s in subsidiaries %}
-                                <option {% if user.worker_set.last.establishment_set.last.subsidiary.id == s.id %}selected{% endif %} value="{{ s.id }}">{{ s.short_name }}</option>
+                                <option {% if subsidiary_origin.id == s.id %}selected{% endif %} value="{{ s.id }}">{{ s.short_name }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -232,6 +243,10 @@
                     <input type="text" id="e_detail_desc" class="rv-form-control rv-e-input-pad text-uppercase" placeholder="Ej. DOCUMENTOS, CAJA, ELECTRODOMÉSTICO">
                 </div>
             </div>
+            <div class="rv-form-group rv-guide-e-detail-weight">
+                <label for="e_detail_weight">Peso (kg) <span class="rv-text-muted">opc.</span></label>
+                <input type="number" id="e_detail_weight" class="rv-form-control text-center" min="0" step="0.01" placeholder="0.00">
+            </div>
             <div class="rv-form-group rv-guide-e-detail-price">
                 <label for="e_detail_price">P. unitario</label>
                 <div class="rv-e-input-wrap">
@@ -258,6 +273,7 @@
             <div class="rv-guide-e-detail-list-head">
                 <span>Cant.</span>
                 <span>Descripción</span>
+                <span class="text-right">Peso</span>
                 <span class="text-right">P. unitario</span>
                 <span class="text-right">Importe</span>
                 <span></span>

@@ -140,8 +140,9 @@
                                 {% if g.cargo_manifest_id %}<span class="rv-tag rv-tag-ok">En manifiesto</span>{% endif %}
                             </td>
                             <td class="rv-assignment-actions">
-                                <a class="rv-btn rv-btn-ghost rv-btn-sm" target="_blank"
-                                   href="{% url 'comercial:print_guide_format_tk' g.id %}">PDF</a>
+                                <button type="button" class="rv-btn rv-btn-ghost rv-btn-sm js-download-guide"
+                                        data-url="{% url 'comercial:print_guide_format_tk' g.id %}?download=1"
+                                        data-filename="GuiaRemisionRemitente_{{ g.id }}.pdf">PDF</button>
                                 {% if not g.cargo_manifest_id %}
                                 <button type="button" class="rv-btn rv-btn-danger rv-btn-sm js-unassign"
                                         data-guide-id="{{ g.id }}">Anular</button>
@@ -258,6 +259,26 @@
         }
     }
 
+    function downloadPdf(url, filename) {
+        fetch(url, { credentials: 'same-origin' })
+            .then(res => {
+                if (!res.ok) throw new Error('download failed');
+                return res.blob();
+            })
+            .then(blob => {
+                const blobUrl = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = filename || 'documento.pdf';
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(blobUrl);
+            })
+            .catch(() => toast(false, 'No se pudo descargar el PDF'));
+    }
+
     function selectProgramming(btn) {
         document.querySelectorAll('.rv-assignment-prog').forEach(el => el.classList.remove('is-selected'));
         btn.classList.add('is-selected');
@@ -295,13 +316,18 @@
                 .then(data => {
                     toast(!!data.success, data.message || 'Listo');
                     if (data.success) {
-                        if (data.print_url) window.open(data.print_url, '_blank');
                         setTimeout(() => location.reload(), 700);
                     } else {
                         this.disabled = false;
                     }
                 })
                 .catch(() => { toast(false, 'Error de red'); this.disabled = false; });
+        });
+    });
+
+    document.querySelectorAll('.js-download-guide').forEach(btn => {
+        btn.addEventListener('click', function () {
+            downloadPdf(this.dataset.url, this.dataset.filename);
         });
     });
 

@@ -23,6 +23,10 @@ urlpatterns = [
     path('get_truck_form/', login_required(get_truck_form), name='get_truck_form'),
     path('save_truck/', login_required(save_truck), name='save_truck'),
     path('get_truck/', login_required(get_truck), name='get_truck'),
+    # drivers
+    path('driver_list/', login_required(DriverList.as_view()), name='driver_list'),
+    path('get_driver_form/', login_required(get_driver_form), name='get_driver_form'),
+    path('save_driver/', login_required(save_driver), name='save_driver'),
     # programming
     path('programming_list/', login_required(ProgrammingList.as_view()), name='programming_list'),
     path('new_programming/', new_programming, name='new_programming'),
