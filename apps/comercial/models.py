@@ -267,7 +267,7 @@ class Programming(models.Model):
 
 
 class CargoManifest(models.Model):
-    """Manifiesto de carga: agrupa obligatoriamente las guías remitente de una programación."""
+    """Manifiesto de carga: agrupa las guías de remisión transportista de una programación."""
 
     STATUS_CHOICES = (
         ('D', 'Borrador'),
@@ -321,7 +321,7 @@ class CargoManifest(models.Model):
 
 
 class CarrierRemissionGuide(models.Model):
-    """Guía de remisión transportista: opcional, agrupa guías remitente de una programación."""
+    """Guía de remisión transportista: una por orden de servicio al asignarla a una programación."""
 
     STATUS_CHOICES = (
         ('D', 'Borrador'),
@@ -330,8 +330,16 @@ class CarrierRemissionGuide(models.Model):
         ('C', 'Completada'),
         ('X', 'Anulada'),
     )
-    programming = models.OneToOneField(
-        Programming, on_delete=models.PROTECT, related_name='carrier_guide',
+    order = models.OneToOneField(
+        'sales.Order', on_delete=models.PROTECT, related_name='carrier_guide',
+    )
+    programming = models.ForeignKey(
+        Programming, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='carrier_guides',
+    )
+    cargo_manifest = models.ForeignKey(
+        CargoManifest, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='carrier_guides',
     )
     serial = models.CharField(max_length=10, blank=True, default='')
     correlative = models.CharField(max_length=20, blank=True, default='')
@@ -341,6 +349,7 @@ class CarrierRemissionGuide(models.Model):
     total_weight = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     quantity_packages = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     observation = models.TextField(blank=True, default='')
+    related_document = models.CharField(max_length=120, blank=True, default='')
     driver_name = models.CharField(max_length=200, blank=True, default='')
     driver_license = models.CharField(max_length=30, blank=True, default='')
     truck = models.ForeignKey(
@@ -365,8 +374,10 @@ class CarrierRemissionGuide(models.Model):
         return str(self.pk)
 
     def recalculate_totals(self):
-        agg = self.sender_guides.aggregate(
-            w=Sum('total_weight'), p=Sum('quantity_packages'),
+        if not self.order_id:
+            return
+        agg = self.order.orderdetail_set.aggregate(
+            w=Sum('weight'), p=Sum('quantity'),
         )
         self.total_weight = agg['w'] or 0
         self.quantity_packages = agg['p'] or 0
@@ -379,7 +390,7 @@ class CarrierRemissionGuide(models.Model):
 
 
 class SenderRemissionGuide(models.Model):
-    """Guía de remisión remitente: una por orden al asignarla a una programación."""
+    """Guía de remisión remitente (reservada; proceso actual usa GRT por orden)."""
 
     STATUS_CHOICES = (
         ('D', 'Borrador'),

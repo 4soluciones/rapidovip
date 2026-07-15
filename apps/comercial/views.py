@@ -66,8 +66,7 @@ from .forms import FormDriver, FormProgramming, FormTruck
 from .guide_assignment import (
     assign_order_to_programming,
     create_cargo_manifest_for_programming,
-    create_carrier_guide_for_programming,
-    unassign_sender_guide,
+    unassign_carrier_guide,
 )
 from .models import (
     CargoManifest,
@@ -75,7 +74,6 @@ from .models import (
     Driver,
     Owner,
     Programming,
-    SenderRemissionGuide,
     Truck,
     TruckBrand,
     TruckModel,
@@ -785,6 +783,7 @@ def create_order(request):
             total=total,
             company=company_obj,
             service_type=service_type,
+            observation=str(data_orders.get('Observation') or '').strip().upper(),
         )
         order_obj.save()
 
@@ -1915,7 +1914,7 @@ def get_trucks_programming_grid(request):
 # ----------------------- Remission guides assignment -----------------------
 
 class GuideAssignmentView(TemplateView):
-    """Módulo para asignar encomiendas a programación y emitir guías."""
+    """Asignación: orden de servicio → GRT → manifiesto de carga."""
     template_name = 'comercial/guide_assignment.html'
 
     def get_context_data(self, **kwargs):
@@ -1933,42 +1932,43 @@ class GuideAssignmentView(TemplateView):
             departure_date=search_date,
             status__in=['P', 'R'],
         ).select_related(
-            'truck', 'subsidiary', 'company', 'cargo_manifest', 'carrier_guide',
-        ).order_by('turn', 'id')
+            'truck',
+            'truck__truck_model',
+            'truck__truck_model__truck_brand',
+            'subsidiary',
+            'company',
+            'cargo_manifest',
+        ).prefetch_related('carrier_guides').order_by('turn', 'id')
 
         pending_orders = Order.objects.filter(
             status='P',
             type_order='E',
             service_type='E',
         ).exclude(
-            sender_guide__status='I',
+            carrier_guide__status='I',
         ).select_related(
             'encomienda__office_destination',
             'client',
             'user',
+            'orderbill',
         ).prefetch_related(
             'orderaction_set__client',
             'orderdetail_set',
         ).order_by('-id')[:200]
 
-        assigned_guides = SenderRemissionGuide.objects.filter(
+        assigned_guides = CarrierRemissionGuide.objects.filter(
             status='I',
             programming__departure_date=search_date,
         ).select_related(
-            'order', 'programming', 'programming__truck', 'carrier_guide', 'cargo_manifest',
+            'order', 'order__orderbill', 'order__encomienda__office_destination',
+            'programming', 'programming__truck', 'cargo_manifest', 'truck',
         ).order_by('-id')
 
         cargo_manifests = CargoManifest.objects.filter(
             programming__departure_date=search_date,
         ).exclude(status='X').select_related(
             'programming', 'truck',
-        ).prefetch_related('sender_guides')
-
-        carrier_guides = CarrierRemissionGuide.objects.filter(
-            programming__departure_date=search_date,
-        ).exclude(status='X').select_related(
-            'programming', 'truck',
-        ).prefetch_related('sender_guides')
+        ).prefetch_related('carrier_guides')
 
         context.update({
             'search_date': search_date,
@@ -1976,43 +1976,57 @@ class GuideAssignmentView(TemplateView):
             'pending_orders': pending_orders,
             'assigned_guides': assigned_guides,
             'cargo_manifests': cargo_manifests,
-            'carrier_guides': carrier_guides,
             'subsidiary': subsidiary_obj,
         })
         return context
 
 
 def assign_order_guide(request):
-    """POST: asigna una orden a una programación y crea guía remitente."""
+    """POST: asigna una orden de servicio a una programación y emite su GRT."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Método no permitido.'}, status=HTTPStatus.BAD_REQUEST)
     try:
         order_id = int(request.POST.get('order_id') or 0)
         programming_id = int(request.POST.get('programming_id') or 0)
-        order_obj = Order.objects.select_related('encomienda').get(pk=order_id)
+        order_obj = Order.objects.select_related('encomienda', 'carrier_guide', 'orderbill').get(pk=order_id)
         programming_obj = Programming.objects.select_related('truck').get(pk=programming_id)
         if not programming_obj.support_pilot:
             return JsonResponse({
                 'success': False,
                 'message': 'La programación no tiene conductor asignado.',
             }, status=HTTPStatus.BAD_REQUEST)
+        existing = getattr(order_obj, 'carrier_guide', None)
+        was_assigned = (
+            existing
+            and existing.status == 'I'
+            and existing.programming_id
+            and existing.programming_id != programming_obj.id
+        )
         guide = assign_order_to_programming(order_obj, programming_obj, request.user)
         return JsonResponse({
             'success': True,
-            'message': 'Asignado.',
+            'message': (
+                f'Reasignada. GRT {guide.document_number()}.'
+                if was_assigned else
+                f'Asignada. GRT {guide.document_number()} emitida.'
+            ),
             'guide_id': guide.id,
             'document_number': guide.document_number(),
+            'order_id': order_obj.id,
+            'print_url': f'/comercial/print_guide_format_a4/{guide.id}/',
         }, status=HTTPStatus.OK)
     except Order.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Orden no encontrada.'}, status=HTTPStatus.NOT_FOUND)
     except Programming.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Programación no encontrada.'}, status=HTTPStatus.NOT_FOUND)
+    except ValueError as exc:
+        return JsonResponse({'success': False, 'message': str(exc)}, status=HTTPStatus.BAD_REQUEST)
     except Exception as exc:
         return JsonResponse({'success': False, 'message': str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
 
 def create_cargo_manifest(request):
-    """POST: genera el manifiesto de carga obligatorio de una programación."""
+    """POST: genera el manifiesto de carga agrupando las GRT de una programación."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Método no permitido.'}, status=HTTPStatus.BAD_REQUEST)
     try:
@@ -2038,51 +2052,29 @@ def create_cargo_manifest(request):
 
 
 def create_carrier_guide(request):
-    """POST: genera la guía transportista opcional de una programación."""
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'message': 'Método no permitido.'}, status=HTTPStatus.BAD_REQUEST)
-    try:
-        programming_id = int(request.POST.get('programming_id') or 0)
-        programming_obj = Programming.objects.select_related('truck', 'subsidiary', 'company').get(
-            pk=programming_id,
-        )
-        try:
-            manifest = programming_obj.cargo_manifest
-        except CargoManifest.DoesNotExist:
-            manifest = None
-        if not manifest or manifest.status == 'X':
-            return JsonResponse({
-                'success': False,
-                'message': 'Primero debe emitir el manifiesto de carga.',
-            }, status=HTTPStatus.BAD_REQUEST)
-        carrier = create_carrier_guide_for_programming(programming_obj, request.user)
-        return JsonResponse({
-            'success': True,
-            'message': f'Guía transportista {carrier.document_number()} emitida.',
-            'guide_id': carrier.id,
-            'document_number': carrier.document_number(),
-            'print_url': f'/comercial/print_guide_format_a4/{carrier.id}/',
-            'guides_count': carrier.sender_guides.count(),
-        }, status=HTTPStatus.OK)
-    except Programming.DoesNotExist:
-        return JsonResponse({'success': False, 'message': 'Programación no encontrada.'}, status=HTTPStatus.NOT_FOUND)
-    except ValueError as exc:
-        return JsonResponse({'success': False, 'message': str(exc)}, status=HTTPStatus.BAD_REQUEST)
-    except Exception as exc:
-        return JsonResponse({'success': False, 'message': str(exc)}, status=HTTPStatus.BAD_REQUEST)
+    """POST legacy: la GRT se emite al asignar cada orden."""
+    return JsonResponse({
+        'success': False,
+        'message': 'La guía transportista se emite al asignar cada orden de servicio.',
+    }, status=HTTPStatus.BAD_REQUEST)
 
 
 def unassign_order_guide(request):
-    """POST: anula la asignación de una guía remitente."""
+    """POST: desasigna una GRT (la orden vuelve a pendientes)."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Método no permitido.'}, status=HTTPStatus.BAD_REQUEST)
     try:
         guide_id = int(request.POST.get('guide_id') or 0)
-        guide = SenderRemissionGuide.objects.select_related('order').get(pk=guide_id)
-        unassign_sender_guide(guide)
-        return JsonResponse({'success': True, 'message': 'Asignación anulada.'}, status=HTTPStatus.OK)
-    except SenderRemissionGuide.DoesNotExist:
-        return JsonResponse({'success': False, 'message': 'Guía no encontrada.'}, status=HTTPStatus.NOT_FOUND)
+        guide = CarrierRemissionGuide.objects.select_related('order').get(pk=guide_id)
+        unassign_carrier_guide(guide)
+        return JsonResponse({
+            'success': True,
+            'message': 'Desasignado. La orden de servicio volvió a pendientes.',
+        }, status=HTTPStatus.OK)
+    except CarrierRemissionGuide.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Guía transportista no encontrada.'}, status=HTTPStatus.NOT_FOUND)
+    except ValueError as exc:
+        return JsonResponse({'success': False, 'message': str(exc)}, status=HTTPStatus.BAD_REQUEST)
     except Exception as exc:
         return JsonResponse({'success': False, 'message': str(exc)}, status=HTTPStatus.BAD_REQUEST)
 

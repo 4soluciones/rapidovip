@@ -115,7 +115,7 @@ STATUS_CHOICES = (
 WAY_TO_PAY_CHOICES = (('C', 'AL CONTADO'), ('D', 'PAGO DESTINO'), ('S', 'SERVICIO'), ('O', 'Otro'))
 TYPE_COMMODITY_CHOICES = (('S', 'SIN ENTREGAR'), ('E', 'ENTREGADO'), ('A', 'ANULADO'), ('I', 'INTERNADO'))
 STATUS_TRANSPORT_CHOICES = (('O', 'EN ORIGEN'), ('T', 'EN TRÁNSITO'), ('D', 'EN DESTINO'), ('E', 'ENTREGADO'))
-TYPE_DOCUMENT = (('T', 'TICKET'), ('B', 'BOLETA'), ('F', 'FACTURA'))
+TYPE_DOCUMENT = (('T', 'ORDEN DE SERVICIO'), ('B', 'BOLETA'), ('F', 'FACTURA'))
 GUIDE_TYPE_CHOICES = (('O', 'OFICINA'), ('R', 'REPARTO'))
 SERVICE_TYPE_CHOICES = (
     ('E', 'ENCOMIENDAS'),
@@ -147,6 +147,7 @@ class Order(models.Model):
     way_to_pay = models.CharField('Forma de pago', max_length=1, choices=WAY_TO_PAY_CHOICES, default='C')
     company = models.ForeignKey('users.Company', on_delete=models.SET_NULL, null=True, blank=True)
     service_type = models.CharField('Tipo de servicio', max_length=1, choices=SERVICE_TYPE_CHOICES, default='E')
+    observation = models.TextField('Observación', blank=True, default='')
     cancel_motive = models.CharField(max_length=500, null=True, blank=True)
 
     def __str__(self):

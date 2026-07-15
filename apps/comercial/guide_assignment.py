@@ -1,4 +1,4 @@
-"""Helpers for sender guides, cargo manifest and optional carrier guide."""
+"""Helpers: orden de servicio → GRT (1 por orden) → manifiesto de carga."""
 import decimal
 from datetime import date
 
@@ -12,7 +12,6 @@ from .models import (
     CarrierRemissionGuide,
     Driver,
     Programming,
-    SenderRemissionGuide,
 )
 
 
@@ -64,9 +63,34 @@ def _employee_license_by_name(full_name):
     return (employee.n_license or '') if employee else ''
 
 
-def _destination_label_for_guides(sender_guides):
+def related_document_for_order(order_obj):
+    """Documento relacionado (factura/boleta) o vacío si es solo orden de servicio."""
+    if not order_obj:
+        return ''
+    order_bill = getattr(order_obj, 'orderbill', None)
+    if order_bill is None and hasattr(order_obj, 'orderbill_set'):
+        order_bill = order_obj.orderbill_set.first()
+    if order_bill:
+        bill_type = str(getattr(order_bill, 'type', '') or '')
+        serial = (order_bill.serial or order_obj.serial or '').strip()
+        number = str(
+            getattr(order_bill, 'n_receipt', None) or order_obj.correlative_sale or ''
+        ).zfill(6)
+        if bill_type in ('1', 'F', '01'):
+            return f'FACTURA ELECTRÓNICA: {serial}-{number}'
+        if bill_type in ('2', '3', 'B', '03'):
+            return f'BOLETA ELECTRÓNICA: {serial}-{number}'
+        return f'DOCUMENTO: {serial}-{number}'
+    if order_obj.type_document == 'F':
+        return f'FACTURA ELECTRÓNICA: {order_obj.serial or ""}-{order_obj.correlative_sale or ""}'
+    if order_obj.type_document == 'B':
+        return f'BOLETA ELECTRÓNICA: {order_obj.serial or ""}-{order_obj.correlative_sale or ""}'
+    return ''
+
+
+def _destination_label_for_guides(carrier_guides):
     labels = []
-    for guide in sender_guides:
+    for guide in carrier_guides:
         order = guide.order
         if not order:
             continue
@@ -93,28 +117,50 @@ def _destination_label_for_guides(sender_guides):
 @transaction.atomic
 def assign_order_to_programming(order_obj, programming_obj, user):
     """
-    Assign an encomienda order to a programming and issue a SenderRemissionGuide.
-    Requires an existing programming.
+    Asigna una orden de servicio a una programación y emite su GRT
+    (tipo de traslado privado; documento relacionado = boleta/factura si existe).
     """
     if not programming_obj:
-        raise ValueError('Debe existir una programación para generar la guía de remisión.')
+        raise ValueError('Debe existir una programación para generar la guía transportista.')
 
-    if getattr(order_obj, 'sender_guide', None) and order_obj.sender_guide.status != 'C':
-        guide = order_obj.sender_guide
-        guide.programming = programming_obj
-        guide.status = 'I'
-        guide.transfer_start_date = programming_obj.departure_date
-        guide.save(update_fields=[
-            'programming', 'status', 'transfer_start_date', 'updated_at',
-        ])
+    weight, packages = _order_totals(order_obj)
+    related_doc = related_document_for_order(order_obj)
+    existing = getattr(order_obj, 'carrier_guide', None)
+
+    if existing:
+        if existing.cargo_manifest_id and existing.status == 'I':
+            raise ValueError(
+                'La orden ya está en un manifiesto de carga. '
+                'No se puede reasignar hasta retirarla del manifiesto.'
+            )
+        if existing.status == 'I' and existing.programming_id == programming_obj.id:
+            return existing
+        existing.programming = programming_obj
+        existing.status = 'I'
+        existing.emit_date = existing.emit_date or date.today()
+        existing.transfer_start_date = programming_obj.departure_date
+        existing.total_weight = weight
+        existing.quantity_packages = packages
+        existing.related_document = related_doc
+        existing.cargo_manifest = None
+        if (order_obj.observation or '').strip() and not (existing.observation or '').strip():
+            existing.observation = (order_obj.observation or '').strip()
+        existing.driver_name = programming_obj.support_pilot or ''
+        existing.driver_license = _employee_license_by_name(programming_obj.support_pilot or '')
+        existing.truck = programming_obj.truck
+        existing.subsidiary = order_obj.subsidiary or programming_obj.subsidiary
+        existing.company = order_obj.company or programming_obj.company
+        if user and not existing.user_id:
+            existing.user = user
+        existing.save()
+        guide = existing
     else:
-        weight, packages = _order_totals(order_obj)
         serial, correlative = _next_guide_serial(
             order_obj.subsidiary or programming_obj.subsidiary,
             order_obj.company or programming_obj.company,
-            'R',
+            'T',
         )
-        guide = SenderRemissionGuide.objects.create(
+        guide = CarrierRemissionGuide.objects.create(
             order=order_obj,
             programming=programming_obj,
             serial=serial,
@@ -124,6 +170,11 @@ def assign_order_to_programming(order_obj, programming_obj, user):
             transfer_start_date=programming_obj.departure_date,
             total_weight=weight,
             quantity_packages=packages,
+            related_document=related_doc,
+            observation=(order_obj.observation or '').strip(),
+            driver_name=programming_obj.support_pilot or '',
+            driver_license=_employee_license_by_name(programming_obj.support_pilot or ''),
+            truck=programming_obj.truck,
             subsidiary=order_obj.subsidiary or programming_obj.subsidiary,
             company=order_obj.company or programming_obj.company,
             user=user,
@@ -140,21 +191,20 @@ def assign_order_to_programming(order_obj, programming_obj, user):
 @transaction.atomic
 def create_cargo_manifest_for_programming(programming_obj, user):
     """
-    Create/refresh the mandatory CargoManifest for a programming.
-    Groups all issued sender guides of that programming.
+    Emite/actualiza el manifiesto de carga agrupando las GRT de la programación.
     """
-    sender_guides = list(
-        SenderRemissionGuide.objects.filter(
+    carrier_guides = list(
+        CarrierRemissionGuide.objects.filter(
             programming=programming_obj, status='I',
         ).select_related('order', 'order__encomienda')
     )
-    if not sender_guides:
-        raise ValueError('No hay guías de remisión remitente emitidas para esta programación.')
+    if not carrier_guides:
+        raise ValueError('No hay guías transportista emitidas para esta programación.')
 
-    weight = sum((g.total_weight or 0) for g in sender_guides)
-    packages = sum((g.quantity_packages or 0) for g in sender_guides)
-    amount = sum((g.order.total or 0) for g in sender_guides if g.order_id)
-    destination = _destination_label_for_guides(sender_guides)
+    weight = sum((g.total_weight or 0) for g in carrier_guides)
+    packages = sum((g.quantity_packages or 0) for g in carrier_guides)
+    amount = sum((g.order.total or 0) for g in carrier_guides if g.order_id)
+    destination = _destination_label_for_guides(carrier_guides)
     driver_name = programming_obj.support_pilot or ''
     co_pilot_name = programming_obj.support_copilot or ''
 
@@ -162,7 +212,7 @@ def create_cargo_manifest_for_programming(programming_obj, user):
     if manifest and manifest.status != 'X':
         manifest.total_weight = weight
         manifest.quantity_packages = packages
-        manifest.guides_count = len(sender_guides)
+        manifest.guides_count = len(carrier_guides)
         manifest.total_amount = amount
         manifest.destination_label = destination
         manifest.driver_name = driver_name
@@ -187,7 +237,7 @@ def create_cargo_manifest_for_programming(programming_obj, user):
             emit_date=date.today(),
             total_weight=weight,
             quantity_packages=packages,
-            guides_count=len(sender_guides),
+            guides_count=len(carrier_guides),
             total_amount=amount,
             destination_label=destination,
             driver_name=driver_name,
@@ -200,11 +250,11 @@ def create_cargo_manifest_for_programming(programming_obj, user):
             user=user,
         )
 
-    SenderRemissionGuide.objects.filter(
+    CarrierRemissionGuide.objects.filter(
         programming=programming_obj, status='I',
     ).update(cargo_manifest=manifest)
 
-    for guide in sender_guides:
+    for guide in carrier_guides:
         if guide.order_id and guide.order.status == 'S':
             guide.order.status = 'T'
             guide.order.save(update_fields=['status', 'update_at'])
@@ -217,72 +267,42 @@ def create_cargo_manifest_for_programming(programming_obj, user):
 
 
 @transaction.atomic
-def create_carrier_guide_for_programming(programming_obj, user):
+def unassign_carrier_guide(guide_obj):
     """
-    Optional CarrierRemissionGuide for a programming.
-    Requires at least one issued sender guide (preferably already in a cargo manifest).
+    Quita la orden de la programación (corrige asignación errónea).
+    La orden vuelve a pendientes. No permite desasignar si ya está en un manifiesto.
     """
-    sender_guides = list(
-        SenderRemissionGuide.objects.filter(
-            programming=programming_obj, status='I',
-        ).select_related('order')
-    )
-    if not sender_guides:
-        raise ValueError('No hay guías de remisión remitente emitidas para esta programación.')
-
-    weight = sum((g.total_weight or 0) for g in sender_guides)
-    packages = sum((g.quantity_packages or 0) for g in sender_guides)
-
-    carrier = getattr(programming_obj, 'carrier_guide', None)
-    if carrier and carrier.status != 'X':
-        carrier.total_weight = weight
-        carrier.quantity_packages = packages
-        carrier.driver_name = programming_obj.support_pilot or carrier.driver_name
-        carrier.driver_license = _employee_license_by_name(carrier.driver_name) or carrier.driver_license
-        carrier.truck = programming_obj.truck
-        carrier.transfer_start_date = programming_obj.departure_date
-        carrier.status = 'I'
-        carrier.save()
-    else:
-        serial, correlative = _next_guide_serial(
-            programming_obj.subsidiary,
-            programming_obj.company,
-            'T',
+    if guide_obj.cargo_manifest_id:
+        raise ValueError(
+            'No se puede desasignar: la guía ya está en un manifiesto de carga.'
         )
-        carrier = CarrierRemissionGuide.objects.create(
-            programming=programming_obj,
-            serial=serial,
-            correlative=correlative,
-            status='I',
-            emit_date=date.today(),
-            transfer_start_date=programming_obj.departure_date,
-            total_weight=weight,
-            quantity_packages=packages,
-            driver_name=programming_obj.support_pilot or '',
-            driver_license=_employee_license_by_name(programming_obj.support_pilot or ''),
-            truck=programming_obj.truck,
-            subsidiary=programming_obj.subsidiary,
-            company=programming_obj.company,
-            user=user,
-        )
+    if guide_obj.status == 'X':
+        return guide_obj
 
-    SenderRemissionGuide.objects.filter(
-        programming=programming_obj, status='I',
-    ).update(carrier_guide=carrier)
-    return carrier
-
-
-def unassign_sender_guide(guide_obj):
-    """Detach a sender guide from programming (cancel assignment)."""
     order = guide_obj.order
-    guide_obj.status = 'C'
+    guide_obj.status = 'X'
     guide_obj.programming = None
-    guide_obj.carrier_guide = None
     guide_obj.cargo_manifest = None
     guide_obj.save(update_fields=[
-        'status', 'programming', 'carrier_guide', 'cargo_manifest', 'updated_at',
+        'status', 'programming', 'cargo_manifest', 'updated_at',
     ])
     if order and order.status in ('S', 'T'):
         order.status = 'P'
         order.truck = None
         order.save(update_fields=['status', 'truck', 'update_at'])
+    return guide_obj
+
+
+# Compatibilidad con imports antiguos
+def unassign_sender_guide(guide_obj):
+    """Deprecated: usar unassign_carrier_guide."""
+    if isinstance(guide_obj, CarrierRemissionGuide):
+        return unassign_carrier_guide(guide_obj)
+    raise ValueError('La guía remitente no se usa en este proceso. Desasigne la GRT.')
+
+
+def create_carrier_guide_for_programming(programming_obj, user):
+    """Deprecated: la GRT se emite al asignar cada orden."""
+    raise ValueError(
+        'La guía transportista se emite automáticamente al asignar cada orden de servicio.'
+    )

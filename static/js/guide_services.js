@@ -305,6 +305,7 @@ var GuideServices = (function ($) {
         $('#e_details_body').empty();
         $('#e_detail_desc, #e_detail_price, #e_detail_amount, #e_detail_weight').val('');
         $('#e_detail_qty').val('1');
+        $('#e_observation').val('');
         recalcEncomiendaTotals();
         $('#e_subsidiary_origin').trigger('change');
     }
@@ -681,6 +682,7 @@ var GuideServices = (function ($) {
             payload.Igv = $('.e-igv').text();
             payload.Sub_total = $('.e-subtotal').text();
             payload.Total = $('.e-total').text();
+            payload.Observation = ($('#e_observation').val() || '').trim();
             $('#e_details_body .rv-guide-e-detail-row').each(function () {
                 payload.Details.push({
                     Quantity: $(this).find('.e-item-qty').text(),

@@ -40,7 +40,7 @@
                 <div class="rv-form-group">
                     <label for="e_type_bill">Tipo de documento</label>
                     <select id="e_type_bill" class="rv-form-control text-uppercase">
-                        <option value="T">Ticket encomienda</option>
+                        <option value="T">Orden de servicio</option>
                         <option value="B">Boleta</option>
                         <option value="F">Factura</option>
                     </select>
@@ -297,6 +297,21 @@
             <div class="rv-guide-e-summary-item rv-guide-e-summary-total">
                 <span>Total</span>
                 <strong>S/ <span class="e-total">0.00</span></strong>
+            </div>
+        </div>
+    </div>
+
+    <div class="rv-guide-card rv-guide-card-full rv-guide-e-observation-panel">
+        <div class="rv-guide-card-head">
+            <span><i class="fas fa-comment-alt"></i> Observación</span>
+            <span class="rv-text-muted">Opcional</span>
+        </div>
+        <div class="rv-form-group rv-guide-e-observation">
+            <div class="rv-e-input-wrap">
+                <i class="fas fa-pen rv-e-input-icon"></i>
+                <textarea id="e_observation" class="rv-form-control rv-e-input-pad text-uppercase"
+                          rows="3" maxlength="1000" aria-label="Observación"
+                          placeholder="Ej. FRÁGIL, ENTREGAR EN HORARIO DE OFICINA, LLAMAR AL LLEGAR"></textarea>
             </div>
         </div>
     </div>

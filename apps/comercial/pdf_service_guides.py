@@ -1,6 +1,7 @@
 """Generación de tickets y comprobantes PDF por tipo de servicio (E/M/D/C)."""
 import decimal
 import io
+import os
 from datetime import datetime, timedelta
 
 from django.http import HttpResponse
@@ -13,7 +14,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm, inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from apps.sales.format_to_dates import utc_to_local
 from apps.sales.models import Order, OrderAction, PAYMENT_METHOD_CHOICES
@@ -31,10 +32,31 @@ def _ensure_brand_font():
     for name, filename in (
         ('bauh', 'BAUHS93.ttf'),
         ('Square', 'square-721-condensed-bt.ttf'),
+        ('Square-Bold', 'sqr721bc.ttf'),
         ('Newgot', 'newgotbc.ttf'),
     ):
         if name not in pdfmetrics.getRegisteredFontNames():
             pdfmetrics.registerFont(TTFont(name, filename))
+
+
+def _brand_logo(max_width, max_height):
+    """Logo de la empresa con proporción real; None si no existe el archivo."""
+    logo_path = os.path.join(str(settings.BASE_DIR), 'static', 'assets', 'rapidovip_logo.png')
+    if not os.path.exists(logo_path):
+        return None
+    img = Image(logo_path)
+    natural_w = float(img.imageWidth or 1)
+    natural_h = float(img.imageHeight or 1)
+    aspect = natural_h / natural_w
+    draw_w = float(max_width)
+    draw_h = draw_w * aspect
+    if draw_h > float(max_height):
+        draw_h = float(max_height)
+        draw_w = draw_h / aspect if aspect else float(max_width)
+    img.drawWidth = draw_w
+    img.drawHeight = draw_h
+    img.hAlign = 'CENTER'
+    return img
 
 
 def _qr_code(data):
@@ -50,10 +72,13 @@ def _qr_code(data):
 
 THERMAL_WT = 2.83 * inch - 4 * 0.05 * inch
 THERMAL_PAGE = (2.83 * inch, 11.6 * inch)
-BILL_WT = 3.14 * inch - 8 * 0.05 * inch
+# Ancho útil real del frame de boleta: página - márgenes (0.05 + 0.055) - padding
+# interno del Frame (6 pt por lado). Así las tablas ocupan el mismo ancho que los
+# párrafos (remitente/destinatario).
+BILL_WT = 3.14961 * inch - 0.105 * inch - 12
 
 SERVICE_TITLES = {
-    'E': 'GUÍA DE ENCOMIENDA',
+    'E': 'ORDEN DE SERVICIO',
 }
 
 
@@ -108,6 +133,17 @@ def _local_styles():
             fontSize=8,
             spaceBefore=0,
             spaceAfter=0,
+            textColor=colors.black,
+        ),
+        'left_pad': ParagraphStyle(
+            name='SvcLeftPad',
+            alignment=TA_LEFT,
+            leading=8,
+            fontName='Newgot',
+            fontSize=8,
+            spaceBefore=1,
+            spaceAfter=1,
+            leftIndent=2,
             textColor=colors.black,
         ),
         'justify': ParagraphStyle(
@@ -255,8 +291,8 @@ def _meta_encomienda(order_obj, width):
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 2),
         ('RIGHTPADDING', (0, 0), (-1, -1), 2),
-        ('TOPPADDING', (0, 0), (-1, -1), 1),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ])
     row1 = Table([[_mix('FECHA DE EMISIÓN:', date_str)]], colWidths=[width])
     row2 = Table([[_mix('HORA EMISIÓN:', time_str)]], colWidths=[width])
@@ -278,26 +314,51 @@ def _meta_encomienda(order_obj, width):
     return rows
 
 
-def _header_encomienda(order_obj, title, width=None):
+def _header_encomienda(order_obj, title, width=None, top_gap=None):
     """Encabezado de encomienda al estilo comprobante térmico."""
+    _ensure_brand_font()
     wt = width or THERMAL_WT
     s = _local_styles()
     brand = _company_short_name(order_obj)
+    logo = _brand_logo(wt * 0.55, 0.6 * inch)
+    # Nombre/dirección de la empresa sin negrita; solo el RUC va en negrita
+    company_lines = _company_block(order_obj).split('\n')
+    ruc_line = (
+        company_lines.pop()
+        if company_lines and company_lines[-1].upper().startswith('RUC')
+        else None
+    )
+    company_flowables = [
+        Paragraph(
+            '<font name="Square">' + '<br />'.join(company_lines) + '</font>',
+            s['center_small'],
+        ),
+    ]
+    if ruc_line:
+        company_flowables.extend([
+            Spacer(2, 3),
+            Paragraph(ruc_line, s['center_small']),
+        ])
     elements = [
-        Spacer(-12, -12),
-        Paragraph(brand.upper(), s['enterprise']),
-        Paragraph(_company_block(order_obj).replace('\n', '<br />'), s['center_small']),
-        Spacer(2, 2),
+        Spacer(1, top_gap) if top_gap is not None else Spacer(-12, -12),
+        logo if logo else Paragraph(brand.upper(), s['enterprise']),
+        Spacer(4, 4),
+        *company_flowables,
+        Spacer(4, 4),
         _separator(wt),
-        Spacer(2, 2),
+        Spacer(4, 4),
         Paragraph(title, s['docname']),
         Paragraph(
-            f'<b>SERIE: {order_obj.serial} - {order_obj.correlative_sale}</b>',
+            (
+                f'<b>N° ORDEN DE SERVICIO: {order_obj.id}</b>'
+                if order_obj.type_document == 'T'
+                else f'<b>SERIE: {order_obj.serial} - {order_obj.correlative_sale}</b>'
+            ),
             s['docno'],
         ),
-        Spacer(2, 2),
+        Spacer(4, 4),
         _separator(wt),
-        Spacer(2, 2),
+        Spacer(4, 4),
     ]
     elements.extend(_meta_encomienda(order_obj, wt))
     return elements
@@ -326,7 +387,7 @@ def _route_block_encomienda(order_obj, width=None):
         _mix('ORIGEN:', origin),
         Paragraph(
             f'<font name="Newgot">DESTINO:</font> '
-            f'<font name="Square-Bold" size="16">{dest.upper()}</font>',
+            f'<font name="Square-Bold" size="12">{dest.upper()}</font>',
             s['left'],
         ),
         Paragraph(
@@ -336,10 +397,11 @@ def _route_block_encomienda(order_obj, width=None):
         ),
         _mix('SERVICIO:', service),
     ]
-    if encomienda and encomienda.code:
-        lines.append(_mix('CÓD. SEGURIDAD:', encomienda.code))
-    if encomienda and encomienda.arrival_time:
-        lines.append(_mix('HORA LLEGADA:', encomienda.arrival_time.strftime('%I:%M %p')))
+    # Ocultos por el momento; reactivar cuando se retome el flujo con estos datos
+    # if encomienda and encomienda.code:
+    #     lines.append(_mix('CÓD. SEGURIDAD:', encomienda.code))
+    # if encomienda and encomienda.arrival_time:
+    #     lines.append(_mix('HORA LLEGADA:', encomienda.arrival_time.strftime('%I:%M %p')))
     if encomienda and encomienda.address_delivery:
         lines.append(_mix('DIR. REPARTO:', encomienda.address_delivery))
 
@@ -350,6 +412,8 @@ def _route_block_encomienda(order_obj, width=None):
         ('LEFTPADDING', (0, 0), (-1, -1), 2),
         ('TOPPADDING', (0, 0), (-1, -1), 2),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        # Separa la fila de DESTINO (fuente grande) de la siguiente
+        ('BOTTOMPADDING', (0, 2), (0, 2), 9),
     ]))
     return tbl
 
@@ -358,24 +422,36 @@ def _encomienda_shipping_block(order_obj, width=None, include_client=False):
     """Datos de envío: cliente (opcional), remitente, destinatarios y ruta."""
     wt = width or THERMAL_WT
     s = _local_styles()
+    # Alinea los párrafos con las tablas (2pt) y separa un poco las líneas
+    s['left'] = s['left_pad']
     elements = []
 
     sender = OrderAction.objects.filter(order=order_obj, type='R').first()
 
     if include_client and sender and sender.client:
         doc = sender.client.clienttype_set.first()
+        # Razón social y dirección en Paragraph para que hagan salto de línea
+        # y no se pierdan cuando el texto es largo (p. ej. facturas)
+        name_tbl = _kv_table(
+            [('CLIENTE', Paragraph((sender.client.names or '').upper(), s['value']))],
+            label_pct=28, width=wt,
+        )
         client_rows = [
-            ('CLIENTE', sender.client.names),
             (doc.document_type.short_description if doc else 'RUC', doc.document_number if doc else ''),
         ]
         if sender.client.phone:
             client_rows.append(('TELÉFONO', sender.client.phone))
         addr = sender.client.clientaddress_set.first()
         if addr and addr.address:
-            client_rows.append(('DIRECCIÓN', addr.address))
+            client_rows.append(('DIRECCIÓN', Paragraph(addr.address.upper(), s['value'])))
         client_tbl = _kv_table(client_rows, label_pct=28, width=wt)
+        if name_tbl:
+            # Separa el nombre/razón social del número de documento
+            elements.extend([name_tbl, Spacer(1, 3)])
         if client_tbl:
-            elements.extend([client_tbl, Spacer(2, 2), _separator(wt)])
+            elements.append(client_tbl)
+        if name_tbl or client_tbl:
+            elements.extend([Spacer(2, 2), _separator(wt)])
 
     elements.extend([_section('Datos de envío'), _separator(wt), Spacer(2, 2)])
 
@@ -498,7 +574,7 @@ def _bill_totals_table(order_obj, width=None):
         ('OP. GRAVADA', sub_total),
         ('OP. INAFECTA', decimal.Decimal('0')),
         ('OP. EXONERADA', decimal.Decimal('0')),
-        ('DESCUENTO', decimal.Decimal('0')),
+        # ('DESCUENTO', decimal.Decimal('0')),
         ('I.G.V. (18.00)', igv_total),
         ('IMPORTE TOTAL', total),
     ]
@@ -510,8 +586,8 @@ def _bill_totals_table(order_obj, width=None):
         ('FONTSIZE', (0, 0), (-1, -1), 8),
         ('ALIGNMENT', (2, 0), (3, -1), 'RIGHT'),
         ('LEFTPADDING', (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
     ]))
     return tbl, total
 
@@ -640,10 +716,12 @@ def _section(title):
 def _company_block(order_obj):
     company = getattr(order_obj, 'company', None)
     if not company:
-        return 'RapidoVip'
-    lines = [(company.business_name or company.short_name or 'RapidoVip').strip()]
+        return 'EMPRESA'
+    lines = [(company.business_name or company.short_name or 'EMPRESA').strip()]
     if company.address:
         lines.append(company.address.strip())
+    if company.phone:
+        lines.append(f'TEL: {company.phone.strip()}')
     if company.ruc:
         lines.append(f'RUC: {company.ruc}')
     return '\n'.join(lines)
@@ -652,8 +730,13 @@ def _company_block(order_obj):
 def _company_short_name(order_obj):
     company = getattr(order_obj, 'company', None)
     if not company:
-        return 'RapidoVip'
-    return (company.short_name or company.business_name or 'RapidoVip').strip()
+        return 'EMPRESA'
+    return (company.short_name or company.business_name or 'EMPRESA').strip()
+
+
+def _thanks_message(order_obj):
+    brand = _company_short_name(order_obj).upper()
+    return f'¡Gracias por enviar con {brand}!'
 
 
 def _property_label(code):
@@ -876,7 +959,7 @@ def _footer_terms_flowables(service_type='E'):
             '2. El cliente declara el contenido y peso aproximado de la carga.<br/>'
             '3. Reclamos por daños deben presentarse dentro de las 48 horas.'
         )
-    return [Paragraph(text, s['tiny'])]
+    return [Paragraph(text, s['terms_body'])]
 
 
 def _pdf_http_response(buff, order_obj, pk, request=None):
@@ -918,19 +1001,29 @@ def _finish_ticket(elements, order_obj, pk, service_type, total_font_size=8, req
         *_footer_terms_flowables(service_type),
         Spacer(1, 1),
         _separator(),
-        Paragraph('¡Gracias por confiar en RapidoVip!', s['center_small']),
+        Paragraph(_thanks_message(order_obj), s['center_small']),
     ])
     buff = _build_ticket_doc(elements, order_obj)
     return _pdf_http_response(buff, order_obj, pk, request)
 
 
 def build_ticket_encomienda(order_obj, pk, request=None):
+    s = _local_styles()
     elements = _header_encomienda(order_obj, SERVICE_TITLES['E'])
     elements.extend([Spacer(2, 2), *_encomienda_shipping_block(order_obj)])
     elements.extend([Spacer(2, 2), _separator(), Spacer(2, 2)])
     details = _encomienda_details_table(order_obj)
     if details:
         elements.extend(details)
+    observation = (getattr(order_obj, 'observation', None) or '').strip()
+    if observation:
+        elements.extend([
+            Spacer(2, 2),
+            _separator(),
+            Spacer(2, 2),
+            Paragraph('<font name="Newgot">OBSERVACIÓN:</font>', s['left']),
+            Paragraph(f'<font name="Square">{observation.upper()}</font>', s['left']),
+        ])
     return _finish_ticket(elements, order_obj, pk, 'E', request=request)
 
 
@@ -1045,73 +1138,78 @@ def build_ticket_for_service(order_obj, pk, request=None):
 
 def _bill_header(order_obj, doc_title):
     s = _local_styles()
-    date_str, time_str = _order_datetime(order_obj)
-    elements = [
-        Spacer(-20, -20),
-        Paragraph('RapidoVip', s['enterprise']),
-        Paragraph(_company_block(order_obj).replace('\n', '<br />'), s['center']),
-        Spacer(2, 2),
-        Table([['']], colWidths=[BILL_WT], rowHeights=[1], style=TableStyle([
-            ('LINEBELOW', (0, 0), (-1, -1), 0.6, SOFT_LINE),
-            ('TOPPADDING', (0, 0), (-1, -1), 0),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ])),
-        Paragraph(doc_title, s['docname']),
-        Paragraph(f'SERIE: {order_obj.serial} - {order_obj.correlative_sale}', s['docno']),
-        Spacer(2, 2),
-        Table([['']], colWidths=[BILL_WT], rowHeights=[1], style=TableStyle([
-            ('LINEBELOW', (0, 0), (-1, -1), 0.6, SOFT_LINE),
-            ('TOPPADDING', (0, 0), (-1, -1), 0),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ])),
-        Spacer(1, 1),
-    ]
-    elements.append(_meta_two_cols(order_obj, BILL_WT))
+    brand = _company_short_name(order_obj)
+    elements = [Spacer(-20, -20), Paragraph(brand.upper(), s['enterprise']),
+                Paragraph(_company_block(order_obj).replace('\n', '<br />'), s['center']), Spacer(2, 2),
+                Table([['']], colWidths=[BILL_WT], rowHeights=[1], style=TableStyle([
+                    ('LINEBELOW', (0, 0), (-1, -1), 0.6, SOFT_LINE),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ])), Paragraph(doc_title, s['docname']),
+                Paragraph(f'SERIE: {order_obj.serial} - {order_obj.correlative_sale}', s['docno']), Spacer(2, 2),
+                Table([['']], colWidths=[BILL_WT], rowHeights=[1], style=TableStyle([
+                    ('LINEBELOW', (0, 0), (-1, -1), 0.6, SOFT_LINE),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ])), Spacer(1, 1), _meta_two_cols(order_obj, BILL_WT)]
     return elements
 
 
-def build_bill_encomienda(order_obj, pk):
+def build_bill_encomienda(order_obj, pk, request=None):
+    _ensure_brand_font()
     s = _local_styles()
-    order_bill = order_obj.orderbill
-    if order_bill.type == '1':
+    order_bill = getattr(order_obj, 'orderbill', None)
+    bill_type = str(getattr(order_bill, 'type', '') or '')
+    if bill_type in ('1', 'F', '01') or order_obj.type_document == 'F':
         doc_title = 'FACTURA ELECTRÓNICA'
     else:
         doc_title = 'BOLETA DE VENTA ELECTRÓNICA'
 
-    elements = _header_encomienda(order_obj, doc_title, width=BILL_WT)
+    brand = _company_short_name(order_obj)
+    elements = _header_encomienda(order_obj, doc_title, width=BILL_WT, top_gap=10)
     elements.extend([Spacer(2, 2), *_encomienda_shipping_block(order_obj, width=BILL_WT, include_client=True)])
     elements.extend([Spacer(2, 2), _separator(BILL_WT), Spacer(2, 2)])
     details = _encomienda_details_table(order_obj, width=BILL_WT)
     if details:
         elements.extend(details)
 
+    observation = (getattr(order_obj, 'observation', None) or '').strip()
+    if observation:
+        elements.extend([
+            Spacer(2, 2),
+            _separator(BILL_WT),
+            Spacer(2, 2),
+            Paragraph('<font name="Newgot">OBSERVACIÓN:</font>', s['left_pad']),
+            Paragraph(f'<font name="Square">{observation.upper()}</font>', s['left_pad']),
+        ])
+
     total_tbl, total = _bill_totals_table(order_obj, width=BILL_WT)
     elements.extend([
         Spacer(1, 1),
         _separator(BILL_WT),
         total_tbl,
-        Spacer(1, 1),
+        Spacer(1, 7),
         Paragraph(f'SON: {numero_a_moneda(total)}', s['center']),
-        Spacer(1, 1),
+        Spacer(1, 7),
         Paragraph(
             'Representación impresa del comprobante electrónico. Consulte en https://www.tuf4ct.com/cpe/',
-            s['left'],
+            s['value'],
         ),
-        Paragraph('Emitido mediante PROVEEDOR autorizado por la SUNAT', s['left']),
+        Paragraph('Emitido mediante PROVEEDOR autorizado por la SUNAT', s['value']),
         Spacer(1, 1),
         _qr_block(order_obj, width=BILL_WT),
         Spacer(1, 1),
         *_footer_terms_flowables('E'),
         Spacer(1, 1),
         _separator(BILL_WT),
-        Paragraph('¡Gracias por enviar con RapidoVip!', s['center_small']),
+        Paragraph(_thanks_message(order_obj), s['center_small']),
     ])
 
-    counter = order_obj.orderdetail_set.count()
+    counter = max(order_obj.orderdetail_set.count(), 1)
     buff = io.BytesIO()
     doc = SimpleDocTemplate(
         buff,
@@ -1120,7 +1218,7 @@ def build_bill_encomienda(order_obj, pk):
         leftMargin=0.05 * inch,
         topMargin=0.039 * inch,
         bottomMargin=0.039 * inch,
-        title='Encomienda RapidoVip',
+        title=f'{doc_title} - {brand}',
     )
     doc.build(elements)
     return _pdf_http_response(buff, order_obj, pk, request)

@@ -76,9 +76,12 @@ admin.site.register(models.SenderRemissionGuide, SenderRemissionGuideAdmin)
 
 
 class CarrierRemissionGuideAdmin(ImportExportModelAdmin):
-    list_display = ('id', 'serial', 'correlative', 'status', 'programming', 'driver_name', 'emit_date')
+    list_display = (
+        'id', 'serial', 'correlative', 'status', 'order',
+        'programming', 'cargo_manifest', 'related_document', 'emit_date',
+    )
     list_filter = ('status', 'emit_date')
-    search_fields = ('serial', 'correlative', 'driver_name')
+    search_fields = ('serial', 'correlative', 'order__id', 'related_document', 'driver_name')
 
 
 admin.site.register(models.CarrierRemissionGuide, CarrierRemissionGuideAdmin)

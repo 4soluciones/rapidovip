@@ -1,9 +1,9 @@
 """Modulo unificado de PDFs de guias de remision y manifiesto de carga.
 
 Consolida:
-    - print_guide_format_tk: Guia de Remision Remitente (ticket termico).
-    - print_guide_format_a4: Guia de Remision Transportista (A4).
-    - print_cargo_manifest: Manifiesto de Carga (A4 horizontal).
+    - print_guide_format_tk: Guia de Remision Remitente (reservada / no usada por ahora).
+    - print_guide_format_a4: Guia de Remision Transportista (A4) — una por orden.
+    - print_cargo_manifest: Manifiesto de Carga (A4 horizontal) — agrupa GRT.
 
 Este modulo es autocontenido (no importa nada de views_PDF) para evitar
 importaciones circulares, ya que views_PDF reexporta estas funciones.
@@ -64,6 +64,10 @@ styles.add(ParagraphStyle(name='Helvetica_Center_8', alignment=TA_CENTER, leadin
 styles.add(ParagraphStyle(name='Helvetica_Center_7', alignment=TA_CENTER, leading=8,
                           fontName='Helvetica', fontSize=7))
 styles.add(ParagraphStyle(name='Helvetica_Justify_8', alignment=TA_JUSTIFY, leading=8,
+                          fontName='Helvetica', fontSize=8))
+styles.add(ParagraphStyle(name='Helvetica_Bold_Right_9', alignment=TA_RIGHT, leading=10,
+                          fontName='Helvetica-Bold', fontSize=9))
+styles.add(ParagraphStyle(name='Helvetica_Right_8', alignment=TA_RIGHT, leading=9,
                           fontName='Helvetica', fontSize=8))
 
 
@@ -425,30 +429,91 @@ def print_guide_format_tk(request, pk=None):  # Guia de Remision Remitente Elect
     return response
 
 
-def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (A4)
-    from .models import CarrierRemissionGuide, SenderRemissionGuide
+def _party_lines(order_obj, action_type):
+    """Devuelve texto de remitente/destinatario con documento."""
+    action = order_obj.orderaction_set.filter(type=action_type).select_related(
+        'client', 'order_addressee',
+    ).last()
+    if not action:
+        return '—'
+    if action.client_id:
+        name = (action.client.names or '—').upper()
+        doc_type, doc_number = _get_client_document_info(action.client)
+        phone = action.client.phone or ''
+        lines = [name]
+        if doc_type or doc_number:
+            lines.append('{}: {}'.format(doc_type or 'DOC', doc_number or '—'))
+        if phone:
+            lines.append('TEL: {}'.format(phone))
+        return '<br/>'.join(lines)
+    if action.order_addressee_id:
+        return (action.order_addressee.names or '—').upper()
+    return '—'
 
-    ml = 0.5 * inch
-    mr = 0.5 * inch
-    ms = 0.5 * inch
-    mi = 0.5 * inch
+
+def _related_document_lines(order_obj, carrier_guide_obj=None):
+    """Documento relacionado (boleta/factura) + referencia a orden de servicio."""
+    lines = ['ORDEN DE SERVICIO: OS-{}'.format(order_obj.id if order_obj else '—')]
+    stored = ''
+    if carrier_guide_obj:
+        stored = (carrier_guide_obj.related_document or '').strip()
+    if stored:
+        lines.append(stored)
+    elif order_obj:
+        from .guide_assignment import related_document_for_order
+        related = related_document_for_order(order_obj)
+        if related:
+            lines.append(related)
+        else:
+            lines.append('SIN COMPROBANTE (PAGO DESTINO / ORDEN DE SERVICIO)')
+    return lines
+
+
+def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (A4)
+    from .models import CarrierRemissionGuide
+
+    ml = 0.45 * inch
+    mr = 0.45 * inch
+    ms = 0.4 * inch
+    mi = 0.4 * inch
     _bts = 8.27 * inch - ml - mr
 
+    soft_border = colors.Color(0.55, 0.55, 0.55)
+    soft_fill = colors.Color(0.92, 0.92, 0.92)
+    radius = [6, 6, 6, 6]
+
     carrier_guide_obj = CarrierRemissionGuide.objects.select_related(
+        'order', 'order__company', 'order__subsidiary', 'order__orderbill',
         'programming', 'programming__subsidiary', 'programming__company',
+        'programming__cargo_manifest',
+        'cargo_manifest',
         'truck', 'truck__truck_model__truck_brand',
         'subsidiary', 'company', 'user',
+    ).prefetch_related(
+        'order__orderdetail_set__unit',
+        'order__orderaction_set__client__clienttype_set__document_type',
+        'order__orderaction_set__order_addressee',
+        'order__orderroute_set__subsidiary',
+        'order__encomienda__office_destination',
+        'order__encomienda__office_origin',
     ).get(pk=pk)
 
+    order_obj = carrier_guide_obj.order
     programming_obj = carrier_guide_obj.programming
-    company_obj = carrier_guide_obj.company or (programming_obj.company if programming_obj else None)
+    company_obj = (
+        carrier_guide_obj.company
+        or (order_obj.company if order_obj else None)
+        or (programming_obj.company if programming_obj else None)
+    )
 
     company_business_name = (company_obj.business_name if company_obj else 'RapidoVip') or 'RapidoVip'
     company_address = company_obj.address if company_obj else ''
     company_ruc = company_obj.ruc if company_obj else ''
 
-    document_number = '{}-{}'.format(
-        carrier_guide_obj.serial or '', str(carrier_guide_obj.correlative or '').zfill(6))
+    serial = (carrier_guide_obj.serial or '').strip()
+    correlative = str(carrier_guide_obj.correlative or '').zfill(6)
+    document_number = '{}-{}'.format(serial, correlative)
+    document_number_display = 'Nº {}-{}'.format(serial, correlative)
 
     emit_date = carrier_guide_obj.emit_date.strftime('%d/%m/%Y') if carrier_guide_obj.emit_date else '-'
     transfer_date = carrier_guide_obj.transfer_start_date.strftime('%d/%m/%Y') \
@@ -459,251 +524,499 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
 
     truck_obj = carrier_guide_obj.truck or (programming_obj.truck if programming_obj else None)
     truck_plate = truck_obj.license_plate if truck_obj else '-'
-    truck_brand = truck_obj.truck_model.truck_brand.name if truck_obj and truck_obj.truck_model_id else ''
+
     driver_name = carrier_guide_obj.driver_name or '-'
     driver_license = carrier_guide_obj.driver_license or '-'
 
-    sender_guides_qs = list(carrier_guide_obj.sender_guides.select_related(
-        'order', 'order__client').all())
+    def _route_label(route_type):
+        if not order_obj:
+            return '-'
+        encomienda = getattr(order_obj, 'encomienda', None)
+        if route_type == 'O' and encomienda and encomienda.office_origin_id:
+            sub = encomienda.office_origin
+            return '{} — {}'.format(
+                sub.short_name or sub.name or '',
+                sub.address or '',
+            ).strip(' —')
+        if route_type == 'D' and encomienda and encomienda.office_destination_id:
+            sub = encomienda.office_destination
+            address = encomienda.address_delivery or sub.address or ''
+            return '{} — {}'.format(
+                sub.short_name or sub.name or '',
+                address,
+            ).strip(' —')
+        route = order_obj.orderroute_set.filter(type=route_type).select_related('subsidiary').last()
+        if route and route.subsidiary:
+            return '{} — {}'.format(
+                route.subsidiary.short_name or route.subsidiary.name or '',
+                route.subsidiary.address or '',
+            ).strip(' —')
+        return '-'
 
-    # Puntos de partida y llegada: sede de la programación y/o ruta de la primera guía remitente.
-    origin_label = ''
-    dest_label = ''
-    if programming_obj and programming_obj.subsidiary:
-        origin_label = programming_obj.subsidiary.short_name or programming_obj.subsidiary.name
-    if sender_guides_qs:
-        first_order = sender_guides_qs[0].order
-        if not origin_label and first_order:
-            first_origin_route = first_order.orderroute_set.filter(type='O').select_related('subsidiary').first()
-            if first_origin_route and first_origin_route.subsidiary:
-                origin_label = first_origin_route.subsidiary.short_name or first_origin_route.subsidiary.name
-        if first_order:
-            first_dest_route = first_order.orderroute_set.filter(type='D').select_related('subsidiary').first()
-            if first_dest_route and first_dest_route.subsidiary:
-                dest_label = first_dest_route.subsidiary.short_name or first_dest_route.subsidiary.name
-    origin_label = origin_label or '-'
-    dest_label = dest_label or '-'
+    origin_label = _route_label('O')
+    dest_label = _route_label('D')
 
-    # Destinatario: si todas las guías comparten el mismo destinatario se muestra su nombre, sino "VARIOS".
-    destination_names = set()
-    for sender_guide_item in sender_guides_qs:
-        order_item = sender_guide_item.order
-        if not order_item:
-            continue
-        receiver_action = order_item.orderaction_set.filter(type='D').select_related(
-            'client', 'order_addressee').last()
-        if not receiver_action:
-            continue
-        if receiver_action.client:
-            destination_names.add((receiver_action.client.names or '').upper())
-        elif receiver_action.order_addressee:
-            destination_names.add((receiver_action.order_addressee.names or '').upper())
-    destination_names.discard('')
-    if len(destination_names) == 1:
-        destinatario_display = next(iter(destination_names))
-    elif len(destination_names) > 1:
-        destinatario_display = 'VARIOS'
-    else:
-        destinatario_display = '-'
-
-    def _boxed_section(title, rows, col_widths):
+    def _soft_boxed_section(title, rows, col_widths, min_body_height=None):
         width_total = sum(col_widths)
         header_tbl = Table([[Paragraph(title, styles["Helvetica_Bold_Left_8"])]], colWidths=[width_total])
         header_tbl.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
-            ('BOX', (0, 0), (-1, -1), 0.75, colors.black),
-            ('LEFTPADDING', (0, 0), (-1, -1), 4),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('BACKGROUND', (0, 0), (-1, -1), soft_fill),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
         ]))
-        body_tbl = Table(rows, colWidths=col_widths)
+        body_kwargs = {'colWidths': col_widths}
+        if min_body_height:
+            body_kwargs['rowHeights'] = [min_body_height] * len(rows)
+        body_tbl = Table(rows, **body_kwargs)
         body_tbl.setStyle(TableStyle([
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('BOX', (0, 0), (-1, -1), 0.75, colors.black),
-            ('INNERGRID', (0, 0), (-1, -1), 0.25, colors.grey),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 4),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('INNERGRID', (0, 0), (-1, -1), 0.35, soft_border),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ]))
-        return [header_tbl, body_tbl]
+        wrapped = Table([[header_tbl], [body_tbl]], colWidths=[width_total])
+        wrapped.setStyle(TableStyle([
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ('BOX', (0, 0), (-1, -1), 1.0, soft_border),
+            ('ROUNDEDCORNERS', radius),
+            ('LINEBELOW', (0, 0), (-1, 0), 0.5, soft_border),
+        ]))
+        return [wrapped]
 
-    logo_image = _guide_logo_image(_bts * 18 / 100, 0.55 * inch)
+    logo_image = _guide_logo_image(_bts * 21 / 100, 0.72 * inch)
+    if logo_image:
+        logo_image.hAlign = 'LEFT'
 
+    company_text_width = _bts * 38 / 100
     table_company_rows = [
-        [Paragraph(company_business_name.upper(), styles["Helvetica_Bold_Left_8"])],
+        [Paragraph(company_business_name.upper(), styles["Helvetica_Bold_Left_9"])],
         [Paragraph(company_address or '', styles["Helvetica_Left_7"])],
         [Paragraph('RUC: {}'.format(company_ruc), styles["Helvetica_Left_7"])],
     ]
-    table_company = Table(table_company_rows, colWidths=[_bts * 45 / 100])
+    table_company = Table(table_company_rows, colWidths=[company_text_width])
     table_company.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
     ]))
 
+    logo_col = _bts * 20 / 100
     if logo_image:
-        left_header_cell = Table([[logo_image, table_company]], colWidths=[_bts * 20 / 100, _bts * 45 / 100])
+        left_header_cell = Table(
+            [[logo_image, table_company]],
+            colWidths=[logo_col, company_text_width],
+        )
         left_header_cell.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('LEFTPADDING', (0, 0), (0, 0), 0),
+            ('RIGHTPADDING', (0, 0), (0, 0), 6),
+            ('LEFTPADDING', (1, 0), (1, 0), 4),
+            ('RIGHTPADDING', (1, 0), (1, 0), 4),
         ]))
     else:
         left_header_cell = table_company
 
+    title_box_width = _bts * 40 / 100
     table_doc_title = Table([
-        [Paragraph('RUC: {}'.format(company_ruc), styles["Helvetica_Bold_Center_8"])],
+        [Paragraph('R.U.C. Nº {}'.format(company_ruc), styles["Helvetica_Bold_Center_9"])],
         [Paragraph('GUÍA DE REMISIÓN<br/>TRANSPORTISTA', styles["Helvetica_Bold_Center_10"])],
-        [Paragraph(document_number, styles["Helvetica_Bold_Center_13"])],
-    ], colWidths=[_bts * 35 / 100])
+        [Paragraph(document_number_display, styles["Helvetica_Bold_Center_13"])],
+    ], colWidths=[title_box_width])
     table_doc_title.setStyle(TableStyle([
-        ('BOX', (0, 0), (-1, -1), 1, colors.black),
-        ('LINEBELOW', (0, 0), (-1, 0), 0.75, colors.black),
-        ('LINEBELOW', (0, 1), (-1, 1), 0.75, colors.black),
+        ('BOX', (0, 0), (-1, -1), 2.0, colors.black),
+        ('ROUNDEDCORNERS', [8, 8, 8, 8]),
+        ('LINEBELOW', (0, 0), (-1, 0), 0.9, soft_border),
+        ('LINEBELOW', (0, 1), (-1, 1), 0.9, soft_border),
+        ('BACKGROUND', (0, 1), (-1, 1), soft_fill),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 1), (-1, 1), 7),
+        ('BOTTOMPADDING', (0, 1), (-1, 1), 7),
     ]))
 
-    table_header = Table([[left_header_cell, table_doc_title]], colWidths=[_bts * 65 / 100, _bts * 35 / 100])
-    table_header.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP')]))
-
-    remitente_section = _boxed_section(
-        'REMITENTE',
-        [[Paragraph('RUC: {}&nbsp;&nbsp;-&nbsp;&nbsp;{}'.format(company_ruc, company_business_name.upper()),
-                    styles["Helvetica_Left_8"])]],
-        [_bts],
+    left_header_width = _bts - title_box_width
+    table_header = Table(
+        [[left_header_cell, table_doc_title]],
+        colWidths=[left_header_width, title_box_width],
     )
-
-    destinatario_section = _boxed_section(
-        'DESTINATARIO',
-        [[Paragraph(destinatario_display, styles["Helvetica_Left_8"])]],
-        [_bts],
-    )
-
-    traslado_section = _boxed_section(
-        'DATOS DEL TRASLADO',
-        [[
-            Paragraph('FECHA EMISIÓN: {}'.format(emit_date), styles["Helvetica_Left_8"]),
-            Paragraph('FECHA INICIO DE TRASLADO: {}'.format(transfer_date), styles["Helvetica_Left_8"]),
-        ], [
-            Paragraph('PESO BRUTO TOTAL: {} KGM'.format(total_weight), styles["Helvetica_Left_8"]),
-            Paragraph('NÚMERO DE BULTOS: {}'.format(quantity_packages), styles["Helvetica_Left_8"]),
-        ]],
-        [_bts * 50 / 100, _bts * 50 / 100],
-    )
-
-    transporte_section = _boxed_section(
-        'DATOS DEL TRANSPORTE',
-        [[
-            Paragraph('PLACA: {}{}'.format(truck_plate, ' - ' + truck_brand if truck_brand else ''),
-                      styles["Helvetica_Left_8"]),
-            Paragraph('CONDUCTOR: {}'.format(driver_name), styles["Helvetica_Left_8"]),
-            Paragraph('LICENCIA: {}'.format(driver_license), styles["Helvetica_Left_8"]),
-        ]],
-        [_bts * 34 / 100, _bts * 33 / 100, _bts * 33 / 100],
-    )
-
-    puntos_section = _boxed_section(
-        'PUNTOS DE PARTIDA Y LLEGADA',
-        [[
-            Paragraph('PARTIDA: {}'.format(origin_label.upper()), styles["Helvetica_Left_8"]),
-            Paragraph('LLEGADA: {}'.format(dest_label.upper()), styles["Helvetica_Left_8"]),
-        ]],
-        [_bts * 50 / 100, _bts * 50 / 100],
-    )
-
-    detail_rows = [('NRO.', 'CÓD', 'DESCRIPCIÓN', 'U/M', 'CANTIDAD')]
-    related_docs = []
-    for index, sender_guide_item in enumerate(sender_guides_qs, start=1):
-        item_document_number = '{}-{}'.format(
-            sender_guide_item.serial or '', str(sender_guide_item.correlative or '').zfill(6))
-        related_docs.append('GUIA DE REMISION REMITENTE: {}'.format(item_document_number))
-        cod = item_document_number if sender_guide_item.serial else str(
-            sender_guide_item.order_id or sender_guide_item.pk)
-        description = 'GRE {} | Remitente → Destinatario'.format(item_document_number)
-        detail_rows.append((
-            str(index),
-            cod,
-            Paragraph(description, styles["Helvetica_Left_7"]),
-            'NIU',
-            str(round(_safe_decimal(sender_guide_item.quantity_packages))),
-        ))
-
-    if len(detail_rows) == 1:
-        detail_rows.append(('-', '-', 'SIN GUÍAS ASOCIADAS', '-', '-'))
-
-    table_details = Table(detail_rows, colWidths=[
-        _bts * 6 / 100, _bts * 18 / 100, _bts * 46 / 100, _bts * 10 / 100, _bts * 20 / 100,
-    ])
-    table_details.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-        ('ALIGN', (0, 0), (1, -1), 'CENTER'),
-        ('ALIGN', (3, 0), (4, -1), 'CENTER'),
+    table_header.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
     ]))
 
-    observaciones_section = None
-    if observation:
-        observaciones_section = _boxed_section(
-            'OBSERVACIONES',
-            [[Paragraph(observation, styles["Helvetica_Justify_8"])]],
-            [_bts],
-        )
+    # ------------------------------------------------------------------
+    # Datos de remitente / destinatario (nombre, documento y teléfono).
+    # ------------------------------------------------------------------
+    def _party_info(action_type):
+        info = {'name': '—', 'doc_label': '', 'doc_number': '', 'phone': ''}
+        if not order_obj:
+            return info
+        action = order_obj.orderaction_set.filter(type=action_type).select_related(
+            'client', 'order_addressee',
+        ).last()
+        if not action:
+            return info
+        if action.client_id:
+            info['name'] = (action.client.names or '—').upper()
+            doc_label, doc_number = _get_client_document_info(action.client)
+            info['doc_label'] = (doc_label or '').upper()
+            info['doc_number'] = doc_number or ''
+            info['phone'] = action.client.phone or ''
+        elif action.order_addressee_id:
+            info['name'] = (action.order_addressee.names or '—').upper()
+            info['phone'] = getattr(action.order_addressee, 'phone', '') or ''
+        return info
 
-    documentos_section = _boxed_section(
-        'DOCUMENTOS RELACIONADOS',
-        [[Paragraph('<br/>'.join(related_docs) if related_docs else 'SIN GUÍAS ASOCIADAS',
-                    styles["Helvetica_Left_7"])]],
-        [_bts],
+    sender_info = _party_info('R')
+    receiver_info = _party_info('D')
+
+    def _party_display(info):
+        text = info['name']
+        if info['doc_label'] or info['doc_number']:
+            text += ' - {} - {}'.format(
+                info['doc_label'] or 'DOC', info['doc_number'] or '—')
+        return text
+
+    emit_time = ''
+    if carrier_guide_obj.created_at:
+        try:
+            from apps.sales.format_to_dates import utc_to_local
+            emit_time = utc_to_local(carrier_guide_obj.created_at).strftime('%H:%M:%S')
+        except Exception:
+            emit_time = carrier_guide_obj.created_at.strftime('%H:%M:%S')
+
+    thin_line = colors.Color(0.75, 0.75, 0.75)
+
+    def _label_value(label, value):
+        return Paragraph(
+            '<b>{}</b> {}'.format(label, value), styles["Helvetica_Left_8"])
+
+    def _label_value_right(label, value):
+        return Paragraph(
+            '<b>{}</b> {}'.format(label, value), styles["Helvetica_Right_8"])
+
+    # Nº de orden de servicio arriba, debajo del encabezado.
+    order_service_line = Paragraph(
+        '<b>ORDEN DE SERVICIO:</b> OS-{}'.format(order_obj.id if order_obj else '—'),
+        styles["Helvetica_Bold_Right_9"],
     )
 
-    table_qr = Table([(qr_code(document_number), '')], colWidths=[_bts * 20 / 100, _bts * 80 / 100])
-    table_qr.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'MIDDLE')]))
+    # Fechas (izquierda) y puntos de partida/llegada (derecha), sin recuadros.
+    dates_points_tbl = Table(
+        [
+            [
+                _label_value('FECHA DE EMISIÓN:', '{} {}'.format(emit_date, emit_time).strip()),
+                _label_value('PUNTO DE PARTIDA:', origin_label),
+            ],
+            [
+                _label_value('FECHA DE TRASLADO:', transfer_date),
+                _label_value('PUNTO DE LLEGADA:', dest_label),
+            ],
+            [
+                _label_value('PESO BRUTO TOTAL DE LA CARGA (KG):', total_weight),
+                '',
+            ],
+        ],
+        colWidths=[_bts * 47 / 100, _bts * 53 / 100],
+    )
+    dates_points_tbl.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    ]))
+
+    # Recuadros redondeados de remitente y destinatario, lado a lado.
+    box_width = _bts * 49 / 100
+    remitente_box = _soft_boxed_section(
+        'DATOS DEL REMITENTE',
+        [
+            [Paragraph(_party_display(sender_info), styles["Helvetica_Left_8"])],
+            [_label_value('TELÉFONO:', sender_info['phone'] or '—')],
+        ],
+        [box_width],
+    )[0]
+    destinatario_box = _soft_boxed_section(
+        'DATOS DEL DESTINATARIO',
+        [
+            [Paragraph(_party_display(receiver_info), styles["Helvetica_Left_8"])],
+            [_label_value('TELÉFONO:', receiver_info['phone'] or '—')],
+        ],
+        [box_width],
+    )[0]
+    parties_tbl = Table(
+        [[remitente_box, destinatario_box]],
+        colWidths=[_bts * 50 / 100, _bts * 50 / 100],
+    )
+    parties_tbl.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (0, 0), 0),
+        ('RIGHTPADDING', (0, 0), (0, 0), 4),
+        ('LEFTPADDING', (1, 0), (1, 0), 4),
+        ('RIGHTPADDING', (1, 0), (1, 0), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    # Transportista (empresa) a la izquierda, RUC a la derecha.
+    transportista_tbl = Table(
+        [[
+            _label_value('TRANSPORTISTA:', company_business_name.upper()),
+            _label_value_right('RUC:', company_ruc),
+        ]],
+        colWidths=[_bts * 65 / 100, _bts * 35 / 100],
+    )
+    transportista_tbl.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LINEABOVE', (0, 0), (-1, 0), 0.6, thin_line),
+        ('LINEBELOW', (0, 0), (-1, 0), 0.6, thin_line),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+
+    # Pagador del flete: destinatario con su documento.
+    payer_display = _party_display(receiver_info)
+    payer_tbl = Table(
+        [[
+            _label_value('DATOS DE PAGADOR DE FLETE:', payer_display),
+            _label_value_right(
+                'INDICADOR DEL PAGADOR DEL FLETE:',
+                'DESTINATARIO - {}'.format(receiver_info['doc_number'] or '—'),
+            ),
+        ]],
+        colWidths=[_bts * 55 / 100, _bts * 45 / 100],
+    )
+    payer_tbl.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LINEBELOW', (0, 0), (-1, 0), 0.6, thin_line),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+
+    # ------------------------------------------------------------------
+    # Tabla de detalle: CANT. | UNIDAD | DESCRIPCIÓN | PESO (Kg) | FLETE
+    # (con observación y T.G. dentro de la columna descripción).
+    # ------------------------------------------------------------------
+    detail_cols = [
+        _bts * 9 / 100,
+        _bts * 14 / 100,
+        _bts * 47 / 100,
+        _bts * 14 / 100,
+        _bts * 16 / 100,
+    ]
+    detail_rows = [[
+        Paragraph('CANT.', styles["Helvetica_Bold_Center_8"]),
+        Paragraph('UNIDAD', styles["Helvetica_Bold_Center_8"]),
+        Paragraph('DESCRIPCIÓN', styles["Helvetica_Bold_Left_8"]),
+        Paragraph('PESO (KG)', styles["Helvetica_Bold_Center_8"]),
+        Paragraph('FLETE', styles["Helvetica_Bold_Center_8"]),
+    ]]
+    details = list(order_obj.orderdetail_set.all()) if order_obj else []
+    for detail in details:
+        qty = _safe_decimal(detail.quantity)
+        weight = _safe_decimal(detail.weight)
+        amount = _safe_decimal(detail.amount)
+        detail_rows.append([
+            Paragraph(
+                str(qty.to_integral_value() if qty == qty.to_integral_value() else qty),
+                styles["Helvetica_Center_8"],
+            ),
+            Paragraph(
+                (detail.unit.name if detail.unit_id else 'BULTO(S)').upper(),
+                styles["Helvetica_Center_8"],
+            ),
+            Paragraph((detail.description or 'ENCOMIENDA').upper(), styles["Helvetica_Left_8"]),
+            Paragraph(str(round(weight, 2)), styles["Helvetica_Center_8"]),
+            Paragraph(str(round(amount, 2)), styles["Helvetica_Center_8"]),
+        ])
+    if len(detail_rows) == 1:
+        detail_rows.append([
+            Paragraph(quantity_packages, styles["Helvetica_Center_8"]),
+            Paragraph('BULTO(S)', styles["Helvetica_Center_8"]),
+            Paragraph('SIN DETALLE DE CARGA', styles["Helvetica_Left_8"]),
+            Paragraph(total_weight, styles["Helvetica_Center_8"]),
+            Paragraph('-', styles["Helvetica_Center_8"]),
+        ])
+
+    tg_label = 'FLETE DESTINO' if order_obj and order_obj.way_to_pay == 'D' else 'FLETE ORIGEN'
+    detail_rows.append([
+        '', '',
+        Paragraph('<b>T.G.</b>&nbsp;&nbsp;&nbsp;{}'.format(tg_label), styles["Helvetica_Left_8"]),
+        '', '',
+    ])
+    detail_rows.append([
+        '', '',
+        Paragraph(
+            '<b>OBSERVACION:</b> {}'.format(observation.upper() if observation else ''),
+            styles["Helvetica_Left_8"],
+        ),
+        '', '',
+    ])
+
+    row_heights = [None] * len(detail_rows)
+    row_heights[-2] = 0.45 * inch
+    row_heights[-1] = 0.55 * inch
+    table_details = Table(detail_rows, colWidths=detail_cols, rowHeights=row_heights)
+    table_details.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), soft_fill),
+        ('BOX', (0, 0), (-1, -1), 1.0, soft_border),
+        ('ROUNDEDCORNERS', radius),
+        ('LINEBELOW', (0, 0), (-1, 0), 0.6, soft_border),
+        ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+        ('VALIGN', (0, 1), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+    ]))
+
+    # Documentos adjuntos: en blanco por ahora.
+    attachments_tbl = Table(
+        [[_label_value('DOCUMENTOS ADJUNTOS:', '')]],
+        colWidths=[_bts],
+        rowHeights=[0.35 * inch],
+    )
+    attachments_tbl.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LINEBELOW', (0, 0), (-1, 0), 0.6, thin_line),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+
+    # Datos de los vehículos y de los conductores.
+    vehicles_title = Table(
+        [[Paragraph('DATOS DE LOS VEHÍCULOS Y DE LOS CONDUCTORES', styles["Helvetica_Bold_Left_8"])]],
+        colWidths=[_bts],
+    )
+    vehicles_title.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), soft_fill),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    vehicles_tbl = Table(
+        [
+            [
+                _label_value('V. PRINCIPAL:', truck_plate),
+                _label_value('TUC V. PRINCIPAL:', ''),
+            ],
+            [
+                _label_value('C. PRINCIPAL:', driver_name.upper()),
+                _label_value('LICENCIA C. PRINCIPAL:', driver_license),
+            ],
+        ],
+        colWidths=[_bts * 50 / 100, _bts * 50 / 100],
+    )
+    vehicles_tbl.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+
+    def _signature_block(label):
+        block = Table(
+            [
+                [Paragraph(label, styles["Helvetica_Bold_Center_8"])],
+                [Paragraph('&nbsp;<br/>&nbsp;', styles["Helvetica_Center_8"])],
+                [HRFlowable(width='90%', thickness=0.8, color=soft_border, spaceBefore=2, spaceAfter=2)],
+                [Paragraph('Firma', styles["Helvetica_Center_7"])],
+            ],
+            colWidths=[_bts * 26 / 100],
+        )
+        block.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOX', (0, 0), (-1, -1), 0.8, soft_border),
+            ('ROUNDEDCORNERS', radius),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        return block
+
+    table_qr_signatures = Table(
+        [[
+            qr_code(document_number, size_cm=3.2),
+            _signature_block('FIRMA DE LA EMPRESA'),
+            _signature_block('FIRMA DEL TRANSPORTISTA'),
+            _signature_block('FIRMA DEL DESTINATARIO'),
+        ]],
+        colWidths=[_bts * 18 / 100, _bts * 27 / 100, _bts * 27.5 / 100, _bts * 27.5 / 100],
+    )
+    table_qr_signatures.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+    ]))
 
     _dictionary = [
         table_header,
-        Spacer(1, 10),
-        *remitente_section,
-        Spacer(1, 6),
-        *destinatario_section,
-        Spacer(1, 6),
-        *traslado_section,
-        Spacer(1, 6),
-        *transporte_section,
-        Spacer(1, 6),
-        *puntos_section,
-        Spacer(1, 10),
-        Paragraph('DETALLE DE GUÍAS DE REMISIÓN REMITENTE INCLUIDAS', styles["Helvetica_Bold_Center_10"]),
         Spacer(1, 4),
+        order_service_line,
+        Spacer(1, 6),
+        dates_points_tbl,
+        Spacer(1, 6),
+        parties_tbl,
+        Spacer(1, 6),
+        transportista_tbl,
+        payer_tbl,
+        Spacer(1, 6),
         table_details,
-        Spacer(1, 10),
+        Spacer(1, 6),
+        attachments_tbl,
+        Spacer(1, 6),
+        vehicles_title,
+        vehicles_tbl,
+        Spacer(1, 8),
+        Paragraph(
+            'Representación impresa de la GUÍA DE REMISIÓN TRANSPORTISTA '
+            '(traslado privado). Consulte la validez de este documento en el portal SUNAT.',
+            styles["Helvetica_Justify_8"],
+        ),
+        Spacer(1, 6),
+        table_qr_signatures,
     ]
-    if observaciones_section:
-        _dictionary.extend([*observaciones_section, Spacer(1, 6)])
-    _dictionary.extend([*documentos_section, Spacer(1, 10)])
-    _dictionary.append(Paragraph(
-        'Representación impresa de la GUÍA DE REMISIÓN TRANSPORTISTA. '
-        'Consulte la validez de este documento en el portal SUNAT.',
-        styles["Helvetica_Justify_8"]))
-    _dictionary.append(Spacer(1, 6))
-    _dictionary.append(table_qr)
 
     buff = io.BytesIO()
-    doc = SimpleDocTemplate(buff,
-                            pagesize=A4,
-                            rightMargin=mr,
-                            leftMargin=ml,
-                            topMargin=ms,
-                            bottomMargin=mi,
-                            title='GUIA DE REMISION TRANSPORTISTA-{}'.format(document_number)
-                            )
+    doc = SimpleDocTemplate(
+        buff,
+        pagesize=A4,
+        rightMargin=mr,
+        leftMargin=ml,
+        topMargin=ms,
+        bottomMargin=mi,
+        title='GUIA DE REMISION TRANSPORTISTA-{}'.format(document_number),
+    )
     doc.build(_dictionary)
 
     response = HttpResponse(content_type='application/pdf')
@@ -718,9 +1031,8 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
 # ---------------------------------------------------------------------------
 
 def _order_document_number(order_obj):
-    if order_obj and order_obj.serial and order_obj.correlative_sale:
-        return '{}-{}'.format(order_obj.serial, order_obj.correlative_sale)
-    return str(order_obj.id) if order_obj else '-'
+    """N° de orden de servicio = ID de la orden."""
+    return 'OS-{}'.format(order_obj.id) if order_obj else '-'
 
 
 def _order_detail_unit_name(order_obj):
@@ -855,9 +1167,10 @@ def print_cargo_manifest(request, pk=None):  # Manifiesto de Carga
     truck_plate = truck_obj.license_plate if truck_obj else '-'
     truck_certificate = (getattr(truck_obj, 'certificate', None) if truck_obj else '') or '-'
 
-    sender_guides_qs = list(
-        cargo_manifest_obj.sender_guides.filter(status='I').select_related(
+    carrier_guides_qs = list(
+        cargo_manifest_obj.carrier_guides.filter(status='I').select_related(
             'order', 'order__encomienda', 'order__encomienda__office_destination',
+            'order__orderbill',
         ).prefetch_related(
             'order__orderdetail_set__unit',
             'order__orderaction_set__client',
@@ -865,7 +1178,7 @@ def print_cargo_manifest(request, pk=None):  # Manifiesto de Carga
             'order__orderroute_set__subsidiary',
         )
     )
-    guides_count = cargo_manifest_obj.guides_count or len(sender_guides_qs)
+    guides_count = cargo_manifest_obj.guides_count or len(carrier_guides_qs)
 
     # -------------------- Encabezado: 3 secciones en un solo cuadro --------------------
     left_width = _bts * 30 / 100
@@ -920,7 +1233,7 @@ def print_cargo_manifest(request, pk=None):  # Manifiesto de Carga
                 ('PESO TOTAL', total_weight),
                 ('FECHA MANIFIESTO', emit_date),
                 ('BULTOS TOTAL', quantity_packages),
-                ('N° DE GUÍAS', guides_count),
+                ('N° DE GRT', guides_count),
                 ('IMPORTE TOTAL', total_amount),
             ], box1_width - 8)],
         ],
@@ -998,32 +1311,32 @@ def print_cargo_manifest(request, pk=None):  # Manifiesto de Carga
     # -------------------- Detalle --------------------
     header_row_1 = [
         Paragraph('INFORMACIÓN DE LA CARGA', styles['Helvetica_Bold_Center_8']),
-        '', '', '', '', '', '', '',
-        Paragraph('REMITENTE Y DESTINATARIO', styles['Helvetica_Bold_Center_8']),
-        '',
+        '', '', '', '', '', '',
+        Paragraph('PARTES Y DOCUMENTO', styles['Helvetica_Bold_Center_8']),
+        '', '',
     ]
     header_row_2 = [
         Paragraph(h, styles['Helvetica_Bold_Center_7']) for h in (
-            '#', 'ORDEN', 'GUÍA', 'UNIDAD', 'CANT.', 'PESO', 'DESTINO', 'DIRECCIÓN',
-            'REMITENTE', 'DESTINATARIO',
+            '#', 'N° OS', 'GRT', 'UNIDAD', 'CANT.', 'PESO', 'DESTINO',
+            'REMITENTE', 'DESTINATARIO', 'DOC. RELACIONADO',
         )
     ]
     detail_rows = [header_row_1, header_row_2]
 
-    for index, sender_guide_item in enumerate(sender_guides_qs, start=1):
-        order_item = sender_guide_item.order
+    for index, carrier_guide_item in enumerate(carrier_guides_qs, start=1):
+        order_item = carrier_guide_item.order
         encomienda_obj = getattr(order_item, 'encomienda', None) if order_item else None
 
         order_number = _order_document_number(order_item) if order_item else '-'
-        guide_number = sender_guide_item.document_number()
+        guide_number = carrier_guide_item.document_number()
         unit_name = _order_detail_unit_name(order_item) if order_item else 'UND'
-        cantidad = _order_detail_quantity(order_item, sender_guide_item.quantity_packages) if order_item else \
-            _safe_decimal(sender_guide_item.quantity_packages)
-        peso = _safe_decimal(sender_guide_item.total_weight)
+        cantidad = _order_detail_quantity(order_item, carrier_guide_item.quantity_packages) if order_item else \
+            _safe_decimal(carrier_guide_item.quantity_packages)
+        peso = _safe_decimal(carrier_guide_item.total_weight)
         destino = _guide_destination_label(order_item, encomienda_obj) if order_item else '-'
-        direccion = _guide_destination_address(order_item, encomienda_obj) if order_item else '-'
         remitente = _guide_action_names(order_item, 'R') if order_item else '-'
         destinatario = _guide_action_names(order_item, 'D') if order_item else '-'
+        related_doc = (carrier_guide_item.related_document or '').strip() or 'OS (sin comprobante)'
 
         detail_rows.append([
             str(index),
@@ -1033,20 +1346,19 @@ def print_cargo_manifest(request, pk=None):  # Manifiesto de Carga
             str(cantidad.to_integral_value() if cantidad == cantidad.to_integral_value() else cantidad),
             str(round(peso, 2)),
             destino,
-            Paragraph(direccion.upper(), style_l7),
             Paragraph(remitente, style_l7),
             Paragraph(destinatario, style_l7),
+            Paragraph(related_doc, style_l7),
         ])
 
-    if not sender_guides_qs:
-        detail_rows.append(['-', '-', '-', '-', '-', '-', '-', 'SIN GUÍAS EMITIDAS', '-', '-'])
+    if not carrier_guides_qs:
+        detail_rows.append(['-', '-', '-', '-', '-', '-', '-', 'SIN GRT EMITIDAS', '-', '-'])
 
-    # Más angostas: #, ORDEN, GUÍA, CANT, PESO, DESTINO | más anchas: UNIDAD, DIR, REM, DEST
-    col_widths = [_bts * pct / 100 for pct in (3, 7, 9, 8, 5, 5, 8, 23, 16, 16)]
+    col_widths = [_bts * pct / 100 for pct in (3, 7, 10, 7, 5, 5, 10, 16, 16, 21)]
     table_detail = Table(detail_rows, colWidths=col_widths, repeatRows=2)
     table_detail.setStyle(TableStyle([
-        ('SPAN', (0, 0), (7, 0)),
-        ('SPAN', (8, 0), (9, 0)),
+        ('SPAN', (0, 0), (6, 0)),
+        ('SPAN', (7, 0), (9, 0)),
         ('BACKGROUND', (0, 0), (-1, 1), colors.lightgrey),
         ('FONTNAME', (0, 0), (-1, 1), 'Helvetica-Bold'),
         ('FONTNAME', (0, 2), (-1, -1), 'Helvetica'),
@@ -1064,7 +1376,7 @@ def print_cargo_manifest(request, pk=None):  # Manifiesto de Carga
     _dictionary = [
         header_table,
         Spacer(1, 10),
-        Paragraph('DETALLE DE GUÍAS DE REMISIÓN REMITENTE INCLUIDAS', styles['Helvetica_Bold_Center_10']),
+        Paragraph('DETALLE DE GUÍAS DE REMISIÓN TRANSPORTISTA INCLUIDAS', styles['Helvetica_Bold_Center_10']),
         Spacer(1, 4),
         table_detail,
     ]

@@ -7,234 +7,337 @@
 <div class="rv-page rv-assignment-page"
      data-url-assign="{% url 'comercial:assign_order_guide' %}"
      data-url-manifest="{% url 'comercial:create_cargo_manifest' %}"
-     data-url-carrier="{% url 'comercial:create_carrier_guide' %}"
      data-url-unassign="{% url 'comercial:unassign_order_guide' %}"
      data-csrf="{{ csrf_token }}">
 
     <header class="rv-assignment-hero">
         <div>
             <p class="rv-assignment-eyebrow">Operaciones · Encomiendas</p>
-            <h1>Asignación, guías y manifiesto</h1>
-            <p class="rv-assignment-lead">
-                Asigne encomiendas a una programación, emita la guía remitente por orden,
-                genere el manifiesto de carga (obligatorio) y, si lo requiere, la guía transportista.
+            <h1>Asignación de órdenes y manifiesto</h1>
+            <p class="rv-assignment-hero-lead">
+                Orden de servicio → Guía transportista (privada) → Manifiesto de carga
             </p>
         </div>
-        <form method="get" class="rv-assignment-date-form">
-            <label for="assignment-date">Fecha de programación</label>
-            <input type="date" id="assignment-date" name="date"
-                   value="{{ search_date|date:'Y-m-d' }}" onchange="this.form.submit()">
-        </form>
     </header>
 
-    <div class="rv-assignment-flow">
-        <div class="rv-assignment-step is-active"><span>1</span> Asignar a programación</div>
-        <div class="rv-assignment-step"><span>2</span> Guía remitente</div>
-        <div class="rv-assignment-step"><span>3</span> Manifiesto de carga</div>
-        <div class="rv-assignment-step"><span>4</span> GRT (opcional)</div>
-    </div>
+    <ol class="rv-assignment-flow">
+        <li class="rv-assignment-flow-step is-active">
+            <span class="rv-assignment-flow-num">1</span>
+            <div>
+                <strong>Órdenes pendientes</strong>
+                <small>Asigne a la programación del viaje</small>
+            </div>
+        </li>
+        <li class="rv-assignment-flow-step">
+            <span class="rv-assignment-flow-num">2</span>
+            <div>
+                <strong>Guías transportista</strong>
+                <small>Una GRT por orden (traslado privado)</small>
+            </div>
+        </li>
+        <li class="rv-assignment-flow-step">
+            <span class="rv-assignment-flow-num">3</span>
+            <div>
+                <strong>Manifiesto de carga</strong>
+                <small>Agrupa todas las GRT del viaje</small>
+            </div>
+        </li>
+    </ol>
 
-    <section class="rv-assignment-grid">
-        <article class="rv-assignment-panel">
-            <header>
-                <h2>Programaciones del día</h2>
-                <span class="rv-assignment-badge">{{ programmings|length }}</span>
-            </header>
-            <div class="rv-assignment-list" id="programming-list">
+    <div class="rv-assignment-shell">
+        <section class="rv-assignment-prog-section">
+            <div class="rv-assignment-prog-toolbar">
+                <div>
+                    <h2>Programación</h2>
+                    <p class="rv-assignment-prog-sub">
+                        {% if programmings|length > 1 %}
+                            Hay {{ programmings|length }} programaciones. Seleccione una para asignar.
+                        {% elif programmings|length == 1 %}
+                            Programación del día seleccionada.
+                        {% else %}
+                            No hay programaciones para esta fecha.
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="rv-assignment-prog-toolbar-actions">
+                    <form method="get" class="rv-assignment-date-form">
+                        <label for="assignment-date">Fecha</label>
+                        <input type="date" id="assignment-date" name="date"
+                               value="{{ search_date|date:'Y-m-d' }}" onchange="this.form.submit()">
+                    </form>
+                    {% if programmings|length > 1 %}
+                    <div class="rv-assignment-prog-select-wrap">
+                        <label for="programming-select">Elegir programación</label>
+                        <select id="programming-select" class="rv-assignment-prog-select">
+                            {% for p in programmings %}
+                            <option value="{{ p.id }}" {% if forloop.first %}selected{% endif %}>
+                                #{{ p.id }}
+                                · {% if p.truck %}{{ p.truck.license_plate }}{% else %}Sin unidad{% endif %}
+                                · {{ p.get_turn_display }}
+                                · {{ p.support_pilot|default:'Sin conductor' }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if programmings %}
+            <div class="rv-assignment-prog-cards" id="programming-list">
                 {% for p in programmings %}
-                <button type="button"
-                        class="rv-assignment-prog {% if forloop.first %}is-selected{% endif %}"
-                        data-programming-id="{{ p.id }}"
-                        data-pilot="{{ p.support_pilot|default:'' }}"
-                        data-plate="{% if p.truck %}{{ p.truck.license_plate }}{% endif %}"
-                        data-has-manifest="{% if p.cargo_manifest %}1{% else %}0{% endif %}">
-                    <strong>{% if p.truck %}{{ p.truck.license_plate }}{% else %}Sin unidad{% endif %}</strong>
-                    <span>{{ p.get_turn_display }} · {{ p.get_status_display }}</span>
-                    <em>{{ p.support_pilot|default:'Sin conductor' }}</em>
-                    {% if p.cargo_manifest %}
-                    <small class="rv-tag rv-tag-ok">Manifiesto</small>
+                <article class="rv-assignment-prog-card {% if forloop.first %}is-selected{% endif %}"
+                         data-programming-id="{{ p.id }}"
+                         data-pilot="{{ p.support_pilot|default:'' }}"
+                         data-copilot="{{ p.support_copilot|default:'' }}"
+                         data-plate="{% if p.truck %}{{ p.truck.license_plate }}{% endif %}"
+                         data-turn="{{ p.get_turn_display }}"
+                         data-status="{{ p.get_status_display }}"
+                         data-has-manifest="{% if p.cargo_manifest %}1{% else %}0{% endif %}"
+                         data-grt-count="{{ p.carrier_guides.all|length }}"
+                         {% if programmings|length == 1 %}style="display:block;"{% elif forloop.first %}style="display:block;"{% else %}style="display:none;"{% endif %}>
+                    <div class="rv-assignment-prog-card-head">
+                        <div>
+                            <span class="rv-assignment-prog-id">#{{ p.id }}</span>
+                            <strong class="rv-assignment-prog-plate">
+                                {% if p.truck %}{{ p.truck.license_plate }}{% else %}Sin unidad{% endif %}
+                            </strong>
+                        </div>
+                        <div class="rv-assignment-prog-tags">
+                            <span class="rv-tag {% if p.status == 'R' %}rv-tag-route{% else %}rv-tag-muted{% endif %}">
+                                {{ p.get_status_display }}
+                            </span>
+                            <span class="rv-tag rv-tag-muted">{{ p.carrier_guides.all|length }} GRT</span>
+                            {% if p.cargo_manifest %}<span class="rv-tag rv-tag-ok">Manifiesto</span>{% endif %}
+                        </div>
+                    </div>
+                    <dl class="rv-assignment-prog-meta">
+                        <div>
+                            <dt>Horario</dt>
+                            <dd>{{ p.get_turn_display }}</dd>
+                        </div>
+                        <div>
+                            <dt>Salida</dt>
+                            <dd>{% if p.departure_date %}{{ p.departure_date|date:"d/m/Y" }}{% else %}—{% endif %}</dd>
+                        </div>
+                        <div>
+                            <dt>Llegada</dt>
+                            <dd>{% if p.arrival_date %}{{ p.arrival_date|date:"d/m/Y" }}{% else %}—{% endif %}</dd>
+                        </div>
+                        <div>
+                            <dt>Sede</dt>
+                            <dd>{% if p.subsidiary %}{{ p.subsidiary.short_name|default:p.subsidiary.name }}{% else %}—{% endif %}</dd>
+                        </div>
+                        <div>
+                            <dt>Conductor</dt>
+                            <dd>{{ p.support_pilot|default:'—' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Copiloto</dt>
+                            <dd>{{ p.support_copilot|default:'—' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Unidad</dt>
+                            <dd>
+                                {% if p.truck %}
+                                    {% if p.truck.truck_model %}
+                                        {{ p.truck.truck_model.truck_brand.name }} {{ p.truck.truck_model.name }}
+                                    {% else %}
+                                        {{ p.truck.get_drive_type_display }}
+                                    {% endif %}
+                                {% else %}—{% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Servicio</dt>
+                            <dd>{{ p.get_service_type_display }}</dd>
+                        </div>
+                    </dl>
+                    {% if p.observation %}
+                    <p class="rv-assignment-prog-note">{{ p.observation }}</p>
                     {% endif %}
-                    {% if p.carrier_guide %}
-                    <small class="rv-tag rv-tag-ok">GRT</small>
-                    {% endif %}
-                </button>
-                {% empty %}
-                <p class="rv-assignment-empty">No hay programaciones para esta fecha.</p>
+                </article>
                 {% endfor %}
             </div>
-        </article>
+            {% else %}
+            <p class="rv-assignment-empty">No hay programaciones para esta fecha.</p>
+            {% endif %}
+        </section>
 
-        <article class="rv-assignment-panel rv-assignment-panel--wide">
-            <header>
-                <h2>Encomiendas pendientes</h2>
-                <span class="rv-assignment-badge">{{ pending_orders|length }}</span>
-            </header>
-            <div class="rv-assignment-table-wrap">
-                <table class="rv-assignment-table" id="pending-orders-table">
-                    <thead>
-                        <tr>
-                            <th>Orden</th>
-                            <th>Remitente</th>
-                            <th>Destino</th>
-                            <th>Total</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for order in pending_orders %}
-                        <tr data-order-id="{{ order.id }}">
-                            <td>
-                                <strong>{{ order.serial }}-{{ order.correlative_sale }}</strong>
-                                <small>#{{ order.id }}</small>
-                            </td>
-                            <td>
-                                {% with sender=order.orderaction_set.all|first %}
-                                    {% if sender and sender.client %}{{ sender.client.names }}{% else %}{{ order.client.names|default:'—' }}{% endif %}
-                                {% endwith %}
-                            </td>
-                            <td>
-                                {% if order.encomienda and order.encomienda.office_destination %}
-                                    {{ order.encomienda.office_destination.short_name }}
-                                {% else %}—{% endif %}
-                            </td>
-                            <td>S/ {{ order.total }}</td>
-                            <td>
-                                <button type="button" class="rv-btn rv-btn-primary rv-btn-sm js-assign-order"
-                                        data-order-id="{{ order.id }}">
-                                    Asignar
-                                </button>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="5" class="rv-assignment-empty">No hay encomiendas pendientes.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </article>
-    </section>
+        <section class="rv-assignment-grid">
+            <article class="rv-assignment-panel rv-assignment-panel--wide">
+                <header>
+                    <h2>Órdenes de servicio pendientes</h2>
+                    <span class="rv-assignment-badge">{{ pending_orders|length }}</span>
+                </header>
+                <p class="rv-assignment-hint">
+                    Al asignar se emite la <strong>guía de remisión transportista</strong>
+                    (traslado privado) con documento relacionado factura/boleta si existe.
+                    El N° de orden de servicio es el <strong>ID</strong> de la orden.
+                </p>
+                <div class="rv-assignment-table-wrap">
+                    <table class="rv-assignment-table" id="pending-orders-table">
+                        <thead>
+                            <tr>
+                                <th>N° OS</th>
+                                <th>Documento</th>
+                                <th>Remitente</th>
+                                <th>Destino</th>
+                                <th>Total</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in pending_orders %}
+                            <tr data-order-id="{{ order.id }}">
+                                <td>
+                                    <strong class="rv-assignment-os">OS-{{ order.id }}</strong>
+                                </td>
+                                <td>
+                                    {% if order.type_document == 'F' %}
+                                        <span class="rv-tag rv-tag-ok">Factura</span>
+                                        <small>{{ order.serial }}-{{ order.correlative_sale }}</small>
+                                    {% elif order.type_document == 'B' %}
+                                        <span class="rv-tag rv-tag-route">Boleta</span>
+                                        <small>{{ order.serial }}-{{ order.correlative_sale }}</small>
+                                    {% else %}
+                                        <span class="rv-tag rv-tag-muted">Orden de servicio</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% with sender=order.orderaction_set.all|first %}
+                                        {% if sender and sender.client %}{{ sender.client.names }}{% else %}{{ order.client.names|default:'—' }}{% endif %}
+                                    {% endwith %}
+                                </td>
+                                <td>
+                                    {% if order.encomienda and order.encomienda.office_destination %}
+                                        {{ order.encomienda.office_destination.short_name }}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td>S/ {{ order.total }}</td>
+                                <td>
+                                    <button type="button" class="rv-btn rv-btn-primary rv-btn-sm js-assign-order"
+                                            data-order-id="{{ order.id }}">
+                                        Asignar + GRT
+                                    </button>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="6" class="rv-assignment-empty">No hay órdenes pendientes.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </article>
 
-    <section class="rv-assignment-grid rv-assignment-grid--bottom">
-        <article class="rv-assignment-panel">
-            <header>
-                <h2>Guías remitente emitidas</h2>
-                <span class="rv-assignment-badge">{{ assigned_guides|length }}</span>
-            </header>
-            <div class="rv-assignment-table-wrap">
-                <table class="rv-assignment-table">
-                    <thead>
-                        <tr>
-                            <th>Guía</th>
-                            <th>Orden</th>
-                            <th>Programación</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for g in assigned_guides %}
-                        <tr>
-                            <td><strong>{{ g.document_number }}</strong></td>
-                            <td>#{{ g.order_id }}</td>
-                            <td>
-                                {% if g.programming.truck %}{{ g.programming.truck.license_plate }}{% endif %}
-                                {% if g.cargo_manifest_id %}<span class="rv-tag rv-tag-ok">En manifiesto</span>{% endif %}
-                            </td>
-                            <td class="rv-assignment-actions">
-                                <button type="button" class="rv-btn rv-btn-ghost rv-btn-sm js-download-guide"
-                                        data-url="{% url 'comercial:print_guide_format_tk' g.id %}?download=1"
-                                        data-filename="GuiaRemisionRemitente_{{ g.id }}.pdf">PDF</button>
-                                {% if not g.cargo_manifest_id %}
-                                <button type="button" class="rv-btn rv-btn-danger rv-btn-sm js-unassign"
-                                        data-guide-id="{{ g.id }}">Anular</button>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="4" class="rv-assignment-empty">Sin guías remitente hoy.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </article>
+            <article class="rv-assignment-panel">
+                <header>
+                    <h2>Guías transportista</h2>
+                    <span class="rv-assignment-badge">{{ assigned_guides|length }}</span>
+                </header>
+                <p class="rv-assignment-hint">
+                    Una GRT por orden. Use <strong>Desasignar</strong> o <strong>Reasignar</strong>
+                    solo si aún no está en el manifiesto.
+                </p>
+                <div class="rv-assignment-table-wrap">
+                    <table class="rv-assignment-table">
+                        <thead>
+                            <tr>
+                                <th>GRT</th>
+                                <th>N° OS</th>
+                                <th>Doc. relacionado</th>
+                                <th>Unidad</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for g in assigned_guides %}
+                            <tr>
+                                <td><strong>{{ g.document_number }}</strong></td>
+                                <td><strong class="rv-assignment-os">OS-{{ g.order_id }}</strong></td>
+                                <td>
+                                    {% if g.related_document %}
+                                        <small>{{ g.related_document }}</small>
+                                    {% else %}
+                                        <span class="rv-tag rv-tag-muted">Sin comprobante</span>
+                                    {% endif %}
+                                    {% if g.cargo_manifest_id %}<span class="rv-tag rv-tag-ok">En manifiesto</span>{% endif %}
+                                </td>
+                                <td>
+                                    {% if g.truck %}{{ g.truck.license_plate }}
+                                    {% elif g.programming.truck %}{{ g.programming.truck.license_plate }}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td class="rv-assignment-actions">
+                                    <a class="rv-btn rv-btn-ghost rv-btn-sm" target="_blank"
+                                       href="{% url 'comercial:print_guide_format_a4' g.id %}">PDF</a>
+                                    {% if not g.cargo_manifest_id %}
+                                    <button type="button" class="rv-btn rv-btn-ghost rv-btn-sm js-reassign"
+                                            data-order-id="{{ g.order_id }}"
+                                            data-guide-id="{{ g.id }}"
+                                            title="Mover a la programación seleccionada">Reasignar</button>
+                                    <button type="button" class="rv-btn rv-btn-danger rv-btn-sm js-unassign"
+                                            data-guide-id="{{ g.id }}"
+                                            title="Quitar de la programación y volver a pendientes">Desasignar</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="5" class="rv-assignment-empty">Sin GRT emitidas hoy.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </article>
+        </section>
 
-        <article class="rv-assignment-panel">
-            <header>
-                <h2>Manifiesto de carga</h2>
-                <button type="button" class="rv-btn rv-btn-accent rv-btn-sm" id="btn-create-manifest">
-                    Emitir manifiesto
-                </button>
-            </header>
-            <p class="rv-assignment-hint" id="manifest-hint">
-                Obligatorio: agrupa todas las guías remitente de la programación seleccionada.
-            </p>
-            <div class="rv-assignment-table-wrap">
-                <table class="rv-assignment-table">
-                    <thead>
-                        <tr>
-                            <th>Manifiesto</th>
-                            <th>Unidad</th>
-                            <th>Guías</th>
-                            <th>Estado</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for m in cargo_manifests %}
-                        <tr>
-                            <td><strong>{{ m.document_number }}</strong></td>
-                            <td>{% if m.truck %}{{ m.truck.license_plate }}{% else %}—{% endif %}</td>
-                            <td>{{ m.guides_count }}</td>
-                            <td>{{ m.get_status_display }}</td>
-                            <td>
-                                <a class="rv-btn rv-btn-ghost rv-btn-sm" target="_blank"
-                                   href="{% url 'comercial:print_cargo_manifest' m.id %}">PDF</a>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="5" class="rv-assignment-empty">Aún no hay manifiestos de carga.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <header style="margin-top:1rem;border-top:1px solid #e8eef4;">
-                <h2>Guía transportista <small style="font-weight:500;color:#6b7c8f;">(opcional)</small></h2>
-                <button type="button" class="rv-btn rv-btn-ghost rv-btn-sm" id="btn-create-carrier">
-                    Emitir GRT
-                </button>
-            </header>
-            <p class="rv-assignment-hint" id="carrier-hint">
-                Opcional. Requiere manifiesto de carga emitido previamente.
-            </p>
-            <div class="rv-assignment-table-wrap">
-                <table class="rv-assignment-table">
-                    <thead>
-                        <tr>
-                            <th>Guía</th>
-                            <th>Unidad</th>
-                            <th>Bultos</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for c in carrier_guides %}
-                        <tr>
-                            <td><strong>{{ c.document_number }}</strong></td>
-                            <td>{% if c.truck %}{{ c.truck.license_plate }}{% else %}—{% endif %}</td>
-                            <td>{{ c.quantity_packages }}</td>
-                            <td>
-                                <a class="rv-btn rv-btn-ghost rv-btn-sm" target="_blank"
-                                   href="{% url 'comercial:print_guide_format_a4' c.id %}">PDF A4</a>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="4" class="rv-assignment-empty">Sin GRT (opcional).</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </article>
-    </section>
+        <section class="rv-assignment-grid rv-assignment-grid--bottom">
+            <article class="rv-assignment-panel rv-assignment-panel--wide">
+                <header>
+                    <h2>Manifiesto de carga</h2>
+                    <button type="button" class="rv-btn rv-btn-accent rv-btn-sm" id="btn-create-manifest">
+                        Emitir manifiesto
+                    </button>
+                </header>
+                <p class="rv-assignment-hint" id="manifest-hint">
+                    Agrupa todas las guías transportista de la programación seleccionada.
+                </p>
+                <div class="rv-assignment-table-wrap">
+                    <table class="rv-assignment-table">
+                        <thead>
+                            <tr>
+                                <th>Manifiesto</th>
+                                <th>Unidad</th>
+                                <th>GRT</th>
+                                <th>Bultos</th>
+                                <th>Peso</th>
+                                <th>Estado</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for m in cargo_manifests %}
+                            <tr>
+                                <td><strong>{{ m.document_number }}</strong></td>
+                                <td>{% if m.truck %}{{ m.truck.license_plate }}{% else %}—{% endif %}</td>
+                                <td>{{ m.guides_count }}</td>
+                                <td>{{ m.quantity_packages }}</td>
+                                <td>{{ m.total_weight }} kg</td>
+                                <td>{{ m.get_status_display }}</td>
+                                <td>
+                                    <a class="rv-btn rv-btn-ghost rv-btn-sm" target="_blank"
+                                       href="{% url 'comercial:print_cargo_manifest' m.id %}">PDF</a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="7" class="rv-assignment-empty">Aún no hay manifiestos de carga.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </article>
+        </section>
+    </div>
 </div>
 {% endblock %}
 
@@ -246,10 +349,8 @@
     const csrf = root.dataset.csrf;
     const urlAssign = root.dataset.urlAssign;
     const urlManifest = root.dataset.urlManifest;
-    const urlCarrier = root.dataset.urlCarrier;
     const urlUnassign = root.dataset.urlUnassign;
     let selectedProgrammingId = null;
-    let selectedHasManifest = false;
 
     function toast(ok, msg) {
         if (window.toastr) {
@@ -259,75 +360,81 @@
         }
     }
 
-    function downloadPdf(url, filename) {
-        fetch(url, { credentials: 'same-origin' })
-            .then(res => {
-                if (!res.ok) throw new Error('download failed');
-                return res.blob();
-            })
-            .then(blob => {
-                const blobUrl = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = blobUrl;
-                link.download = filename || 'documento.pdf';
-                link.style.display = 'none';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                window.URL.revokeObjectURL(blobUrl);
-            })
-            .catch(() => toast(false, 'No se pudo descargar el PDF'));
-    }
-
-    function selectProgramming(btn) {
-        document.querySelectorAll('.rv-assignment-prog').forEach(el => el.classList.remove('is-selected'));
-        btn.classList.add('is-selected');
-        selectedProgrammingId = btn.dataset.programmingId;
-        selectedHasManifest = btn.dataset.hasManifest === '1';
-        const base = `Programación #${selectedProgrammingId} · ${btn.dataset.plate || 'Sin placa'} · ${btn.dataset.pilot || 'Sin conductor'}`;
+    function selectProgramming(card) {
+        if (!card) return;
+        document.querySelectorAll('.rv-assignment-prog-card').forEach(el => {
+            el.classList.remove('is-selected');
+            el.style.display = 'none';
+        });
+        card.classList.add('is-selected');
+        card.style.display = 'block';
+        selectedProgrammingId = card.dataset.programmingId;
+        const grt = card.dataset.grtCount || '0';
+        const base = `Programación #${selectedProgrammingId} · ${card.dataset.plate || 'Sin placa'} · ${card.dataset.pilot || 'Sin conductor'}`;
         const mh = document.getElementById('manifest-hint');
-        const ch = document.getElementById('carrier-hint');
-        if (mh) mh.textContent = base + ' · Emita el manifiesto de carga.';
-        if (ch) ch.textContent = selectedHasManifest
-            ? base + ' · Puede emitir GRT opcional.'
-            : base + ' · Primero emita el manifiesto.';
+        if (mh) {
+            mh.textContent = card.dataset.hasManifest === '1'
+                ? base + ` · Manifiesto emitido (${grt} GRT). Puede volver a emitir para actualizar.`
+                : base + ` · ${grt} GRT listas. Emita el manifiesto cuando complete la carga.`;
+        }
+        const sel = document.getElementById('programming-select');
+        if (sel && sel.value !== selectedProgrammingId) {
+            sel.value = selectedProgrammingId;
+        }
     }
 
-    const firstProg = document.querySelector('.rv-assignment-prog.is-selected') || document.querySelector('.rv-assignment-prog');
-    if (firstProg) selectProgramming(firstProg);
+    const firstCard = document.querySelector('.rv-assignment-prog-card.is-selected')
+        || document.querySelector('.rv-assignment-prog-card');
+    if (firstCard) selectProgramming(firstCard);
 
-    document.querySelectorAll('.rv-assignment-prog').forEach(btn => {
-        btn.addEventListener('click', () => selectProgramming(btn));
-    });
+    const progSelect = document.getElementById('programming-select');
+    if (progSelect) {
+        progSelect.addEventListener('change', function () {
+            const card = document.querySelector(
+                '.rv-assignment-prog-card[data-programming-id="' + this.value + '"]'
+            );
+            selectProgramming(card);
+        });
+    }
+
+    function postAssign(orderId, btn) {
+        if (!selectedProgrammingId) {
+            toast(false, 'Seleccione una programación.');
+            return;
+        }
+        const fd = new FormData();
+        fd.append('order_id', orderId);
+        fd.append('programming_id', selectedProgrammingId);
+        fd.append('csrfmiddlewaretoken', csrf);
+        if (btn) btn.disabled = true;
+        fetch(urlAssign, { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => {
+                toast(!!data.success, data.message || 'Listo');
+                if (data.success) {
+                    if (data.print_url) window.open(data.print_url, '_blank');
+                    setTimeout(() => location.reload(), 700);
+                } else if (btn) {
+                    btn.disabled = false;
+                }
+            })
+            .catch(() => { toast(false, 'Error de red'); if (btn) btn.disabled = false; });
+    }
 
     document.querySelectorAll('.js-assign-order').forEach(btn => {
         btn.addEventListener('click', function () {
-            if (!selectedProgrammingId) {
-                toast(false, 'Seleccione una programación.');
-                return;
-            }
-            const fd = new FormData();
-            fd.append('order_id', this.dataset.orderId);
-            fd.append('programming_id', selectedProgrammingId);
-            fd.append('csrfmiddlewaretoken', csrf);
-            this.disabled = true;
-            fetch(urlAssign, { method: 'POST', body: fd, credentials: 'same-origin' })
-                .then(r => r.json())
-                .then(data => {
-                    toast(!!data.success, data.message || 'Listo');
-                    if (data.success) {
-                        setTimeout(() => location.reload(), 700);
-                    } else {
-                        this.disabled = false;
-                    }
-                })
-                .catch(() => { toast(false, 'Error de red'); this.disabled = false; });
+            postAssign(this.dataset.orderId, this);
         });
     });
 
-    document.querySelectorAll('.js-download-guide').forEach(btn => {
+    document.querySelectorAll('.js-reassign').forEach(btn => {
         btn.addEventListener('click', function () {
-            downloadPdf(this.dataset.url, this.dataset.filename);
+            if (!selectedProgrammingId) {
+                toast(false, 'Seleccione la programación correcta.');
+                return;
+            }
+            if (!confirm('¿Reasignar esta orden a la programación seleccionada?')) return;
+            postAssign(this.dataset.orderId, this);
         });
     });
 
@@ -357,48 +464,21 @@
         });
     }
 
-    const carrierBtn = document.getElementById('btn-create-carrier');
-    if (carrierBtn) {
-        carrierBtn.addEventListener('click', function () {
-            if (!selectedProgrammingId) {
-                toast(false, 'Seleccione una programación.');
-                return;
-            }
-            if (!selectedHasManifest) {
-                toast(false, 'Primero emita el manifiesto de carga.');
-                return;
-            }
-            const fd = new FormData();
-            fd.append('programming_id', selectedProgrammingId);
-            fd.append('csrfmiddlewaretoken', csrf);
-            this.disabled = true;
-            fetch(urlCarrier, { method: 'POST', body: fd, credentials: 'same-origin' })
-                .then(r => r.json())
-                .then(data => {
-                    toast(!!data.success, data.message || 'Listo');
-                    if (data.success) {
-                        if (data.print_url) window.open(data.print_url, '_blank');
-                        setTimeout(() => location.reload(), 700);
-                    } else {
-                        this.disabled = false;
-                    }
-                })
-                .catch(() => { toast(false, 'Error de red'); this.disabled = false; });
-        });
-    }
-
     document.querySelectorAll('.js-unassign').forEach(btn => {
         btn.addEventListener('click', function () {
-            if (!confirm('¿Anular esta asignación?')) return;
+            if (!confirm('¿Desasignar esta orden? Volverá a pendientes y se anulará la GRT.')) return;
             const fd = new FormData();
             fd.append('guide_id', this.dataset.guideId);
             fd.append('csrfmiddlewaretoken', csrf);
+            this.disabled = true;
             fetch(urlUnassign, { method: 'POST', body: fd, credentials: 'same-origin' })
                 .then(r => r.json())
                 .then(data => {
                     toast(!!data.success, data.message || 'Listo');
                     if (data.success) setTimeout(() => location.reload(), 500);
-                });
+                    else this.disabled = false;
+                })
+                .catch(() => { toast(false, 'Error de red'); this.disabled = false; });
         });
     });
 })();
