@@ -6,7 +6,7 @@ from apps.users.models import Subsidiary
 
 class Owner(models.Model):
     id = models.AutoField(primary_key=True)
-    name = models.CharField('Nombre', max_length=100, unique=True)
+    name = models.CharField('Nombre', max_length=100)
     associated = models.CharField('Asociado', max_length=100, null=True, blank=True)
     ruc = models.CharField(max_length=11)
     address = models.CharField('Dirección', max_length=100, null=True, blank=True)

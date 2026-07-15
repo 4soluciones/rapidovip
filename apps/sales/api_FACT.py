@@ -17,7 +17,7 @@ FACT_DRY_RUN = False
 
 
 tokens = {
-    "20616147375": "gAAAAABqTA0cJ5usLHk_6QxdRNsphXDcm_utYdSdMFagg2k2ww_-xFAaV7JoZw7b3_NpXxO25lXfxYUFR4Yewkm_zpFDTCkwzA==",
+    "20559330818": "gAAAAABqTA0cJ5usLHk_6QxdRNsphXDcm_utYdSdMFagg2k2ww_-xFAaV7JoZw7b3_NpXxO25lXfxYUFR4Yewkm_zpFDTCkwzA==",
 }
 
 
@@ -289,7 +289,7 @@ def send_receipt_commodity_fact(request, order_id):  # BOLETA DE ENCOMIENDA 4FAC
         }}
         """
 
-    # print(graphql_query)
+    print(graphql_query)
 
     token = tokens.get(order_obj.company.ruc, "ID no encontrado")
 
