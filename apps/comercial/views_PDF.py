@@ -28,6 +28,15 @@ from apps.sales.number_to_letters import numero_a_moneda
 from apps.sales.models import Order, OrderAction, OrderBill, Manifest, OrderRoute
 import io
 from .views import calculate_age
+
+
+def _order_detail_unit_label(detail, use_description=False):
+    if not detail.unit_id:
+        return 'SIN UND'
+    unit = detail.unit
+    if use_description:
+        return (unit.description or unit.name or 'SIN UND').upper()
+    return (unit.name or unit.description or 'SIN UND').upper()
 import datetime
 from datetime import datetime, timedelta
 # import win32
@@ -367,12 +376,11 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
         ('LEFTPADDING', (0, 0), (0, -1), 0.3),  # first column
         # ('LEFTPADDING', (0, 0), (0, -1), 0.5),  # first column
-        ('ALIGNMENT', (1, 0), (1, -1), 'CENTER'),  # second column
+        ('ALIGNMENT', (1, 0), (1, -1), 'CENTER'),  # unit column
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGNMENT', (2, 0), (2, -1), 'RIGHT'),  # third column
-        ('ALIGNMENT', (3, 0), (3, -1), 'RIGHT'),  # four column
-        ('LEFTPADDING', (2, 0), (2, -1), 8),  # third column
-        ('RIGHTPADDING', (2, 0), (2, -1), -8),  # third column
+        ('ALIGNMENT', (2, 0), (2, -1), 'CENTER'),  # quantity column
+        ('ALIGNMENT', (3, 0), (3, -1), 'RIGHT'),  # total column
+        ('RIGHTPADDING', (3, 0), (3, -1), 0.5),  # total column
         # ('BACKGROUND', (2, 0), (2, -1), colors.lightgrey),
     ]
     my_style_table5 = [
@@ -524,8 +532,8 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
                        colWidths=[_wt * 20 / 100, _wt * 80 / 100])
     ana_c5.setStyle(TableStyle(my_style_table2))
 
-    td_description = ('DESCRIPCIÓN', 'CANT.', 'TOTAL')
-    ana_c6 = Table([td_description], colWidths=[_wt * 75 / 100, _wt * 10 / 100, _wt * 15 / 100])
+    td_description = ('DESCRIPCIÓN', 'UND.', 'CANT.', 'TOTAL')
+    ana_c6 = Table([td_description], colWidths=[_wt * 58 / 100, _wt * 10 / 100, _wt * 10 / 100, _wt * 22 / 100])
     ana_c6.setStyle(TableStyle(my_style_table3))
 
     sub_total = 0
@@ -541,7 +549,10 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
     for d in order_obj.orderdetail_set.all():
         P0 = Paragraph(d.description.upper(), styles["JustifyDesc"])
         _rows.append(
-            (P0, str(decimal.Decimal(round(d.quantity))), Paragraph(str(round(d.amount, 2)), styles["JustifyDesc"])))
+            (P0,
+             _order_detail_unit_label(d),
+             str(decimal.Decimal(round(d.quantity))),
+             Paragraph(str(round(d.amount, 2)), styles["JustifyDesc"])))
         base_total = d.quantity * d.price_unit
         base_amount = base_total / decimal.Decimal(1.1800)
         igv = base_total - base_amount
@@ -556,7 +567,7 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         # elif order_obj.way_to_pay == 'D':
         #     _details_ix_qr.append(str(round(d.amount, 2)))
 
-    ana_c7 = Table(_rows, colWidths=[_wt * 78 / 100, _wt * 6 / 100, _wt * 16 / 100],
+    ana_c7 = Table(_rows, colWidths=[_wt * 58 / 100, _wt * 10 / 100, _wt * 10 / 100, _wt * 22 / 100],
                    rowHeights=0.30 * inch)
 
     ana_c7.setStyle(TableStyle(my_style_table4))
@@ -1531,7 +1542,7 @@ def print_manifest_comidity(request, pk=None):  # Manifiesto de Encomiendas
                           serial_row,
                           str(order_obj.correlative_sale[-4:]),
                           str(decimal.Decimal(round(d.quantity))),
-                          d.unit.description,
+                          _order_detail_unit_label(d, use_description=True),
                           str(decimal.Decimal(round(d.weight))) + ' KG',
                           Paragraph(d.description.upper(), styles["Justify-Dotcirful"]),
                           Paragraph(name_addreess, styles["Justify-Dotcirful"]),
@@ -1754,7 +1765,7 @@ def print_guide_comidity(request, pk=None):  # Guia Remision Transportista
     for d in order_obj.orderdetail_set.all():
         _rows.append((_c2,
                       Paragraph(d.description.upper(), styles["Justify-Dotcirful-table"]),
-                      d.unit.description,
+                      _order_detail_unit_label(d, use_description=True),
                       str(decimal.Decimal(round(d.quantity))),
                       str(decimal.Decimal(round(d.weight))) + ' KG'))
         _c2 = _c2 + 1

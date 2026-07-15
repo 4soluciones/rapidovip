@@ -1,12 +1,14 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.views.generic import TemplateView, View, CreateView, UpdateView
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.forms.models import model_to_dict
 from django.http import JsonResponse
 from http import HTTPStatus
 
 from .models import *
 from .forms import *
+from apps.users.roles import user_is_administrator
 from apps.users.models import Subsidiary, District, DocumentType, Employee, Worker
 from apps.comercial.models import Truck
 from django.contrib.auth.models import User
@@ -242,4 +244,79 @@ def get_client(request):
             'client_bill': client_bill,
         })
     return JsonResponse({'error': True, 'message': 'Error de peticion.'})
+
+
+class UnitListView(TemplateView):
+    template_name = 'sales/unit_list.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        if not user_is_administrator(request.user):
+            return redirect('dashboard')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['units'] = Unit.objects.order_by('name')
+        return ctx
+
+
+@login_required
+@user_passes_test(user_is_administrator)
+def get_unit_form(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': True}, status=405)
+    tpl = loader.get_template('sales/unit_modal_form.html')
+    return JsonResponse({
+        'success': True,
+        'grid': tpl.render({'form': UnitForm()}, request),
+    })
+
+
+@login_required
+@user_passes_test(user_is_administrator)
+def get_unit_edit_form(request, unit_id: int):
+    if request.method != 'GET':
+        return JsonResponse({'error': True}, status=405)
+    unit = Unit.objects.get(pk=unit_id)
+    tpl = loader.get_template('sales/unit_modal_edit_form.html')
+    return JsonResponse({
+        'success': True,
+        'grid': tpl.render({
+            'unit': unit,
+            'form': UnitForm(instance=unit),
+        }, request),
+    })
+
+
+@login_required
+@user_passes_test(user_is_administrator)
+def save_unit(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': True}, status=405)
+    form = UnitForm(request.POST)
+    if form.is_valid():
+        form.save()
+        return JsonResponse({'success': True, 'message': 'Unidad registrada correctamente.'})
+    errors = []
+    for field, msgs in form.errors.items():
+        label = form.fields[field].label if field in form.fields else field
+        errors.append(f'{label}: {", ".join(msgs)}')
+    return JsonResponse({'error': True, 'message': '; '.join(errors) or 'Datos inválidos'}, status=400)
+
+
+@login_required
+@user_passes_test(user_is_administrator)
+def save_unit_edit(request, unit_id: int):
+    if request.method != 'POST':
+        return JsonResponse({'error': True}, status=405)
+    unit = Unit.objects.get(pk=unit_id)
+    form = UnitForm(request.POST, instance=unit)
+    if form.is_valid():
+        form.save()
+        return JsonResponse({'success': True, 'message': 'Unidad actualizada correctamente.'})
+    errors = []
+    for field, msgs in form.errors.items():
+        label = form.fields[field].label if field in form.fields else field
+        errors.append(f'{label}: {", ".join(msgs)}')
+    return JsonResponse({'error': True, 'message': '; '.join(errors) or 'Datos inválidos'}, status=400)
 

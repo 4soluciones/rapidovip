@@ -1,0 +1,115 @@
+{% extends 'home.html' %}
+{% block title %}RapidoVip — Unidades de medida{% endblock %}
+
+{% block body %}
+<div class="rv-page">
+    <div class="rv-page-header">
+        <div>
+            <h1><i class="fas fa-ruler-combined"></i> Unidades de medida</h1>
+            <p class="rv-page-subtitle">Catálogo de unidades para el detalle de encomiendas y documentos</p>
+        </div>
+        <button type="button" class="rv-btn rv-btn-success" id="btn-new-unit">
+            <i class="fas fa-plus"></i> Nueva unidad
+        </button>
+    </div>
+
+    <div class="rv-form-section">
+        <div class="rv-table-wrap">
+            <table class="rv-table" id="unit-table">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Descripción</th>
+                        <th>Estado</th>
+                        <th class="text-right">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in units %}
+                    <tr>
+                        <td><span class="rv-badge rv-badge-route">{{ u.name }}</span></td>
+                        <td class="text-muted">{{ u.description|default:"—" }}</td>
+                        <td>
+                            {% if u.is_enabled %}
+                                <span class="rv-badge rv-badge-success">Activa</span>
+                            {% else %}
+                                <span class="rv-badge rv-badge-muted">Inactiva</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <button type="button"
+                                    class="rv-btn rv-btn-outline rv-btn-sm btn-edit-unit"
+                                    data-unit-id="{{ u.id }}">
+                                <i class="fas fa-pen"></i> Editar
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-4">
+                            No hay unidades registradas.
+                            <button type="button" class="btn btn-link p-0" id="btn-new-unit-empty">Crear la primera</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalUnit" tabindex="-1"></div>
+{% endblock %}
+
+{% block extrajs %}
+<script>
+    function openUnitModal() {
+        $.get('{% url "sales:get_unit_form" %}', function (r) {
+            if (r.success) {
+                $('#modalUnit').html(r.grid);
+                $('#modalUnit').modal('show');
+            }
+        });
+    }
+
+    function openUnitEditModal(unitId) {
+        const urlTmpl = '{% url "sales:get_unit_edit_form" unit_id=0 %}';
+        const url = urlTmpl.replace('/0/', `/${unitId}/`);
+        $.get(url, function (r) {
+            if (r.success) {
+                $('#modalUnit').html(r.grid);
+                $('#modalUnit').modal('show');
+            }
+        });
+    }
+
+    $('#btn-new-unit, #btn-new-unit-empty').on('click', openUnitModal);
+
+    $(document).on('click', '.btn-edit-unit', function () {
+        openUnitEditModal($(this).data('unit-id'));
+    });
+
+    $(document).on('submit', '#unit-modal-form', function (e) {
+        e.preventDefault();
+        $.post('{% url "sales:save_unit" %}', $(this).serialize(), function (r) {
+            toastr.success(r.message);
+            $('#modalUnit').modal('hide');
+            setTimeout(() => location.reload(), 600);
+        }).fail(function (jq) {
+            toastr.error(jq.responseJSON?.message || 'Error al guardar');
+        });
+    });
+
+    $(document).on('submit', '#unit-edit-modal-form', function (e) {
+        e.preventDefault();
+        const action = $(this).data('action');
+        $.post(action, $(this).serialize(), function (r) {
+            toastr.success(r.message);
+            $('#modalUnit').modal('hide');
+            setTimeout(() => location.reload(), 600);
+        }).fail(function (jq) {
+            toastr.error(jq.responseJSON?.message || 'Error al guardar');
+        });
+    });
+</script>
+{% endblock %}

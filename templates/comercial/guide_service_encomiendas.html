@@ -236,6 +236,17 @@
                 <label for="e_detail_qty">Cant.</label>
                 <input type="number" id="e_detail_qty" class="rv-form-control text-center" min="1" step="1" value="1">
             </div>
+            <div class="rv-form-group rv-guide-e-detail-unit">
+                <label for="e_detail_unit">Unidad</label>
+                <select id="e_detail_unit" class="rv-form-control">
+                    <option value="" selected disabled>Escoja</option>
+                    {% for u in units %}
+                        <option value="{{ u.id }}">
+                            {{ u.description|default:u.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="rv-form-group rv-guide-e-detail-desc">
                 <label for="e_detail_desc">Descripción</label>
                 <div class="rv-e-input-wrap">
@@ -272,6 +283,7 @@
         <div class="rv-guide-e-detail-body">
             <div class="rv-guide-e-detail-list-head">
                 <span>Cant.</span>
+                <span>Unidad</span>
                 <span>Descripción</span>
                 <span class="text-right">Peso</span>
                 <span class="text-right">P. unitario</span>

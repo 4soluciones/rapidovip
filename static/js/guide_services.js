@@ -459,9 +459,12 @@ var GuideServices = (function ($) {
         }
         var weightDisplay = weight === null ? '—' : weight.toFixed(2) + ' kg';
         var weightValue = weight === null ? '' : weight.toFixed(2);
+        var unitId = $('#e_detail_unit').val() || '';
+        var unitLabel = ($('#e_detail_unit option:selected').text() || 'SIN UND').trim().toUpperCase();
         $('#e_details_body').append(
             '<div class="rv-guide-e-detail-row">' +
                 '<span class="e-item-qty">' + qty + '</span>' +
+                '<span class="e-item-unit text-center" data-unit-id="' + unitId + '">' + unitLabel + '</span>' +
                 '<span class="e-item-desc">' + desc.toUpperCase() + '</span>' +
                 '<span class="e-item-weight text-right" data-weight="' + weightValue + '">' + weightDisplay + '</span>' +
                 '<span class="e-item-price text-right item-price">' + price.toFixed(2) + '</span>' +
@@ -690,7 +693,7 @@ var GuideServices = (function ($) {
                     Weight: $(this).find('.e-item-weight').attr('data-weight') || '',
                     Price_unit: $(this).find('.item-price').text(),
                     Amount: $(this).find('.item-amount').text(),
-                    Unit: 1
+                    Unit: $(this).find('.e-item-unit').attr('data-unit-id') || $('#e_detail_unit').val() || ''
                 });
             });
             $('.e-addressee-row').each(function () {

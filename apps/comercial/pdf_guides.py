@@ -845,7 +845,7 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
                 styles["Helvetica_Center_8"],
             ),
             Paragraph(
-                (detail.unit.name if detail.unit_id else 'BULTO(S)').upper(),
+                (detail.unit.name if detail.unit_id else 'SIN UND').upper(),
                 styles["Helvetica_Center_8"],
             ),
             Paragraph((detail.description or 'ENCOMIENDA').upper(), styles["Helvetica_Left_8"]),
@@ -1040,7 +1040,7 @@ def _order_detail_unit_name(order_obj):
         d.unit.name for d in order_obj.orderdetail_set.all() if d.unit_id
     ]
     if not unit_names:
-        return 'UND'
+        return 'SIN UND'
     return Counter(unit_names).most_common(1)[0][0]
 
 

@@ -7,6 +7,11 @@ from apps.sales.api_FACT import send_bill_commodity_fact, send_receipt_commodity
 urlpatterns = [
     path('', login_required(Home.as_view()), name='home'),
     path('client_list/', login_required(ClientList.as_view()), name='client_list'),
+    path('units/', login_required(UnitListView.as_view()), name='unit_list'),
+    path('units/form/', login_required(get_unit_form), name='get_unit_form'),
+    path('units/save/', login_required(save_unit), name='save_unit'),
+    path('units/<int:unit_id>/form/', login_required(get_unit_edit_form), name='get_unit_edit_form'),
+    path('units/<int:unit_id>/save/', login_required(save_unit_edit), name='save_unit_edit'),
 
     path('new_client/', new_client, name='new_client'),
     path('get_client/', get_client, name='get_client'),

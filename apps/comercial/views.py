@@ -608,6 +608,7 @@ def new_guide(request):
         'service_type': service_type,
         'service_docs': service_docs,
         'service_docs_json': json.dumps(service_docs),
+        'units': Unit.objects.filter(is_enabled=True).order_by('id'),
     })
 
 
@@ -1067,23 +1068,16 @@ def get_document_type(doc_code):
     return document_type
 
 
-def get_default_unit():
-    """Unidad genérica para detalles de encomienda/servicio cuando no hay catálogo cargado."""
-    unit, _ = Unit.objects.get_or_create(
-        name='UN',
-        defaults={'description': 'Unidad', 'is_enabled': True},
-    )
-    return unit
-
-
 def resolve_order_unit(unit_value):
-    if unit_value in (None, ''):
-        return get_default_unit()
+    if unit_value in (None, '', 0, '0'):
+        return None
     try:
         unit_id = int(unit_value)
     except (TypeError, ValueError):
-        return get_default_unit()
-    return Unit.objects.filter(id=unit_id).first() or get_default_unit()
+        return None
+    if unit_id <= 0:
+        return None
+    return Unit.objects.filter(id=unit_id, is_enabled=True).first()
 
 
 def get_name_business(request):
@@ -1425,9 +1419,9 @@ def get_order_comodity_values(order_set=None):
             item_detail = {
                 'id': od.id,
                 'quantity': od.quantity,
-                'unit_id': od.unit.id,
+                'unit_id': od.unit.id if od.unit_id else None,
                 'weight': od.weight,
-                'unit_description': od.unit.description,
+                'unit_description': (od.unit.description or od.unit.name) if od.unit_id else 'SIN UND',
                 'description': od.description
             }
 

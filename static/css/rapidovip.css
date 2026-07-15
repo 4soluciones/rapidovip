@@ -2953,7 +2953,7 @@ button.rv-btn-search {
 }
 .rv-guide-service-e .rv-guide-e-detail-compose {
     display: grid;
-    grid-template-columns: 72px 1fr minmax(88px, 100px) minmax(110px, 130px) minmax(110px, 130px) auto;
+    grid-template-columns: 72px minmax(90px, 110px) 1fr minmax(88px, 100px) minmax(110px, 130px) minmax(110px, 130px) auto;
     gap: 0.5rem 0.65rem;
     align-items: end;
     padding: 0.75rem;
@@ -2989,7 +2989,7 @@ button.rv-btn-search {
 .rv-guide-service-e .rv-guide-e-detail-list-head,
 .rv-guide-service-e .rv-guide-e-detail-row {
     display: grid;
-    grid-template-columns: 72px 1fr minmax(88px, 100px) minmax(110px, 130px) minmax(110px, 130px) 42px;
+    grid-template-columns: 72px minmax(90px, 110px) 1fr minmax(88px, 100px) minmax(110px, 130px) minmax(110px, 130px) 42px;
     gap: 0.5rem;
     align-items: center;
     padding: 0.55rem 0.75rem;
@@ -3026,6 +3026,19 @@ button.rv-btn-search {
     color: var(--rv-primary);
     font-weight: 700;
     font-size: 0.85rem;
+}
+.rv-guide-service-e .rv-guide-e-detail-row .e-item-unit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.5rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: 6px;
+    background: #f1f5f9;
+    color: #475569;
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
 }
 .rv-guide-service-e .rv-guide-e-detail-row .e-item-desc {
     font-weight: 600;
@@ -3856,12 +3869,14 @@ button.rv-btn-search {
         grid-template-columns: 2.5rem 1fr auto;
         grid-template-areas:
             "qty desc action"
+            "qty unit amount"
             "qty weight amount"
             "qty price amount";
         row-gap: 0.25rem;
     }
     .rv-guide-service-e .rv-guide-e-detail-row .e-item-qty { grid-area: qty; }
     .rv-guide-service-e .rv-guide-e-detail-row .e-item-desc { grid-area: desc; }
+    .rv-guide-service-e .rv-guide-e-detail-row .e-item-unit { grid-area: unit; justify-self: start; font-size: 0.75rem; }
     .rv-guide-service-e .rv-guide-e-detail-row .e-item-weight { grid-area: weight; font-size: 0.8rem; }
     .rv-guide-service-e .rv-guide-e-detail-row .e-item-price { grid-area: price; font-size: 0.8rem; }
     .rv-guide-service-e .rv-guide-e-detail-row .e-item-amount { grid-area: amount; }
