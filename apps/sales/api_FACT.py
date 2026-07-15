@@ -289,7 +289,7 @@ def send_receipt_commodity_fact(request, order_id):  # BOLETA DE ENCOMIENDA 4FAC
         }}
         """
 
-    print(graphql_query)
+    # print(graphql_query)
 
     token = tokens.get(order_obj.company.ruc, "ID no encontrado")
 
@@ -1230,7 +1230,7 @@ def send_guide_transportation_fact(guide_id):
         }}
     }}
     """
-    print(graphql_query)
+    # print(graphql_query)
     # --- MODO PRUEBA: comentar este bloque al pasar a producción (o poner FACT_DRY_RUN = False) ---
     if FACT_DRY_RUN:
         return _fact_dry_run_response(
@@ -1244,6 +1244,7 @@ def send_guide_transportation_fact(guide_id):
     # --- FIN MODO PRUEBA ---
 
     token = tokens.get(company_obj.ruc, "ID no encontrado")
+
     if token == "ID no encontrado":
         return {
             "success": False,
