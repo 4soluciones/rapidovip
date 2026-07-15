@@ -99,10 +99,6 @@ def _destination_label_for_guides(carrier_guides):
             labels.append(
                 encomienda.office_destination.short_name or encomienda.office_destination.name
             )
-        else:
-            route = order.orderroute_set.filter(type='D').select_related('subsidiary').last()
-            if route and route.subsidiary_id:
-                labels.append(route.subsidiary.short_name or route.subsidiary.name)
     unique = []
     for label in labels:
         if label and label not in unique:

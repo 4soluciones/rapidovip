@@ -386,12 +386,10 @@ def _route_block_encomienda(order_obj, width=None):
     s = _local_styles()
     wt = width or THERMAL_WT
     encomienda = _get_encomienda(order_obj)
-    route_origin = order_obj.orderroute_set.filter(type='O').first()
-    route_dest = order_obj.orderroute_set.filter(type='D').first()
-    origin = route_origin.subsidiary.short_name if route_origin and route_origin.subsidiary else '-'
-    dest = route_dest.subsidiary.short_name if route_dest and route_dest.subsidiary else '-'
-    if encomienda and encomienda.office_destination_id:
-        dest = encomienda.office_destination.short_name or dest
+    origin = encomienda.office_origin.short_name \
+        if encomienda and encomienda.office_origin_id else '-'
+    dest = encomienda.office_destination.short_name \
+        if encomienda and encomienda.office_destination_id else '-'
     payment = order_obj.get_way_to_pay_display()
     service = encomienda.get_type_guide_display() if encomienda else 'ENCOMIENDA'
 

@@ -25,7 +25,7 @@ from rapidovip import settings
 from apps.sales.format_to_dates import utc_to_local
 from .models import Programming
 from apps.sales.number_to_letters import numero_a_moneda
-from apps.sales.models import Order, OrderAction, OrderBill, Manifest, OrderRoute
+from apps.sales.models import Order, OrderAction, OrderBill, Manifest, OrderCommodity
 import io
 from .views import calculate_age
 
@@ -514,11 +514,13 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
     if encomienda and encomienda.address_delivery:
         address_delivery = Paragraph(str(encomienda.address_delivery.upper()), styles["Justify"])
 
-    destiny = Paragraph(': ' + str(order_obj.orderroute_set.filter(type='D').first().subsidiary.short_name),
+    _origin_office = encomienda.office_origin if encomienda else None
+    _destination_office = encomienda.office_destination if encomienda else None
+    destiny = Paragraph(': ' + str(_destination_office.short_name if _destination_office else '-'),
                         styles["JustifyAllertaBig"])
 
     td_type = ('TIPO', ': ENCOMIENDA')
-    td_origin = ('ORIGEN', ': ' + str(order_obj.orderroute_set.filter(type='O').first().subsidiary.short_name))
+    td_origin = ('ORIGEN', ': ' + str(_origin_office.short_name if _origin_office else '-'))
     td_destiny = ('DESTINO', destiny)
     td_way_to_pay = ('COND.PAGO', ': ' + str(order_obj.get_way_to_pay_display()))
     td_service = ('SERVICIO', ': ' + str(encomienda.get_type_guide_display() if encomienda else 'ENCOMIENDA'))
@@ -612,8 +614,8 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
     # str_details_ix_qr = ', '.join([item.strip() for item in _details_ix_qr])
 
     _user_qr = str(order_obj.user.username.upper())
-    origin = str(order_obj.orderroute_set.filter(type='O').first().subsidiary.short_name)
-    destiny = str(order_obj.orderroute_set.filter(type='D').first().subsidiary.short_name)
+    origin = str(_origin_office.short_name if _origin_office else '-')
+    destiny = str(_destination_office.short_name if _destination_office else '-')
     _way_to_pay_qr = str(order_obj.get_way_to_pay_display())
 
     datatable = str(_format_current_time) + ',' + str(order_obj.serial) + ',' + str(correlative) + ',' + str(
@@ -1709,8 +1711,10 @@ def print_guide_comidity(request, pk=None):  # Guia Remision Transportista
     ]
     ana_c.setStyle(TableStyle(my_style_table_header))
 
-    td_subsidiary_origin = order_obj.orderroute_set.filter(type='O').last().subsidiary.address
-    td_subsidiary_destiny = order_obj.orderroute_set.filter(type='D').last().subsidiary.address
+    td_subsidiary_origin = encomienda.office_origin.address \
+        if encomienda and encomienda.office_origin_id else ''
+    td_subsidiary_destiny = encomienda.office_destination.address \
+        if encomienda and encomienda.office_destination_id else ''
 
     _tbl_subsidiarys = [
         ['', '', td_subsidiary_origin],
@@ -2317,95 +2321,24 @@ def print_report_commodity(request, start_date=None, end_date=None, user_selecte
     user_id = request.user.id
     user_obj = User.objects.get(id=user_id)
     subsidiary_obj = get_subsidiary_by_user(user_obj)
-    order_route_set = ''
     user_select_obj = None
 
     if user_selected != 'T':
         user_select_obj = User.objects.get(id=int(user_selected))
 
-    if destiny == 'T' and way_to_pay == 'T':
-        if user_selected == 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E',
-                                                        order__traslate_date__range=[start_date, end_date]).order_by(
-                'order__id').distinct('order__id')
-        elif user_selected != 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E', order__user=user_select_obj,
-                                                        order__traslate_date__range=[start_date, end_date]).order_by(
-                'order__id').distinct('order__id')
-    if destiny == 'T' and way_to_pay == 'C':
-        if user_selected == 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E',
-                                                        order__traslate_date__range=[start_date, end_date],
-                                                        order__way_to_pay='C').order_by('order__id').distinct(
-                'order__id')
-        elif user_selected != 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E', order__user=user_select_obj,
-                                                        order__traslate_date__range=[start_date, end_date],
-                                                        order__way_to_pay='C').order_by('order__id').distinct(
-                'order__id')
-    if destiny == 'T' and way_to_pay == 'D':
-        if user_selected == 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E',
-                                                        order__traslate_date__range=[start_date, end_date],
-                                                        order__way_to_pay='D').order_by('order__id').distinct(
-                'order__id')
-        elif user_selected != 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E', order__user=user_select_obj,
-                                                        order__traslate_date__range=[start_date, end_date],
-                                                        order__way_to_pay='D').order_by('order__id').distinct(
-                'order__id')
+    order_set = Order.objects.filter(
+        subsidiary=subsidiary_obj,
+        type_order='E',
+        traslate_date__range=[start_date, end_date],
+    ).select_related('user', 'encomienda__office_destination')
 
-    if destiny != 'T' and way_to_pay == 'T':
-        if user_selected == 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E',
-                                                        type='D',
-                                                        subsidiary__id=destiny,
-                                                        order__traslate_date__range=[start_date, end_date]).order_by(
-                'order__id')
-        elif user_selected != 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E', order__user=user_select_obj,
-                                                        type='D',
-                                                        subsidiary__id=destiny,
-                                                        order__traslate_date__range=[start_date, end_date]).order_by(
-                'order__id')
-    if destiny != 'T' and way_to_pay == 'C':
-        if user_selected == 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E',
-                                                        type='D',
-                                                        subsidiary__id=destiny,
-                                                        order__traslate_date__range=[start_date, end_date],
-                                                        order__way_to_pay='C').order_by('order__id')
-        elif user_selected != 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E', user=user_select_obj,
-                                                        type='D',
-                                                        subsidiary__id=destiny,
-                                                        order__traslate_date__range=[start_date, end_date],
-                                                        order__way_to_pay='C').order_by('order__id')
-    if destiny != 'T' and way_to_pay == 'D':
-        if user_selected == 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E',
-                                                        type='D',
-                                                        subsidiary__id=destiny,
-                                                        order__traslate_date__range=[start_date, end_date],
-                                                        order__way_to_pay='D').order_by('order__id')
-        elif user_selected != 'T':
-            order_route_set = OrderRoute.objects.filter(order__subsidiary=subsidiary_obj,
-                                                        order__type_order='E', user=user_select_obj,
-                                                        type='D',
-                                                        subsidiary__id=destiny,
-                                                        order__traslate_date__range=[start_date, end_date],
-                                                        order__way_to_pay='D').order_by('order__id')
+    if user_select_obj is not None:
+        order_set = order_set.filter(user=user_select_obj)
+    if way_to_pay in ('C', 'D'):
+        order_set = order_set.filter(way_to_pay=way_to_pay)
+    if destiny != 'T':
+        order_set = order_set.filter(encomienda__office_destination__id=destiny)
+    order_set = order_set.order_by('id')
 
     _tbl_header = ('REPORTE DE ENCOMIENDAS',)
 
@@ -2438,39 +2371,35 @@ def print_report_commodity(request, start_date=None, end_date=None, user_selecte
     cont_counted = 0
     cont_destination_payment = 0
 
-    for o in order_route_set:
+    for o in order_set:
         _total_pay_counted = 0
         _total_pay_destiny = 0
-        destiny_obj = ''
 
-        if o.order.status != 'A':
-            if o.order.way_to_pay == 'C':
-                _total_pay_counted = o.order.total
-            elif o.order.way_to_pay == 'D':
-                _total_pay_destiny = o.order.total
+        if o.status != 'A':
+            if o.way_to_pay == 'C':
+                _total_pay_counted = o.total
+            elif o.way_to_pay == 'D':
+                _total_pay_destiny = o.total
 
-        # destiny_set = o.orderroute_set.filter(type='D')
-        destiny_set = o.type = 'D'
-        if destiny_set != None:
-            destiny_obj = o.subsidiary.short_name
-
-        # if destiny_set.exists():
-        #     destiny_obj = destiny_set.first().subsidiary.short_name
+        encomienda = getattr(o, 'encomienda', None)
+        if encomienda and encomienda.office_destination_id:
+            destiny_obj = encomienda.office_destination.short_name
         else:
-            destiny_obj = 'ANULADO'
-        _rows.append((o.order.traslate_date,
-                      o.order.serial,
-                      str(o.order.correlative_sale),
+            destiny_obj = '—'
+
+        _rows.append((o.traslate_date,
+                      o.serial,
+                      str(o.correlative_sale),
                       _total_pay_counted,
                       _total_pay_destiny,
                       destiny_obj,
-                      o.order.user.worker_set.last().employee.names
+                      o.user.worker_set.last().employee.names
                       ))
-        if o.order.status != 'A':
-            if o.order.way_to_pay == 'C':
-                cont_counted = cont_counted + o.order.total
-            elif o.order.way_to_pay == 'D':
-                cont_destination_payment = cont_destination_payment + o.order.total
+        if o.status != 'A':
+            if o.way_to_pay == 'C':
+                cont_counted = cont_counted + o.total
+            elif o.way_to_pay == 'D':
+                cont_destination_payment = cont_destination_payment + o.total
 
     ana_c3 = Table(_rows, colWidths=colwiths_table_title)
 

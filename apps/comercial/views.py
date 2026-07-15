@@ -23,7 +23,6 @@ from apps.comercial.service_helpers import (
     get_service_destiny_label,
     prefetch_orders_for_report,
     save_service_for_order,
-    sync_commodity_addressees,
 )
 from apps.comercial.serial_helpers import (
     get_serial_manifest,
@@ -55,7 +54,6 @@ from apps.sales.models import (
     OrderBill,
     OrderCommodity,
     OrderDetail,
-    OrderRoute,
     SERVICE_TYPE_CHOICES,
     Unit,
     WAY_TO_PAY_CHOICES,
@@ -649,13 +647,11 @@ def create_order(request):
         client_obj_sender = None
         client_obj_addressee_obj = None
         client_sender_addressee_obj = None
-        client_addressee_name = str(data_orders["Client_Address_Sender"])
         client_sender_name = str(data_orders["Client_Sender"])
         client_sender_phone = str(data_orders["Client_Sender_phone"])
         subsidiary_origin = str(data_orders["Subsidiary_origin"])
         subsidiary_destiny = str(data_orders["Subsidiary_destiny"])
         service_type = 'E'
-        service_extra = data_orders.get('Service_Extra') or {}
         way_to_pay = str(data_orders.get('Way_to_pay') or data_orders.get('Way_to_Pay') or 'C')
         type_document = str(data_orders.get('Type') or 'T')
         if way_to_pay == 'C' and type_document == 'T':
@@ -818,8 +814,6 @@ def create_order(request):
         if type_document in ('B', 'F'):
             update_correlative_commodity(order_obj=order_obj)
 
-        addressee_actions = []
-
         for data_addressee in data_orders['Addressees']:
             document_type_addressee = str(data_addressee['DocumentType'])
             document_number_addressee = str(data_addressee['DocumentNumber'])
@@ -858,7 +852,6 @@ def create_order(request):
                     type='D'
                 )
                 order_action_addressee_obj.save()
-                addressee_actions.append(order_action_addressee_obj)
 
             else:
                 client_addressee_obj = OrderAddressee(
@@ -873,39 +866,18 @@ def create_order(request):
                     order_addressee=client_addressee_obj
                 )
                 order_action_addressee_obj.save()
-                addressee_actions.append(order_action_addressee_obj)
 
         if service_type == 'E':
-            commodity = save_service_for_order(
+            save_service_for_order(
                 order_obj,
                 service_type,
-                service_extra,
                 subsidiary_origin=subsidiary_origin_obj,
                 subsidiary_destiny=subsidiary_destiny_obj,
-                sender=client_obj_sender,
                 type_guide=type_guide,
                 arrival_time=arrival_time,
                 address_delivery=address_delivery,
                 code=code,
             )
-            commodity.addressee_name = client_addressee_name.upper()
-            commodity.save(update_fields=['addressee_name', 'code_track'])
-            sync_commodity_addressees(commodity, addressee_actions)
-
-        # Guardando la orden route
-        order_route_origin_obj = OrderRoute(
-            order=order_obj,
-            subsidiary=subsidiary_origin_obj,
-            type='O'
-        )
-        order_route_origin_obj.save()
-
-        order_route_destiny_obj = OrderRoute(
-            order=order_obj,
-            subsidiary=subsidiary_destiny_obj,
-            type='D'
-        )
-        order_route_destiny_obj.save()
 
         # Guardando el orden action
 
@@ -1383,22 +1355,22 @@ def report_comodity_grid(request):
 
         if destiny != 'T' and way_to_pay == 'T':
             if user_selected == 'T':
-                order_set = order_set.filter(orderroute__type='D', orderroute__subsidiary__id=destiny)
+                order_set = order_set.filter(encomienda__office_destination__id=destiny)
             elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj, orderroute__type='D',
-                                             orderroute__subsidiary__id=destiny)
+                order_set = order_set.filter(user=user_select_obj,
+                                             encomienda__office_destination__id=destiny)
         if destiny != 'T' and way_to_pay == 'C':
             if user_selected == 'T':
-                order_set = order_set.filter(orderroute__type='D', orderroute__subsidiary__id=destiny, way_to_pay='C')
+                order_set = order_set.filter(encomienda__office_destination__id=destiny, way_to_pay='C')
             elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj, orderroute__type='D',
-                                             orderroute__subsidiary__id=destiny, way_to_pay='C')
+                order_set = order_set.filter(user=user_select_obj,
+                                             encomienda__office_destination__id=destiny, way_to_pay='C')
         if destiny != 'T' and way_to_pay == 'D':
             if user_selected == 'T':
-                order_set = order_set.filter(orderroute__type='D', orderroute__subsidiary__id=destiny, way_to_pay='D')
+                order_set = order_set.filter(encomienda__office_destination__id=destiny, way_to_pay='D')
             elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj, orderroute__type='D',
-                                             orderroute__subsidiary__id=destiny,
+                order_set = order_set.filter(user=user_select_obj,
+                                             encomienda__office_destination__id=destiny,
                                              way_to_pay='D')
 
         order_set = prefetch_orders_for_report(order_set).order_by('-traslate_date', '-id')
@@ -1457,16 +1429,8 @@ def get_order_comodity_values(order_set=None):
 
             item_detail_order.append(item_detail)
 
-        for ort in o.orderroute_set.all():
-            item_route_d = {
-                'id': ort.id,
-                'type': ort.type,
-                'subsidiary': ort.subsidiary.name if ort.subsidiary_id else '—',
-            }
-            item_route_destiny.append(item_route_d)
-
         destiny_label = get_service_destiny_label(o)
-        if destiny_label != '—' and not item_route_destiny:
+        if destiny_label != '—':
             item_route_destiny.append({'id': 0, 'type': 'D', 'subsidiary': destiny_label})
 
         for oa in o.orderaction_set.all():
@@ -1698,22 +1662,22 @@ def cancel_commodity(request):
 
         if destiny != 'T' and way_to_pay == 'T':
             if user_selected == 'T':
-                order_set = order_set.filter(orderroute__type='D', orderroute__subsidiary__id=destiny)
+                order_set = order_set.filter(encomienda__office_destination__id=destiny)
             elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj, orderroute__type='D',
-                                             orderroute__subsidiary__id=destiny)
+                order_set = order_set.filter(user=user_select_obj,
+                                             encomienda__office_destination__id=destiny)
         if destiny != 'T' and way_to_pay == 'C':
             if user_selected == 'T':
-                order_set = order_set.filter(orderroute__type='D', orderroute__subsidiary__id=destiny, way_to_pay='C')
+                order_set = order_set.filter(encomienda__office_destination__id=destiny, way_to_pay='C')
             elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj, orderroute__type='D',
-                                             orderroute__subsidiary__id=destiny, way_to_pay='C')
+                order_set = order_set.filter(user=user_select_obj,
+                                             encomienda__office_destination__id=destiny, way_to_pay='C')
         if destiny != 'T' and way_to_pay == 'D':
             if user_selected == 'T':
-                order_set = order_set.filter(orderroute__type='D', orderroute__subsidiary__id=destiny, way_to_pay='D')
+                order_set = order_set.filter(encomienda__office_destination__id=destiny, way_to_pay='D')
             elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj, orderroute__type='D',
-                                             orderroute__subsidiary__id=destiny,
+                order_set = order_set.filter(user=user_select_obj,
+                                             encomienda__office_destination__id=destiny,
                                              way_to_pay='D')
 
         order_set = prefetch_orders_for_report(order_set).order_by('-traslate_date', '-id')
@@ -1767,10 +1731,11 @@ def change_destiny(request):
         new_destiny = int(request.POST.get('new_destiny', ''))
         new_subsidiary_destiny_obj = Subsidiary.objects.get(id=new_destiny)
         order_obj = Order.objects.get(id=int(order_id))
-        order_route_obj = OrderRoute.objects.filter(order=order_obj, type='D').first()
-        order_route_obj.subsidiary = new_subsidiary_destiny_obj
-        order_route_obj.save()
-        # serialized_new_subsidiary_destiny = serializers.serialize('json', new_subsidiary_destiny_obj)
+        commodity_obj = OrderCommodity.objects.filter(order=order_obj).first()
+        if commodity_obj is None:
+            commodity_obj = OrderCommodity(order=order_obj)
+        commodity_obj.office_destination = new_subsidiary_destiny_obj
+        commodity_obj.save()
 
         return JsonResponse({
             'message': 'Sucursal actualizada correctamente',

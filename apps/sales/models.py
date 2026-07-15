@@ -71,21 +71,6 @@ class ClientAddress(models.Model):
         verbose_name_plural = 'Direcciones del Clientes'
 
 
-class OrderRoute(models.Model):
-    TYPE_CHOICES = (('O', 'Origen'), ('D', 'Destino'),)
-    id = models.AutoField(primary_key=True)
-    order = models.ForeignKey('Order', on_delete=models.CASCADE, null=True, blank=True)
-    subsidiary = models.ForeignKey(Subsidiary, verbose_name='Sede', on_delete=models.SET_NULL, null=True, blank=True)
-    type = models.CharField('Tipo de Ruta', max_length=1, choices=TYPE_CHOICES, default='O', )
-
-    def __str__(self):
-        return str(self.id)
-
-    class Meta:
-        verbose_name = 'Ruta'
-        verbose_name_plural = 'Rutas'
-
-
 class OrderAction(models.Model):
     id = models.AutoField(primary_key=True)
     TYPE_CHOICES = (('R', 'REMITENTE'), ('D', 'DESTINATARIO'), ('E', 'ENTIDAD'))
@@ -176,9 +161,6 @@ class Order(models.Model):
 
 class OrderCommodity(models.Model):
     order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='encomienda')
-    sender = models.ForeignKey(
-        Client, related_name='sender_orders', on_delete=models.SET_NULL, null=True, blank=True,
-    )
     office_origin = models.ForeignKey(
         Subsidiary, related_name='origin_orders', on_delete=models.PROTECT, null=True, blank=True,
     )
@@ -196,7 +178,6 @@ class OrderCommodity(models.Model):
         'Estado de encomienda', max_length=1, choices=STATUS_TRANSPORT_CHOICES, default='O',
     )
     code_track = models.CharField(max_length=4, blank=True, default='')
-    addressee_name = models.CharField(max_length=500, blank=True, default='')
 
     def save(self, *args, **kwargs):
         if not self.code_track:
@@ -219,38 +200,6 @@ class OrderCommodity(models.Model):
     class Meta:
         verbose_name = 'Encomienda'
         verbose_name_plural = 'Encomiendas'
-
-
-class OrderCommodityAddressee(models.Model):
-    commodity = models.ForeignKey(
-        OrderCommodity, on_delete=models.CASCADE, related_name='addressee_links',
-    )
-    client = models.ForeignKey(
-        Client, on_delete=models.SET_NULL, null=True, blank=True, related_name='commodity_addressee_links',
-    )
-    order_addressee = models.ForeignKey(
-        OrderAddressee, on_delete=models.CASCADE, null=True, blank=True,
-    )
-    position = models.PositiveSmallIntegerField(default=0)
-
-    def display_name(self):
-        if self.client_id:
-            return self.client.names or ''
-        if self.order_addressee_id:
-            return self.order_addressee.names or ''
-        return ''
-
-    def display_phone(self):
-        if self.client_id:
-            return self.client.phone or ''
-        if self.order_addressee_id:
-            return self.order_addressee.phone or ''
-        return ''
-
-    class Meta:
-        ordering = ['position', 'id']
-        verbose_name = 'Destinatario de encomienda'
-        verbose_name_plural = 'Destinatarios de encomienda'
 
 
 class OrderTracking(models.Model):

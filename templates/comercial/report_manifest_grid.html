@@ -46,7 +46,7 @@
                 <td class="align-middle text-center font-weight-bold">{{ m.id }}</td>
                 <td class="align-middle text-center font-weight-bold">{{ m.created_at|date:"d-m-y" }}</td>
                 <td class="align-middle text-center font-weight-bold">{{ m.orderprogramming_set.first.programming.path.get_first_point.short_name }}</td>
-                <td class="align-middle text-center font-weight-bold">{{ m.orderprogramming_set.first.order.orderroute_set.last.subsidiary.short_name }}</td>
+                <td class="align-middle text-center font-weight-bold">{{ m.orderprogramming_set.first.order.encomienda.office_destination.short_name }}</td>
                 <td class="align-middle text-center font-weight-bold">{{ m.orderprogramming_set.first.programming.truck.license_plate }}</td>
                 <td class="align-middle text-center font-weight-bold">{{ m.orderprogramming_set.first.programming.truck.get_drive_type_display }}</td>
                 <td class="align-middle text-center font-weight-bold">{{ m.orderprogramming_set.first.programming.get_turn_display }}</td>

@@ -509,11 +509,14 @@ def _client_address_info(client_obj):
 
 
 def _route_point(order_obj, route_type):
-    """Punto origen/destino desde OrderRoute: (dirección completa, dirección, ubigeo)."""
-    route = order_obj.orderroute_set.filter(type=route_type).select_related("subsidiary").last()
-    if not route or not route.subsidiary_id:
+    """Punto origen/destino desde la encomienda: (dirección completa, dirección, ubigeo)."""
+    try:
+        encomienda = order_obj.encomienda
+    except ObjectDoesNotExist:
         return "", "", ""
-    sub = route.subsidiary
+    sub = encomienda.office_origin if route_type == "O" else encomienda.office_destination
+    if not sub:
+        return "", "", ""
     label = (sub.short_name or sub.name or "").strip()
     address = (sub.address or "").strip()
     ubigeo = (sub.ubigeo or "").strip()

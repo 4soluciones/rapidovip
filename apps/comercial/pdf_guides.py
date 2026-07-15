@@ -176,14 +176,13 @@ def print_guide_format_tk(request, pk=None):  # Guia de Remision Remitente Elect
     elif receiver_action and receiver_action.order_addressee:
         receiver_name = (receiver_action.order_addressee.names or '').upper()
 
-    origin_route = order_obj.orderroute_set.filter(type='O').select_related('subsidiary').last()
-    dest_route = order_obj.orderroute_set.filter(type='D').select_related('subsidiary').last()
-    origin_label = (origin_route.subsidiary.short_name or origin_route.subsidiary.name) \
-        if origin_route and origin_route.subsidiary else ''
-    origin_address = (origin_route.subsidiary.address or '') if origin_route and origin_route.subsidiary else ''
-    dest_label = (dest_route.subsidiary.short_name or dest_route.subsidiary.name) \
-        if dest_route and dest_route.subsidiary else ''
-    dest_address = (dest_route.subsidiary.address or '') if dest_route and dest_route.subsidiary else ''
+    _encomienda = getattr(order_obj, 'encomienda', None)
+    _origin_office = _encomienda.office_origin if _encomienda else None
+    _dest_office = _encomienda.office_destination if _encomienda else None
+    origin_label = (_origin_office.short_name or _origin_office.name) if _origin_office else ''
+    origin_address = (_origin_office.address or '') if _origin_office else ''
+    dest_label = (_dest_office.short_name or _dest_office.name) if _dest_office else ''
+    dest_address = (_dest_office.address or '') if _dest_office else ''
 
     carrier_guide_obj = sender_guide_obj.carrier_guide
     transport_company_obj = (carrier_guide_obj.company if carrier_guide_obj else None) or company_obj
@@ -493,7 +492,6 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
         'order__orderdetail_set__unit',
         'order__orderaction_set__client__clienttype_set__document_type',
         'order__orderaction_set__order_addressee',
-        'order__orderroute_set__subsidiary',
         'order__encomienda__office_destination',
         'order__encomienda__office_origin',
     ).get(pk=pk)
@@ -544,12 +542,6 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
             return '{} — {}'.format(
                 sub.short_name or sub.name or '',
                 address,
-            ).strip(' —')
-        route = order_obj.orderroute_set.filter(type=route_type).select_related('subsidiary').last()
-        if route and route.subsidiary:
-            return '{} — {}'.format(
-                route.subsidiary.short_name or route.subsidiary.name or '',
-                route.subsidiary.address or '',
             ).strip(' —')
         return '-'
 
@@ -1069,9 +1061,6 @@ def _guide_destination_label(order_obj, encomienda_obj):
     if encomienda_obj and encomienda_obj.office_destination_id:
         office = encomienda_obj.office_destination
         return office.short_name or office.name or '-'
-    dest_route = order_obj.orderroute_set.filter(type='D').select_related('subsidiary').last()
-    if dest_route and dest_route.subsidiary:
-        return dest_route.subsidiary.short_name or dest_route.subsidiary.name or '-'
     return '-'
 
 
@@ -1080,9 +1069,6 @@ def _guide_destination_address(order_obj, encomienda_obj):
         return encomienda_obj.address_delivery or '-'
     if encomienda_obj and encomienda_obj.office_destination_id and encomienda_obj.office_destination.address:
         return encomienda_obj.office_destination.address
-    dest_route = order_obj.orderroute_set.filter(type='D').select_related('subsidiary').last()
-    if dest_route and dest_route.subsidiary and dest_route.subsidiary.address:
-        return dest_route.subsidiary.address
     return '-'
 
 
@@ -1188,7 +1174,8 @@ def print_cargo_manifest(request, pk=None):  # Manifiesto de Carga
             'order__orderdetail_set__unit',
             'order__orderaction_set__client',
             'order__orderaction_set__order_addressee',
-            'order__orderroute_set__subsidiary',
+            'order__encomienda__office_destination',
+            'order__encomienda__office_origin',
         )
     )
     guides_count = cargo_manifest_obj.guides_count or len(carrier_guides_qs)
