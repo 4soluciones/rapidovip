@@ -7,6 +7,7 @@ from http import HTTPStatus
 
 from django.contrib.auth.models import User
 from django.core import serializers
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
@@ -34,11 +35,17 @@ from apps.comercial.view_correlative import (
     get_correlative_manifest,
     update_correlative_commodity,
     update_correlative_manifest_passenger,
+    update_correlative_service_order,
 )
 from apps.sales.api_FACT import (
+    _client_address_info,
+    _client_document_info,
+    _driver_from_employee_name,
+    _route_point,
     annul_invoice,
     get_sale_by_id,
     send_bill_commodity_fact,
+    send_guide_transportation_fact,
     send_receipt_commodity_fact,
 )
 from apps.sales.models import (
@@ -688,12 +695,28 @@ def create_order(request):
             user_subsidiary_office = user_subsidiary_obj.office
             user_subsidiary_printer = user_subsidiary_obj.printer
 
-        new_correlative = get_correlative_service(
+        # Serie y correlativo de la orden de servicio: todas las encomiendas lo llevan (fila 'T')
+        order_serial = get_serial_service(subsidiary_obj, company_obj, service_type, 'T')
+        order_correlative = get_correlative_service(
             subsidiary_obj=subsidiary_obj,
             company_obj=company_obj,
             service_type=service_type,
-            doc_type=type_document,
+            doc_type='T',
         )
+
+        if type_document in ('B', 'F'):
+            # Al contado: ademas de la orden de servicio, correlativo propio de boleta/factura
+            serial = get_serial_service(subsidiary_obj, company_obj, service_type, type_document) or serial
+            new_correlative = get_correlative_service(
+                subsidiary_obj=subsidiary_obj,
+                company_obj=company_obj,
+                service_type=service_type,
+                doc_type=type_document,
+            )
+        else:
+            # Pago destino: solo serie/correlativo de la orden de servicio
+            serial = order_serial
+            new_correlative = order_correlative
 
         search_commodity_set = Order.objects.filter(
             serial=serial, correlative_sale=new_correlative, type_order='E',
@@ -776,6 +799,8 @@ def create_order(request):
             way_to_pay=way_to_pay,
             correlative_sale=new_correlative,
             serial=serial,
+            order_serial=order_serial,
+            order_correlative=order_correlative,
             user=user_selected_obj,
             subsidiary=subsidiary_obj,
             type_order='E',
@@ -788,7 +813,10 @@ def create_order(request):
         )
         order_obj.save()
 
-        update_correlative_commodity(order_obj=order_obj)
+        # Siempre avanza el correlativo de la orden de servicio; el de boleta/factura solo al contado
+        update_correlative_service_order(order_obj=order_obj)
+        if type_document in ('B', 'F'):
+            update_correlative_commodity(order_obj=order_obj)
 
         addressee_actions = []
 
@@ -1010,6 +1038,8 @@ def create_order(request):
             'order_id': order_obj.id,
             'serial': order_obj.serial,
             'correlative': order_obj.correlative_sale,
+            'order_serial': order_obj.order_serial,
+            'order_correlative': order_obj.order_correlative,
             'userSubsidiary': user_subsidiary_subsidiary,
             'userOffice': user_subsidiary_office,
             'userPrinter': user_subsidiary_printer,
@@ -1975,52 +2005,217 @@ class GuideAssignmentView(TemplateView):
         return context
 
 
+def _order_service_label(order_obj):
+    """Etiqueta legible de la orden de servicio: serie-correlativo o OS-id."""
+    if (order_obj.order_serial or '').strip() and (order_obj.order_correlative or '').strip():
+        return f'{order_obj.order_serial}-{order_obj.order_correlative}'
+    return f'OS-{order_obj.id}'
+
+
+def validate_order_for_carrier_guide(order_obj, programming_obj):
+    """
+    Validación rápida (sin llamadas externas) de los datos que 4FACT exige
+    para la GRT. Es un espejo de send_guide_transportation_fact pero solo
+    valida: no genera PDF ni envía nada. Devuelve una lista de errores
+    (vacía si la orden pasa el filtro).
+    """
+    errors = []
+
+    if not programming_obj:
+        return ['No hay programación seleccionada.']
+    if not programming_obj.departure_date:
+        errors.append('La programación no tiene fecha de salida (inicio de traslado).')
+
+    # Vehículo y conductor
+    truck_obj = programming_obj.truck
+    truck_plate = ((truck_obj.license_plate if truck_obj else '') or '').strip()
+    if not truck_plate:
+        errors.append('La programación no tiene vehículo con placa.')
+    driver_name = (programming_obj.support_pilot or '').strip()
+    if not driver_name:
+        errors.append('La programación no tiene conductor asignado.')
+    else:
+        _, driver_license = _driver_from_employee_name(driver_name)
+        driver_license = (driver_license or '').strip()
+        driver_document = ''.join(ch for ch in driver_license if ch.isdigit())
+        if not driver_license:
+            errors.append(f'El conductor "{driver_name}" no tiene licencia registrada.')
+        elif not driver_document:
+            errors.append(f'La licencia del conductor "{driver_name}" no contiene el DNI.')
+
+    # Empresa emisora (RUC)
+    company_obj = order_obj.company or programming_obj.company
+    if not company_obj or not (company_obj.ruc or '').strip():
+        errors.append('No se encontró la empresa (RUC) asociada a la orden.')
+
+    # Cliente (remitente que contrata el servicio)
+    remitter_action = order_obj.orderaction_set.filter(type='R').select_related('client').last()
+    client_obj = None
+    if remitter_action and remitter_action.client_id:
+        client_obj = remitter_action.client
+    elif order_obj.client_id:
+        client_obj = order_obj.client
+    client_type_document, client_nro_document = _client_document_info(client_obj)
+    client_names = (client_obj.names or '').strip() if client_obj else ''
+    if not client_names:
+        errors.append('Falta el nombre del cliente (remitente).')
+    if not client_nro_document:
+        errors.append('Falta el documento del cliente (remitente).')
+    if client_type_document is None:
+        errors.append('Falta el tipo de documento del cliente (remitente).')
+
+    # Destinatario
+    receiver_action = order_obj.orderaction_set.filter(type='D').select_related(
+        'client', 'order_addressee',
+    ).last()
+    receiver_obj = None
+    if receiver_action and receiver_action.client_id:
+        receiver_obj = receiver_action.client
+    elif order_obj.client_id:
+        receiver_obj = order_obj.client
+    receiver_type_document, receiver_nro_document = _client_document_info(receiver_obj)
+    receiver_names = (receiver_obj.names or '').strip() if receiver_obj else ''
+    if not receiver_names and receiver_action and receiver_action.order_addressee_id:
+        receiver_names = (receiver_action.order_addressee.names or '').strip()
+    if not receiver_names:
+        errors.append('Falta el nombre del destinatario.')
+    if not receiver_nro_document:
+        errors.append('Falta el documento del destinatario.')
+    if receiver_type_document is None:
+        errors.append('Falta el tipo de documento del destinatario.')
+
+    # Puntos de partida / llegada y ubigeos (mismos fallbacks que el envío real)
+    origin_full, origin_address, origin_ubigeo = _route_point(order_obj, 'O')
+    destiny_full, destiny_address, arrival_ubigeo = _route_point(order_obj, 'D')
+    try:
+        encomienda = order_obj.encomienda
+    except ObjectDoesNotExist:
+        encomienda = None
+    if encomienda:
+        if not origin_address and encomienda.office_origin_id:
+            origin_sub = encomienda.office_origin
+            origin_address = (origin_sub.address or '').strip()
+            origin_full = origin_address
+            if not origin_ubigeo:
+                origin_ubigeo = (origin_sub.ubigeo or '').strip()
+        if not destiny_address and encomienda.office_destination_id:
+            destiny_sub = encomienda.office_destination
+            destiny_address = (destiny_sub.address or '').strip()
+            destiny_full = destiny_address
+            if not arrival_ubigeo:
+                arrival_ubigeo = (destiny_sub.ubigeo or '').strip()
+        if encomienda.type_guide == 'R' and (encomienda.address_delivery or '').strip():
+            destiny_address = (encomienda.address_delivery or '').strip()
+            destiny_full = destiny_address
+    if not origin_ubigeo:
+        _, origin_ubigeo = _client_address_info(client_obj)
+    if not arrival_ubigeo:
+        _, arrival_ubigeo = _client_address_info(receiver_obj)
+
+    if not (origin_full or origin_address):
+        errors.append('Falta la dirección del punto de partida (ruta origen).')
+    if not (destiny_full or destiny_address):
+        errors.append('Falta la dirección del punto de llegada (ruta destino).')
+    if not origin_ubigeo:
+        errors.append('Falta el ubigeo del punto de partida (configúrelo en la sede de origen).')
+    if not arrival_ubigeo:
+        errors.append('Falta el ubigeo del punto de llegada (configúrelo en la sede de destino).')
+
+    # Detalle: ítems, peso y bultos
+    details = list(order_obj.orderdetail_set.all())
+    if not details:
+        errors.append('La orden no tiene detalles para la guía.')
+    else:
+        has_valid_item = any(
+            (d.quantity or d.quantity_sold or decimal.Decimal(0)) > 0 for d in details
+        )
+        if not has_valid_item:
+            errors.append('No hay ítems con cantidad válida para enviar.')
+        total_weight = sum((d.weight or 0) for d in details)
+        total_packages = sum((d.quantity or 0) for d in details)
+        if total_weight <= 0:
+            errors.append('El peso bruto total debe ser mayor a 0.')
+        if total_packages <= 0:
+            errors.append('La cantidad de bultos debe ser mayor a 0.')
+
+    return errors
+
+
 def assign_order_guide(request):
-    """POST: asigna una orden de servicio a una programación y emite su GRT."""
+    """
+    POST: asigna una o varias órdenes de servicio a una programación.
+    Valida cada orden (filtro pre-4FACT) y solo emite la GRT de las que pasan.
+    Las que fallan se devuelven como warnings.
+    """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Método no permitido.'}, status=HTTPStatus.BAD_REQUEST)
+
+    raw_ids = (request.POST.get('order_ids') or request.POST.get('order_id') or '').strip()
+    order_ids = [int(part) for part in raw_ids.split(',') if part.strip().isdigit()]
+    if not order_ids:
+        return JsonResponse({'success': False, 'message': 'No se indicaron órdenes de servicio.'},
+                            status=HTTPStatus.BAD_REQUEST)
     try:
-        order_id = int(request.POST.get('order_id') or 0)
         programming_id = int(request.POST.get('programming_id') or 0)
-        order_obj = Order.objects.select_related('encomienda', 'carrier_guide', 'orderbill').get(pk=order_id)
-        programming_obj = Programming.objects.select_related('truck').get(pk=programming_id)
-        if not programming_obj.support_pilot:
-            return JsonResponse({
-                'success': False,
-                'message': 'La programación no tiene conductor asignado.',
-            }, status=HTTPStatus.BAD_REQUEST)
-        existing = getattr(order_obj, 'carrier_guide', None)
-        was_assigned = (
-            existing
-            and existing.status == 'I'
-            and existing.programming_id
-            and existing.programming_id != programming_obj.id
-        )
-        guide = assign_order_to_programming(order_obj, programming_obj, request.user)
-        return JsonResponse({
-            'success': True,
-            'message': (
-                f'Reasignada. GRT {guide.document_number()}.'
-                if was_assigned else
-                f'Asignada. GRT {guide.document_number()} emitida.'
-            ),
-            'guide_id': guide.id,
-            'document_number': guide.document_number(),
-            'order_id': order_obj.id,
-            'print_url': f'/comercial/print_guide_format_a4/{guide.id}/',
-        }, status=HTTPStatus.OK)
-    except Order.DoesNotExist:
-        return JsonResponse({'success': False, 'message': 'Orden no encontrada.'}, status=HTTPStatus.NOT_FOUND)
+        programming_obj = Programming.objects.select_related(
+            'truck', 'subsidiary', 'company',
+        ).get(pk=programming_id)
     except Programming.DoesNotExist:
-        return JsonResponse({'success': False, 'message': 'Programación no encontrada.'}, status=HTTPStatus.NOT_FOUND)
-    except ValueError as exc:
-        return JsonResponse({'success': False, 'message': str(exc)}, status=HTTPStatus.BAD_REQUEST)
-    except Exception as exc:
-        return JsonResponse({'success': False, 'message': str(exc)}, status=HTTPStatus.BAD_REQUEST)
+        return JsonResponse({'success': False, 'message': 'Programación no encontrada.'},
+                            status=HTTPStatus.NOT_FOUND)
+
+    assigned = []
+    warnings = []
+    for order_id in order_ids:
+        try:
+            order_obj = Order.objects.select_related(
+                'encomienda', 'carrier_guide', 'orderbill', 'client', 'company', 'subsidiary',
+            ).get(pk=order_id)
+        except Order.DoesNotExist:
+            warnings.append(f'OS #{order_id}: orden no encontrada.')
+            continue
+
+        label = _order_service_label(order_obj)
+        validation_errors = validate_order_for_carrier_guide(order_obj, programming_obj)
+        if validation_errors:
+            warnings.append(f'{label}: ' + ' '.join(validation_errors))
+            continue
+        try:
+            guide = assign_order_to_programming(order_obj, programming_obj, request.user)
+            assigned.append({
+                'order_id': order_obj.id,
+                'label': label,
+                'guide_id': guide.id,
+                'document_number': guide.document_number(),
+            })
+        except ValueError as exc:
+            warnings.append(f'{label}: {exc}')
+        except Exception as exc:
+            warnings.append(f'{label}: {exc}')
+
+    if assigned:
+        if len(assigned) == 1:
+            message = f'{assigned[0]["label"]} asignada. GRT {assigned[0]["document_number"]} emitida.'
+        else:
+            message = f'{len(assigned)} órdenes asignadas con su GRT emitida.'
+    else:
+        message = 'Ninguna orden pasó la validación. Revise las observaciones.'
+
+    return JsonResponse({
+        'success': bool(assigned),
+        'message': message,
+        'assigned': assigned,
+        'warnings': warnings,
+    }, status=HTTPStatus.OK)
 
 
 def create_cargo_manifest(request):
-    """POST: genera el manifiesto de carga agrupando las GRT de una programación."""
+    """
+    POST: EMITIR MANIFIESTO Y GENERAR GRTs.
+    1) Valida todas las GRT emitidas de la programación (filtro pre-4FACT).
+    2) Si todas pasan, envía cada GRT a 4FACT (registerGuideTransportation).
+    3) Emite/actualiza el manifiesto de carga.
+    """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Método no permitido.'}, status=HTTPStatus.BAD_REQUEST)
     try:
@@ -2028,14 +2223,63 @@ def create_cargo_manifest(request):
         programming_obj = Programming.objects.select_related('truck', 'subsidiary', 'company').get(
             pk=programming_id,
         )
+
+        guides = list(
+            CarrierRemissionGuide.objects.filter(
+                programming=programming_obj, status='I',
+            ).select_related('order', 'order__client', 'order__company', 'order__encomienda')
+        )
+        if not guides:
+            return JsonResponse({
+                'success': False,
+                'message': 'No hay guías transportista emitidas para esta programación.',
+            }, status=HTTPStatus.BAD_REQUEST)
+
+        # 1) Validación previa de todas las GRT: si alguna falla, no se envía nada.
+        validation_warnings = []
+        for guide in guides:
+            errors = validate_order_for_carrier_guide(guide.order, programming_obj)
+            if errors:
+                label = _order_service_label(guide.order)
+                validation_warnings.append(
+                    f'GRT {guide.document_number()} ({label}): ' + ' '.join(errors)
+                )
+        if validation_warnings:
+            return JsonResponse({
+                'success': False,
+                'message': 'Hay guías que no pasan la validación. Corrija y vuelva a intentar.',
+                'warnings': validation_warnings,
+            }, status=HTTPStatus.OK)
+
+        # 2) Envío a 4FACT solo de las GRT que aún no se enviaron (sin manifiesto previo).
+        send_warnings = []
+        sent_count = 0
+        for guide in guides:
+            if guide.cargo_manifest_id:
+                continue
+            result = send_guide_transportation_fact(guide.id)
+            if result.get('success'):
+                sent_count += 1
+            else:
+                detail = result.get('errors') or result.get('error') or result.get('message') or 'Error desconocido.'
+                if isinstance(detail, (list, tuple)):
+                    detail = ' '.join(str(d) for d in detail)
+                send_warnings.append(f'GRT {guide.document_number()}: {detail}')
+
+        # 3) Manifiesto de carga
         manifest = create_cargo_manifest_for_programming(programming_obj, request.user)
+
+        message = f'Manifiesto {manifest.document_number()} emitido.'
+        if sent_count:
+            message += f' {sent_count} GRT enviada(s) a facturación.'
         return JsonResponse({
             'success': True,
-            'message': f'Manifiesto de carga {manifest.document_number()} emitido.',
+            'message': message,
             'manifest_id': manifest.id,
             'document_number': manifest.document_number(),
-            'print_url': f'/comercial/print_cargo_manifest/{manifest.id}/',
             'guides_count': manifest.guides_count,
+            'sent_count': sent_count,
+            'warnings': send_warnings,
         }, status=HTTPStatus.OK)
     except Programming.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'Programación no encontrada.'}, status=HTTPStatus.NOT_FOUND)

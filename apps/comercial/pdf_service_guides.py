@@ -261,7 +261,7 @@ def _meta_two_cols(order_obj, width):
     """
     date_str, time_str = _order_datetime(order_obj)
     left1 = _mix('CÓDIGO:', order_obj.code_track or '-')
-    right1 = _mix('NRO ORDEN:', order_obj.id)
+    right1 = _mix('NRO ORDEN:', _service_order_number(order_obj))
     left2 = _mix('FECHA:', date_str)
     right2 = _mix('HORA:', time_str)
     left3 = _mix('SUCURSAL:', order_obj.subsidiary.name if order_obj.subsidiary else '-')
@@ -314,6 +314,13 @@ def _meta_encomienda(order_obj, width):
     return rows
 
 
+def _service_order_number(order_obj):
+    """Número de orden de servicio (serie-correlativo); todas las encomiendas lo llevan."""
+    if order_obj.order_serial and order_obj.order_correlative:
+        return f'{order_obj.order_serial}-{order_obj.order_correlative}'
+    return str(order_obj.id)
+
+
 def _header_encomienda(order_obj, title, width=None, top_gap=None):
     """Encabezado de encomienda al estilo comprobante térmico."""
     _ensure_brand_font()
@@ -350,16 +357,22 @@ def _header_encomienda(order_obj, title, width=None, top_gap=None):
         Paragraph(title, s['docname']),
         Paragraph(
             (
-                f'<b>N° ORDEN DE SERVICIO: {order_obj.id}</b>'
+                f'<b>N° ORDEN DE SERVICIO: {_service_order_number(order_obj)}</b>'
                 if order_obj.type_document == 'T'
                 else f'<b>SERIE: {order_obj.serial} - {order_obj.correlative_sale}</b>'
             ),
             s['docno'],
         ),
+    ]
+    if order_obj.type_document != 'T' and order_obj.order_correlative:
+        elements.append(
+            Paragraph(f'ORDEN DE SERVICIO: {_service_order_number(order_obj)}', s['docno'])
+        )
+    elements.extend([
         Spacer(4, 4),
         _separator(wt),
         Spacer(4, 4),
-    ]
+    ])
     elements.extend(_meta_encomienda(order_obj, wt))
     return elements
 

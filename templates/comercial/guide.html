@@ -2,7 +2,7 @@
 
 {% load static %}
 
-{% block title %}Emisión de Encomiendas — RapidoVip{% endblock %}
+{% block title %}Emisión de Encomiendas{% endblock %}
 
 
 {% block body %}
@@ -40,37 +40,24 @@
         <div class="rv-guide-hero">
 
             <div class="rv-guide-hero-text rv-guide-hero-text--center">
-
-                <h1>Emisión de órdenes de servicio</h1>
-                <p>Contado: boleta o factura · Destino: orden de servicio (N° = ID)</p>
-
+                <h1>Emisión de Encomiendas</h1>
+                <p>Órdenes de servicio</p>
             </div>
 
             <div class="rv-guide-hero-actions">
-
                 <div class="rv-guide-cash-status" id="guide-cash-status">
-
                     <span class="rv-guide-cash-dot"></span>
-
                     <span id="guide-cash-label">Verificando...</span>
-
                 </div>
-
-                {# Cada servicio maneja su propio botón Guardar #}
-
             </div>
 
         </div>
-
-
 
         <div class="rv-guide-main">
             {% include 'comercial/guide_service_encomiendas.html' %}
         </div>
 
     </form>
-
-
 
     <div class="rv-guide-loading" id="guide-loading" style="display:none">
 
@@ -93,7 +80,6 @@
     GuideServices.init({
 
         serviceDocs: {{ service_docs_json|safe }},
-
         defaultService: '{{ service_type|default:"E" }}'
 
     });

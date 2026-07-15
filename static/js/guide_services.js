@@ -97,22 +97,53 @@ var GuideServices = (function ($) {
         $('#id_correlative').val(correlative || '');
     }
 
+    function applyOrderNumbers(serial, correlative) {
+        $('#id_order_serie').val(serial || '');
+        $('#id_order_correlative').val(correlative || '');
+    }
+
+    function toggleVoucherNumbers(docType) {
+        var isVoucher = docType === 'B' || docType === 'F';
+        $('.rv-guide-doc-voucher').toggle(isVoucher);
+        $('#id_serie_label').text(docType === 'F' ? 'Factura' : 'Boleta');
+        return isVoucher;
+    }
+
     function loadDocumentNumbers(svc, docType) {
         docType = docType || (svc === 'E' ? ($('#e_type_bill').val() || 'T') : 'T');
         var u = urls();
 
-        if (cfg.serviceDocs && cfg.serviceDocs[svc]) {
-            if (svc === 'E' && cfg.serviceDocs.E && cfg.serviceDocs.E[docType]) {
+        if (svc === 'E') {
+            // Orden de servicio: todas las encomiendas usan la fila 'T'
+            if (cfg.serviceDocs && cfg.serviceDocs.E && cfg.serviceDocs.E.T) {
+                applyOrderNumbers(cfg.serviceDocs.E.T.serial, cfg.serviceDocs.E.T.correlative);
+            }
+            $.get(u.document, { service_type: 'E', document_type: 'T' }, function (r) {
+                applyOrderNumbers(r.serial, r.correlative);
+            });
+
+            // Comprobante (boleta/factura): solo al contado
+            if (!toggleVoucherNumbers(docType)) {
+                applyDocumentNumbers('', '');
+                return;
+            }
+            if (cfg.serviceDocs && cfg.serviceDocs.E && cfg.serviceDocs.E[docType]) {
                 applyDocumentNumbers(
                     cfg.serviceDocs.E[docType].serial,
                     cfg.serviceDocs.E[docType].correlative
                 );
-            } else if (svc !== 'E') {
-                applyDocumentNumbers(
-                    cfg.serviceDocs[svc].serial,
-                    cfg.serviceDocs[svc].correlative
-                );
             }
+            $.get(u.document, { service_type: 'E', document_type: docType }, function (r) {
+                applyDocumentNumbers(r.serial, r.correlative);
+            });
+            return;
+        }
+
+        if (cfg.serviceDocs && cfg.serviceDocs[svc]) {
+            applyDocumentNumbers(
+                cfg.serviceDocs[svc].serial,
+                cfg.serviceDocs[svc].correlative
+            );
         }
 
         $.get(u.document, { service_type: svc, document_type: docType }, function (r) {
@@ -656,6 +687,8 @@ var GuideServices = (function ($) {
             Service_Type: svc,
             Serial: $('#id_serie').val(),
             Correlative: $('#id_correlative').val(),
+            Order_Serial: $('#id_order_serie').val(),
+            Order_Correlative: $('#id_order_correlative').val(),
             User: $('#id_user').val(),
             Date_traslate: $('#id_traslate_date').val(),
             Cash: $('#id_cash').val(),

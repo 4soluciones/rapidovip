@@ -144,6 +144,8 @@ class Order(models.Model):
     total = models.DecimalField('Total', max_digits=10, decimal_places=2, default=0)
     serial = models.CharField('Serie', max_length=5, null=True, blank=True)
     correlative_sale = models.CharField(verbose_name='Correlativo', max_length=45, null=True, blank=True)
+    order_serial = models.CharField('Serie Orden de Servicio', max_length=10, null=True, blank=True)
+    order_correlative = models.CharField('Correlativo Orden de Servicio', max_length=45, null=True, blank=True)
     way_to_pay = models.CharField('Forma de pago', max_length=1, choices=WAY_TO_PAY_CHOICES, default='C')
     company = models.ForeignKey('users.Company', on_delete=models.SET_NULL, null=True, blank=True)
     service_type = models.CharField('Tipo de servicio', max_length=1, choices=SERVICE_TYPE_CHOICES, default='E')

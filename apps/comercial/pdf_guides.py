@@ -563,8 +563,8 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
             ('BACKGROUND', (0, 0), (-1, -1), soft_fill),
             ('LEFTPADDING', (0, 0), (-1, -1), 6),
             ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]))
         body_kwargs = {'colWidths': col_widths}
         if min_body_height:
@@ -577,8 +577,8 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('LEFTPADDING', (0, 0), (-1, -1), 6),
             ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]))
         wrapped = Table([[header_tbl], [body_tbl]], colWidths=[width_total])
         wrapped.setStyle(TableStyle([
@@ -714,8 +714,12 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
             '<b>{}</b> {}'.format(label, value), styles["Helvetica_Right_8"])
 
     # Nº de orden de servicio arriba, debajo del encabezado.
+    if order_obj and (order_obj.order_serial or '').strip() and (order_obj.order_correlative or '').strip():
+        order_service_number = '{}-{}'.format(order_obj.order_serial, order_obj.order_correlative)
+    else:
+        order_service_number = 'OS-{}'.format(order_obj.id) if order_obj else '—'
     order_service_line = Paragraph(
-        '<b>ORDEN DE SERVICIO:</b> OS-{}'.format(order_obj.id if order_obj else '—'),
+        '<b>ORDEN DE SERVICIO:</b> {}'.format(order_service_number),
         styles["Helvetica_Bold_Right_9"],
     )
 
@@ -741,8 +745,8 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-        ('TOPPADDING', (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
     ]))
 
     # Recuadros redondeados de remitente y destinatario, lado a lado.
@@ -795,14 +799,19 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
     ]))
 
-    # Pagador del flete: destinatario con su documento.
-    payer_display = _party_display(receiver_info)
+    # Pagador del flete: al contado paga el remitente; pago destino paga el destinatario.
+    if order_obj and order_obj.way_to_pay == 'D':
+        payer_info = receiver_info
+        payer_indicator = 'DESTINATARIO'
+    else:
+        payer_info = sender_info
+        payer_indicator = 'REMITENTE'
     payer_tbl = Table(
         [[
-            _label_value('DATOS DE PAGADOR DE FLETE:', payer_display),
+            _label_value('DATOS DE PAGADOR DE FLETE:', _party_display(payer_info)),
             _label_value_right(
                 'INDICADOR DEL PAGADOR DEL FLETE:',
-                'DESTINATARIO - {}'.format(receiver_info['doc_number'] or '—'),
+                '{} - {}'.format(payer_indicator, payer_info['doc_number'] or '—'),
             ),
         ]],
         colWidths=[_bts * 55 / 100, _bts * 45 / 100],
@@ -877,8 +886,8 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
     ])
 
     row_heights = [None] * len(detail_rows)
-    row_heights[-2] = 0.45 * inch
-    row_heights[-1] = 0.55 * inch
+    row_heights[-2] = 0.4 * inch
+    row_heights[-1] = 0.5 * inch
     table_details = Table(detail_rows, colWidths=detail_cols, rowHeights=row_heights)
     table_details.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), soft_fill),
@@ -887,17 +896,18 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
         ('LINEBELOW', (0, 0), (-1, 0), 0.6, soft_border),
         ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
         ('VALIGN', (0, 1), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ('LEFTPADDING', (0, 0), (-1, -1), 5),
         ('RIGHTPADDING', (0, 0), (-1, -1), 5),
     ]))
 
-    # Documentos adjuntos: en blanco por ahora.
+    # Documentos adjuntos: documento relacionado guardado en la guía (boleta/factura).
+    related_document = (carrier_guide_obj.related_document or '').strip()
     attachments_tbl = Table(
-        [[_label_value('DOCUMENTOS ADJUNTOS:', '')]],
+        [[_label_value('DOCUMENTOS ADJUNTOS:', related_document.upper())]],
         colWidths=[_bts],
-        rowHeights=[0.35 * inch],
+        rowHeights=[0.3 * inch],
     )
     attachments_tbl.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -981,29 +991,29 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
 
     _dictionary = [
         table_header,
-        Spacer(1, 4),
+        Spacer(1, 3),
         order_service_line,
-        Spacer(1, 6),
+        Spacer(1, 4),
         dates_points_tbl,
-        Spacer(1, 6),
+        Spacer(1, 3),
         parties_tbl,
-        Spacer(1, 6),
+        Spacer(1, 4),
         transportista_tbl,
         payer_tbl,
-        Spacer(1, 6),
+        Spacer(1, 4),
         table_details,
-        Spacer(1, 6),
+        Spacer(1, 4),
         attachments_tbl,
-        Spacer(1, 6),
+        Spacer(1, 4),
         vehicles_title,
         vehicles_tbl,
-        Spacer(1, 8),
+        Spacer(1, 5),
         Paragraph(
             'Representación impresa de la GUÍA DE REMISIÓN TRANSPORTISTA '
             '(traslado privado). Consulte la validez de este documento en el portal SUNAT.',
             styles["Helvetica_Justify_8"],
         ),
-        Spacer(1, 6),
+        Spacer(1, 4),
         table_qr_signatures,
     ]
 
@@ -1019,8 +1029,11 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
     )
     doc.build(_dictionary)
 
+    disposition = 'attachment' if request and request.GET.get('download') else 'inline'
     response = HttpResponse(content_type='application/pdf')
-    response['Content-Disposition'] = 'inline; filename="GuiaRemisionTransportista_[{}].pdf"'.format(document_number)
+    response['Content-Disposition'] = '{}; filename="GuiaRemisionTransportista_[{}].pdf"'.format(
+        disposition, document_number,
+    )
     response.write(buff.getvalue())
     buff.close()
     return response

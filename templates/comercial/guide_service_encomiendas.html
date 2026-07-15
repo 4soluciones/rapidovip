@@ -3,14 +3,26 @@
         <div class="rv-guide-card rv-guide-e-doc">
             <div class="rv-guide-card-head">
                 <span><i class="fas fa-file-invoice"></i> Documento y pago</span>
-                <div class="rv-guide-doc-inline" title="Serie y correlativo del documento">
-                    <div class="rv-guide-doc-field">
-                        <label for="id_serie">Serie</label>
-                        <input type="text" class="rv-form-control text-center rv-guide-doc-locked" id="id_serie" readonly value="{{ service_docs.E.T.serial }}">
+                <div class="rv-guide-doc-groups">
+                    <div class="rv-guide-doc-inline" title="Serie y correlativo de la orden de servicio">
+                        <div class="rv-guide-doc-field">
+                            <label for="id_order_serie">O. Servicio</label>
+                            <input type="text" class="rv-form-control text-center rv-guide-doc-locked" id="id_order_serie" readonly value="{{ service_docs.E.T.serial }}">
+                        </div>
+                        <div class="rv-guide-doc-field">
+                            <label for="id_order_correlative">N°</label>
+                            <input type="text" class="rv-form-control text-center rv-guide-doc-locked" id="id_order_correlative" readonly value="{{ service_docs.E.T.correlative }}">
+                        </div>
                     </div>
-                    <div class="rv-guide-doc-field">
-                        <label for="id_correlative">N°</label>
-                        <input type="text" class="rv-form-control text-center rv-guide-doc-locked" id="id_correlative" readonly value="{{ service_docs.E.T.correlative }}">
+                    <div class="rv-guide-doc-inline rv-guide-doc-voucher" title="Serie y correlativo del comprobante (boleta/factura)">
+                        <div class="rv-guide-doc-field">
+                            <label for="id_serie" id="id_serie_label">Comprobante</label>
+                            <input type="text" class="rv-form-control text-center rv-guide-doc-locked" id="id_serie" readonly value="{{ service_docs.E.B.serial }}">
+                        </div>
+                        <div class="rv-guide-doc-field">
+                            <label for="id_correlative">N°</label>
+                            <input type="text" class="rv-form-control text-center rv-guide-doc-locked" id="id_correlative" readonly value="{{ service_docs.E.B.correlative }}">
+                        </div>
                     </div>
                 </div>
             </div>

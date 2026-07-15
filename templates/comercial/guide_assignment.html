@@ -31,7 +31,7 @@
         <li class="rv-assignment-flow-step">
             <span class="rv-assignment-flow-num">2</span>
             <div>
-                <strong>Guías transportista</strong>
+                <strong>Guías transportista asignadas a la programación</strong>
                 <small>Una GRT por orden (traslado privado)</small>
             </div>
         </li>
@@ -171,14 +171,26 @@
                     <span class="rv-assignment-badge">{{ pending_orders|length }}</span>
                 </header>
                 <p class="rv-assignment-hint">
-                    Al asignar se emite la <strong>guía de remisión transportista</strong>
-                    (traslado privado) con documento relacionado factura/boleta si existe.
-                    El N° de orden de servicio es el <strong>ID</strong> de la orden.
+                    Al asignar se valida la orden y se emite la <strong>guía de remisión transportista</strong>
+                    (traslado privado). Las que no pasen la validación se mostrarán como observación.
                 </p>
+                {% if pending_orders %}
+                <div class="rv-assignment-select-bar">
+                    <button type="button" class="rv-btn rv-btn-ghost rv-btn-sm" id="btn-toggle-select">
+                        Seleccionar todo
+                    </button>
+                    <button type="button" class="rv-btn rv-btn-primary rv-btn-sm" id="btn-assign-selected" disabled>
+                        Asignar seleccionadas + GRT (<span id="selected-count">0</span>)
+                    </button>
+                </div>
+                {% endif %}
                 <div class="rv-assignment-table-wrap">
                     <table class="rv-assignment-table" id="pending-orders-table">
                         <thead>
                             <tr>
+                                <th class="rv-assignment-check-col">
+                                    <input type="checkbox" id="check-all-orders" title="Seleccionar todo">
+                                </th>
                                 <th>N° OS</th>
                                 <th>Documento</th>
                                 <th>Remitente</th>
@@ -190,8 +202,17 @@
                         <tbody>
                             {% for order in pending_orders %}
                             <tr data-order-id="{{ order.id }}">
+                                <td class="rv-assignment-check-col">
+                                    <input type="checkbox" class="js-order-check" value="{{ order.id }}">
+                                </td>
                                 <td>
-                                    <strong class="rv-assignment-os">OS-{{ order.id }}</strong>
+                                    <strong class="rv-assignment-os">
+                                        {% if order.order_serial and order.order_correlative %}
+                                            {{ order.order_serial }}-{{ order.order_correlative }}
+                                        {% else %}
+                                            OS-{{ order.id }}
+                                        {% endif %}
+                                    </strong>
                                 </td>
                                 <td>
                                     {% if order.type_document == 'F' %}
@@ -223,7 +244,7 @@
                                 </td>
                             </tr>
                             {% empty %}
-                            <tr><td colspan="6" class="rv-assignment-empty">No hay órdenes pendientes.</td></tr>
+                            <tr><td colspan="7" class="rv-assignment-empty">No hay órdenes pendientes.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -232,7 +253,7 @@
 
             <article class="rv-assignment-panel">
                 <header>
-                    <h2>Guías transportista</h2>
+                    <h2>Guías transportista asignadas a la programación</h2>
                     <span class="rv-assignment-badge">{{ assigned_guides|length }}</span>
                 </header>
                 <p class="rv-assignment-hint">
@@ -254,7 +275,15 @@
                             {% for g in assigned_guides %}
                             <tr>
                                 <td><strong>{{ g.document_number }}</strong></td>
-                                <td><strong class="rv-assignment-os">OS-{{ g.order_id }}</strong></td>
+                                <td>
+                                    <strong class="rv-assignment-os">
+                                        {% if g.order.order_serial and g.order.order_correlative %}
+                                            {{ g.order.order_serial }}-{{ g.order.order_correlative }}
+                                        {% else %}
+                                            OS-{{ g.order_id }}
+                                        {% endif %}
+                                    </strong>
+                                </td>
                                 <td>
                                     {% if g.related_document %}
                                         <small>{{ g.related_document }}</small>
@@ -269,8 +298,10 @@
                                     {% else %}—{% endif %}
                                 </td>
                                 <td class="rv-assignment-actions">
-                                    <a class="rv-btn rv-btn-ghost rv-btn-sm" target="_blank"
-                                       href="{% url 'comercial:print_guide_format_a4' g.id %}">PDF</a>
+                                    <button type="button" class="rv-btn rv-btn-ghost rv-btn-sm js-download-guide"
+                                            data-url="{% url 'comercial:print_guide_format_a4' g.id %}?download=1"
+                                            data-filename="GuiaRemisionTransportista_{{ g.document_number }}.pdf"
+                                            title="Descargar PDF de la GRT">Ver PDF</button>
                                     {% if not g.cargo_manifest_id %}
                                     <button type="button" class="rv-btn rv-btn-ghost rv-btn-sm js-reassign"
                                             data-order-id="{{ g.order_id }}"
@@ -296,11 +327,12 @@
                 <header>
                     <h2>Manifiesto de carga</h2>
                     <button type="button" class="rv-btn rv-btn-accent rv-btn-sm" id="btn-create-manifest">
-                        Emitir manifiesto
+                        EMITIR MANIFIESTO Y GENERAR GRTs
                     </button>
                 </header>
                 <p class="rv-assignment-hint" id="manifest-hint">
-                    Agrupa todas las guías transportista de la programación seleccionada.
+                    Valida las GRT de la programación, las envía a facturación electrónica (4FACT)
+                    y emite el manifiesto de carga.
                 </p>
                 <div class="rv-assignment-table-wrap">
                     <table class="rv-assignment-table">
@@ -338,6 +370,14 @@
             </article>
         </section>
     </div>
+
+    <div class="rv-loader" id="rv-loader" aria-hidden="true">
+        <div class="rv-loader-box">
+            <span class="rv-loader-spinner"></span>
+            <p class="rv-loader-msg">Procesando…</p>
+            <small class="rv-loader-sub">No cierre ni actualice la página</small>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -352,6 +392,22 @@
     const urlUnassign = root.dataset.urlUnassign;
     let selectedProgrammingId = null;
 
+    // ------------------------------ UI helpers ------------------------------
+    const loader = document.getElementById('rv-loader');
+
+    function showLoader(msg) {
+        if (!loader) return;
+        loader.querySelector('.rv-loader-msg').textContent = msg || 'Procesando…';
+        loader.classList.add('is-visible');
+        loader.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideLoader() {
+        if (!loader) return;
+        loader.classList.remove('is-visible');
+        loader.setAttribute('aria-hidden', 'true');
+    }
+
     function toast(ok, msg) {
         if (window.toastr) {
             toastr[ok ? 'success' : 'error'](msg);
@@ -360,6 +416,55 @@
         }
     }
 
+    function showWarnings(list) {
+        (list || []).forEach(w => {
+            if (window.toastr) {
+                toastr.warning(w, 'Observación', { timeOut: 14000, extendedTimeOut: 6000, closeButton: true });
+            } else {
+                alert(w);
+            }
+        });
+    }
+
+    // Re-mostrar warnings pendientes después de recargar la página
+    try {
+        const pending = JSON.parse(sessionStorage.getItem('rvAssignWarnings') || '[]');
+        if (pending.length) {
+            showWarnings(pending);
+            sessionStorage.removeItem('rvAssignWarnings');
+        }
+    } catch (e) { /* noop */ }
+
+    function reloadWithWarnings(warnings, delayMs) {
+        if (warnings && warnings.length) {
+            try { sessionStorage.setItem('rvAssignWarnings', JSON.stringify(warnings)); } catch (e) { /* noop */ }
+        }
+        setTimeout(() => location.reload(), delayMs || 700);
+    }
+
+    function downloadPdf(url, filename) {
+        showLoader('Descargando PDF…');
+        fetch(url, { credentials: 'same-origin' })
+            .then(res => {
+                if (!res.ok) throw new Error('download failed');
+                return res.blob();
+            })
+            .then(blob => {
+                const blobUrl = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = filename || 'documento.pdf';
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(blobUrl);
+                hideLoader();
+            })
+            .catch(() => { hideLoader(); toast(false, 'No se pudo descargar el PDF'); });
+    }
+
+    // --------------------------- Programación ---------------------------
     function selectProgramming(card) {
         if (!card) return;
         document.querySelectorAll('.rv-assignment-prog-card').forEach(el => {
@@ -397,28 +502,77 @@
         });
     }
 
-    function postAssign(orderId, btn) {
+    // ------------------------ Selección de órdenes ------------------------
+    const orderChecks = Array.from(document.querySelectorAll('.js-order-check'));
+    const checkAll = document.getElementById('check-all-orders');
+    const toggleBtn = document.getElementById('btn-toggle-select');
+    const assignSelectedBtn = document.getElementById('btn-assign-selected');
+    const selectedCount = document.getElementById('selected-count');
+
+    function checkedIds() {
+        return orderChecks.filter(c => c.checked).map(c => c.value);
+    }
+
+    function refreshSelectionUI() {
+        const count = checkedIds().length;
+        if (selectedCount) selectedCount.textContent = count;
+        if (assignSelectedBtn) assignSelectedBtn.disabled = count === 0;
+        const allChecked = orderChecks.length > 0 && count === orderChecks.length;
+        if (checkAll) {
+            checkAll.checked = allChecked;
+            checkAll.indeterminate = count > 0 && !allChecked;
+        }
+        if (toggleBtn) toggleBtn.textContent = allChecked ? 'Deseleccionar todo' : 'Seleccionar todo';
+        orderChecks.forEach(c => c.closest('tr').classList.toggle('is-checked', c.checked));
+    }
+
+    function setAll(checked) {
+        orderChecks.forEach(c => { c.checked = checked; });
+        refreshSelectionUI();
+    }
+
+    orderChecks.forEach(c => c.addEventListener('change', refreshSelectionUI));
+    if (checkAll) checkAll.addEventListener('change', function () { setAll(this.checked); });
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+            setAll(!(orderChecks.length && checkedIds().length === orderChecks.length));
+        });
+    }
+    refreshSelectionUI();
+
+    // --------------------------- Asignación (1..n) ---------------------------
+    function postAssign(orderIds, btn) {
         if (!selectedProgrammingId) {
             toast(false, 'Seleccione una programación.');
             return;
         }
+        const ids = Array.isArray(orderIds) ? orderIds : [orderIds];
+        if (!ids.length) {
+            toast(false, 'Seleccione al menos una orden de servicio.');
+            return;
+        }
         const fd = new FormData();
-        fd.append('order_id', orderId);
+        fd.append('order_ids', ids.join(','));
         fd.append('programming_id', selectedProgrammingId);
         fd.append('csrfmiddlewaretoken', csrf);
         if (btn) btn.disabled = true;
+        showLoader(ids.length > 1
+            ? `Validando y emitiendo GRT de ${ids.length} órdenes…`
+            : 'Validando y emitiendo GRT…');
         fetch(urlAssign, { method: 'POST', body: fd, credentials: 'same-origin' })
             .then(r => r.json())
             .then(data => {
-                toast(!!data.success, data.message || 'Listo');
                 if (data.success) {
-                    if (data.print_url) window.open(data.print_url, '_blank');
-                    setTimeout(() => location.reload(), 700);
-                } else if (btn) {
-                    btn.disabled = false;
+                    toast(true, data.message || 'Listo');
+                    reloadWithWarnings(data.warnings, 900);
+                } else {
+                    hideLoader();
+                    toast(false, data.message || 'No se pudo asignar.');
+                    showWarnings(data.warnings);
+                    if (btn) btn.disabled = false;
                 }
             })
-            .catch(() => { toast(false, 'Error de red'); if (btn) btn.disabled = false; });
+            .catch(() => { hideLoader(); toast(false, 'Error de red'); if (btn) btn.disabled = false; });
     }
 
     document.querySelectorAll('.js-assign-order').forEach(btn => {
@@ -426,6 +580,12 @@
             postAssign(this.dataset.orderId, this);
         });
     });
+
+    if (assignSelectedBtn) {
+        assignSelectedBtn.addEventListener('click', function () {
+            postAssign(checkedIds(), this);
+        });
+    }
 
     document.querySelectorAll('.js-reassign').forEach(btn => {
         btn.addEventListener('click', function () {
@@ -438,6 +598,14 @@
         });
     });
 
+    // ------------------------------ PDF (descarga) ------------------------------
+    document.querySelectorAll('.js-download-guide').forEach(btn => {
+        btn.addEventListener('click', function () {
+            downloadPdf(this.dataset.url, this.dataset.filename);
+        });
+    });
+
+    // ---------------- Manifiesto + envío de GRTs a 4FACT ----------------
     const manifestBtn = document.getElementById('btn-create-manifest');
     if (manifestBtn) {
         manifestBtn.addEventListener('click', function () {
@@ -445,25 +613,30 @@
                 toast(false, 'Seleccione una programación.');
                 return;
             }
+            if (!confirm('¿Emitir el manifiesto y enviar las GRT a facturación electrónica?')) return;
             const fd = new FormData();
             fd.append('programming_id', selectedProgrammingId);
             fd.append('csrfmiddlewaretoken', csrf);
             this.disabled = true;
+            showLoader('Validando GRTs, enviando a 4FACT y emitiendo el manifiesto…');
             fetch(urlManifest, { method: 'POST', body: fd, credentials: 'same-origin' })
                 .then(r => r.json())
                 .then(data => {
-                    toast(!!data.success, data.message || 'Listo');
                     if (data.success) {
-                        if (data.print_url) window.open(data.print_url, '_blank');
-                        setTimeout(() => location.reload(), 700);
+                        toast(true, data.message || 'Listo');
+                        reloadWithWarnings(data.warnings, 900);
                     } else {
+                        hideLoader();
+                        toast(false, data.message || 'No se pudo emitir el manifiesto.');
+                        showWarnings(data.warnings);
                         this.disabled = false;
                     }
                 })
-                .catch(() => { toast(false, 'Error de red'); this.disabled = false; });
+                .catch(() => { hideLoader(); toast(false, 'Error de red'); this.disabled = false; });
         });
     }
 
+    // ------------------------------ Desasignar ------------------------------
     document.querySelectorAll('.js-unassign').forEach(btn => {
         btn.addEventListener('click', function () {
             if (!confirm('¿Desasignar esta orden? Volverá a pendientes y se anulará la GRT.')) return;
@@ -471,14 +644,20 @@
             fd.append('guide_id', this.dataset.guideId);
             fd.append('csrfmiddlewaretoken', csrf);
             this.disabled = true;
+            showLoader('Desasignando orden…');
             fetch(urlUnassign, { method: 'POST', body: fd, credentials: 'same-origin' })
                 .then(r => r.json())
                 .then(data => {
-                    toast(!!data.success, data.message || 'Listo');
-                    if (data.success) setTimeout(() => location.reload(), 500);
-                    else this.disabled = false;
+                    if (data.success) {
+                        toast(true, data.message || 'Listo');
+                        setTimeout(() => location.reload(), 600);
+                    } else {
+                        hideLoader();
+                        toast(false, data.message || 'No se pudo desasignar.');
+                        this.disabled = false;
+                    }
                 })
-                .catch(() => { toast(false, 'Error de red'); this.disabled = false; });
+                .catch(() => { hideLoader(); toast(false, 'Error de red'); this.disabled = false; });
         });
     });
 })();

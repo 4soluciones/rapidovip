@@ -255,8 +255,13 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
     rows = []
 
     if encomienda and encomienda.code_track:
+        service_order_number = (
+            f'{order_obj.order_serial}-{order_obj.order_correlative}'
+            if order_obj.order_serial and order_obj.order_correlative
+            else str(order_obj.id)
+        )
         td_code_track = (
-            Paragraph('<b>NRO. ORDEN:</b> ' + str(order_obj.id), style_custom_left),
+            Paragraph('<b>NRO. ORDEN:</b> ' + service_order_number, style_custom_left),
             Paragraph('<b>CÓDIGO:</b> ' + str(encomienda.code_track), style_custom_right)
         )
         rows.append(td_code_track)

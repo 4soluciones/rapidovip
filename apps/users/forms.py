@@ -254,7 +254,7 @@ class SubsidiarySeriesForm(forms.Form):
         widget=forms.Select(attrs={'class': 'rv-form-control'}),
     )
     serial_ticket = forms.CharField(
-        label='Serie tickets encomienda',
+        label='Serie órdenes de servicio',
         max_length=10,
         required=False,
         widget=forms.TextInput(attrs={'class': 'rv-form-control', 'placeholder': 'Ej: T001'}),

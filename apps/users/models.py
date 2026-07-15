@@ -44,7 +44,7 @@ class SubsidiarySerial(models.Model):
         ('A', 'Manifiesto de carga'),
     )
     DOCUMENT_TYPE_CHOICES = (
-        ('T', 'Ticket'),
+        ('T', 'Orden de servicio'),
         ('B', 'Boleta'),
         ('F', 'Factura'),
         ('G', 'Guía'),
@@ -67,43 +67,6 @@ class SubsidiarySerial(models.Model):
         unique_together = ('subsidiary', 'company', 'service_type', 'document_type')
         verbose_name = 'Serie por sede y servicio'
         verbose_name_plural = 'Series por sede y servicio'
-
-# class SubsidiaryCompany(models.Model):
-#     subsidiary = models.ForeignKey(Subsidiary, on_delete=models.CASCADE)
-#     company = models.ForeignKey(Company, on_delete=models.CASCADE)
-#     serial_ticket_commodity = models.CharField('Serie Ticket encomienda', max_length=10, null=True, blank=True)
-#     serial_voucher_to_commodity = models.CharField('Serie Boleta encomienda', max_length=10, null=True, blank=True)
-#     serial_invoice_to_commodity = models.CharField('Serie Factura encomienda', max_length=10, null=True, blank=True)
-#     serial_ticket_commodity = models.CharField('Serie Ticket encomienda', max_length=10, null=True, blank=True)
-#     serial_voucher_to_commodity = models.CharField('Serie Boleta encomienda', max_length=10, null=True, blank=True)
-#     serial_invoice_to_commodity = models.CharField('Serie Factura encomienda', max_length=10, null=True, blank=True)
-#
-#
-#
-#     serial_two = models.CharField(max_length=10, null=True, blank=True)
-#     correlative_serial_two = models.IntegerField(default=0)
-#     serial_voucher_to_passenger = models.CharField(max_length=10, null=True, blank=True)
-#     correlative_of_vouchers_to_passenger = models.IntegerField(default=0)
-#     serial_invoice_to_passenger = models.CharField(max_length=10, null=True, blank=True)
-#     correlative_of_invoices_to_passenger = models.IntegerField(default=0)
-#     serial_three = models.CharField(max_length=10, null=True, blank=True)
-#     correlative_serial_three = models.IntegerField(default=0)
-#     serial_fourth = models.CharField(max_length=10, null=True, blank=True)
-#     correlative_serial_fourth = models.IntegerField(default=0)
-#     serial = models.CharField('Serie encomienda', max_length=10, null=True, blank=True)
-#     correlative_serial = models.IntegerField(default=0)
-#     serial_voucher_to_commodity = models.CharField(max_length=10, null=True, blank=True)
-#     correlative_of_vouchers_to_commodity = models.IntegerField(default=0)
-#     serial_invoice_to_commodity = models.CharField(max_length=10, null=True, blank=True)
-#     correlative_of_invoices_to_commodity = models.IntegerField(default=0)
-#
-#     def __str__(self):
-#         return f'{self.subsidiary} - {self.company}'
-#
-#     class Meta:
-#         unique_together = ('subsidiary', 'company')
-#         verbose_name = 'Serie por sede y empresa'
-#         verbose_name_plural = 'Series por sede y empresa'
 
 
 class DocumentType(models.Model):

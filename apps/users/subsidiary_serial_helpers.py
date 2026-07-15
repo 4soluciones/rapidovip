@@ -91,7 +91,7 @@ def get_serials_for_subsidiary_company(subsidiary, company):
 
 SERVICE_SERIAL_GROUPS = (
     ('E', 'Encomienda', (
-        ('T', 'Ticket'),
+        ('T', 'Orden de servicio'),
         ('B', 'Boleta'),
         ('F', 'Factura'),
     )),

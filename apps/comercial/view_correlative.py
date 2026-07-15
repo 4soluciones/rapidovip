@@ -27,6 +27,19 @@ def get_correlative_commodity(subsidiary_obj=None, company_rotation_obj=None, do
     )
 
 
+def update_correlative_service_order(order_obj=None):
+    """Confirma el correlativo de la orden de servicio (fila 'T' de la serie)."""
+    if not order_obj or not order_obj.order_correlative:
+        return
+    commit_correlative(
+        order_obj.subsidiary,
+        order_obj.company,
+        order_obj.service_type,
+        order_obj.order_correlative,
+        'T',
+    )
+
+
 def update_correlative_commodity(order_obj=None):
     if not order_obj:
         return

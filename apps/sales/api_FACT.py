@@ -914,3 +914,379 @@ def send_guide_fact(guide_id):
         return {"success": False, "error": f"Error en la solicitud: {str(e)}"}
     except ValueError:
         return {"success": False, "error": "La respuesta no es un JSON válido"}
+
+
+def send_guide_transportation_fact(guide_id):
+    """
+    Envía Guía de Remisión Transportista (GRT) a 4FACT vía mutation
+    registerGuideTransportation.
+    guide_id: pk de apps.comercial.models.CarrierRemissionGuide
+    """
+    from apps.comercial.models import CarrierRemissionGuide, Driver
+
+    try:
+        guide_obj = CarrierRemissionGuide.objects.select_related(
+            "order",
+            "order__company",
+            "order__subsidiary",
+            "order__client",
+            "programming",
+            "programming__truck",
+            "truck",
+            "subsidiary",
+            "company",
+        ).get(id=int(guide_id))
+    except (CarrierRemissionGuide.DoesNotExist, TypeError, ValueError):
+        return {"success": False, "message": "Guía de remisión transportista no encontrada."}
+
+    order_obj = guide_obj.order
+    if not order_obj:
+        return {"success": False, "message": "La guía no tiene una orden asociada."}
+
+    errors = []
+
+    if guide_obj.status not in ("I", "T"):
+        errors.append("La guía debe estar emitida (estado I) para enviarse a facturación.")
+    if not (guide_obj.serial or "").strip():
+        errors.append("La guía no tiene serie.")
+    if not (guide_obj.correlative or "").strip():
+        errors.append("La guía no tiene correlativo.")
+    if not guide_obj.emit_date:
+        errors.append("La guía no tiene fecha de emisión.")
+    if not guide_obj.transfer_start_date:
+        errors.append("La guía no tiene fecha de inicio de traslado.")
+    if not guide_obj.total_weight or guide_obj.total_weight <= 0:
+        errors.append("El peso bruto total debe ser mayor a 0.")
+    if not guide_obj.quantity_packages or guide_obj.quantity_packages <= 0:
+        errors.append("La cantidad de bultos debe ser mayor a 0.")
+
+    company_obj = guide_obj.company or order_obj.company
+    if not company_obj or not (company_obj.ruc or "").strip():
+        errors.append("No se encontró la empresa (RUC) asociada a la guía.")
+
+    # Cliente (GRT): remitente que contrata el servicio (OrderAction tipo R).
+    remitter_action = order_obj.orderaction_set.filter(type="R").select_related("client").last()
+    client_obj = None
+    if remitter_action and remitter_action.client_id:
+        client_obj = remitter_action.client
+    elif order_obj.client_id:
+        client_obj = order_obj.client
+
+    client_type_document, client_nro_document = _client_document_info(client_obj)
+    client_names = (client_obj.names or "").strip() if client_obj else ""
+    client_phone = (client_obj.phone or "").strip() if client_obj else ""
+    client_address, client_ubigeo = _client_address_info(client_obj)
+
+    if not client_names:
+        errors.append("Falta el nombre del cliente (remitente).")
+    if not client_nro_document:
+        errors.append("Falta el documento del cliente (remitente).")
+    if client_type_document is None:
+        errors.append("Falta el tipo de documento del cliente (remitente).")
+
+    # Destinatario (receiver): OrderAction tipo D; fallback al cliente de la orden.
+    receiver_action = order_obj.orderaction_set.filter(type="D").select_related(
+        "client", "order_addressee"
+    ).last()
+    receiver_obj = None
+    if receiver_action and receiver_action.client_id:
+        receiver_obj = receiver_action.client
+    elif order_obj.client_id:
+        receiver_obj = order_obj.client
+
+    receiver_type_document, receiver_nro_document = _client_document_info(receiver_obj)
+    receiver_names = (receiver_obj.names or "").strip() if receiver_obj else ""
+    if not receiver_names and receiver_action and receiver_action.order_addressee_id:
+        receiver_names = (receiver_action.order_addressee.names or "").strip()
+
+    if not receiver_names:
+        errors.append("Falta el nombre del destinatario.")
+    if not receiver_nro_document:
+        errors.append("Falta el documento del destinatario.")
+    if receiver_type_document is None:
+        errors.append("Falta el tipo de documento del destinatario.")
+
+    # Puntos de partida / llegada
+    origin_full, origin_address, origin_ubigeo = _route_point(order_obj, "O")
+    destiny_full, destiny_address, arrival_ubigeo = _route_point(order_obj, "D")
+    try:
+        encomienda = order_obj.encomienda
+    except ObjectDoesNotExist:
+        encomienda = None
+    if encomienda:
+        if not origin_address and encomienda.office_origin_id:
+            origin_sub = encomienda.office_origin
+            origin_address = (origin_sub.address or "").strip()
+            origin_label = (origin_sub.short_name or origin_sub.name or "").strip()
+            origin_full = f"{origin_label} - {origin_address}".strip(" -")
+            if not origin_ubigeo:
+                origin_ubigeo = (origin_sub.ubigeo or "").strip()
+        if not destiny_address and encomienda.office_destination_id:
+            destiny_sub = encomienda.office_destination
+            destiny_address = (destiny_sub.address or "").strip()
+            destiny_label = (destiny_sub.short_name or destiny_sub.name or "").strip()
+            destiny_full = f"{destiny_label} - {destiny_address}".strip(" -")
+            if not arrival_ubigeo:
+                arrival_ubigeo = (destiny_sub.ubigeo or "").strip()
+        if encomienda.type_guide == "R" and (encomienda.address_delivery or "").strip():
+            destiny_full = (encomienda.address_delivery or "").strip()
+            destiny_address = destiny_full
+
+    # Fallback: ubigeo desde direcciones de clientes si la sede no lo tiene
+    if not origin_ubigeo:
+        origin_ubigeo = client_ubigeo
+    if not arrival_ubigeo:
+        _, arrival_ubigeo = _client_address_info(receiver_obj)
+
+    if not origin_full and not origin_address:
+        errors.append("Falta la dirección del punto de partida (ruta origen).")
+    if not destiny_full and not destiny_address:
+        errors.append("Falta la dirección del punto de llegada (ruta destino).")
+    if not origin_ubigeo:
+        errors.append(
+            "Falta el ubigeo del punto de partida "
+            "(configurar ubigeo en la sede de origen)."
+        )
+    if not arrival_ubigeo:
+        errors.append(
+            "Falta el ubigeo del punto de llegada "
+            "(configurar ubigeo en la sede de destino)."
+        )
+
+    # Vehículo y conductor
+    programming = guide_obj.programming
+    truck_obj = guide_obj.truck or (programming.truck if programming else None)
+    truck_plate = ((truck_obj.license_plate if truck_obj else "") or "").strip().upper()
+
+    driver_name = (guide_obj.driver_name or "").strip()
+    driver_license = (guide_obj.driver_license or "").strip()
+    if not driver_name and programming:
+        driver_name = (programming.support_pilot or "").strip()
+    if not driver_license and driver_name:
+        resolved_name, resolved_license = _driver_from_employee_name(driver_name)
+        driver_name = resolved_name or driver_name
+        driver_license = resolved_license
+
+    # DNI del conductor: dígitos de la licencia (ej. "Q-40567890" -> "40567890")
+    driver_document = "".join(ch for ch in driver_license if ch.isdigit())
+    if driver_name and not driver_document:
+        driver_obj = Driver.objects.filter(is_active=True).filter(
+            names__icontains=driver_name.split()[0]
+        ).first()
+        if driver_obj:
+            driver_document = "".join(
+                ch for ch in (driver_obj.license_number or "") if ch.isdigit()
+            )
+
+    if not truck_plate:
+        errors.append("Falta la placa del vehículo.")
+    if not driver_name:
+        errors.append("Falta el nombre del conductor.")
+    if not driver_license:
+        errors.append("Falta la licencia del conductor.")
+    if not driver_document:
+        errors.append("Falta el documento (DNI) del conductor.")
+
+    # Ítems desde el detalle de la orden
+    details = list(order_obj.orderdetail_set.select_related("unit").all())
+    if not details:
+        errors.append("La orden no tiene detalles para la guía.")
+
+    items = []
+    for d in details:
+        qty = d.quantity or d.quantity_sold or decimal.Decimal(0)
+        if qty <= 0:
+            continue
+        unit_code = (d.unit.name if d.unit_id and d.unit else "NIU") or "NIU"
+        description = str(d.description or "TRANSPORTE DE ENCOMIENDA").replace('"', "'")
+        price_unit = d.price_unit or decimal.Decimal(0)
+        base_amount = (
+            (qty * price_unit) / decimal.Decimal("1.1800") if price_unit else decimal.Decimal(0)
+        )
+        precio_base = (base_amount / qty) if qty and price_unit else decimal.Decimal(0)
+        items.append({
+            "producto": description,
+            "cantidad": float(qty),
+            "precioBase": float(round(precio_base, 6)),
+            "codigoSunat": "10000000",
+            "codigoProducto": str(d.id).zfill(4),
+            "codigoUnidad": unit_code,
+            "tipoIgvCodigo": "10",
+        })
+
+    if not items:
+        errors.append("No hay ítems con cantidad válida para enviar.")
+
+    if errors:
+        return {
+            "success": False,
+            "message": "Validación de guía transportista fallida.",
+            "errors": errors,
+        }
+
+    formatdate = guide_obj.emit_date.strftime("%Y-%m-%d")
+    emit_dt = utc_to_local(guide_obj.created_at) if guide_obj.created_at else None
+    formatdate_hour = emit_dt.strftime("%H:%M:%S") if emit_dt else "00:00:00"
+    formatdate_transfer = guide_obj.transfer_start_date.strftime("%Y-%m-%d")
+
+    serial = (guide_obj.serial or "").strip()
+    try:
+        number = str(int(str(guide_obj.correlative).strip()))
+    except (TypeError, ValueError):
+        number = str(guide_obj.correlative).strip()
+
+    # Motivo de traslado 01 = venta
+    guide_reason = "01"
+
+    items_graphql = ", ".join(
+        f"""{{
+               codigoUnidad: "{_gql_escape(item['codigoUnidad'])}",
+               codigoProducto: "{item['codigoProducto']}",
+               codigoSunat: "{item['codigoSunat']}",
+               producto: "{_gql_escape(item['producto'])}",
+               cantidad: {item['cantidad']},
+               precioBase: {item['precioBase']},
+               tipoIgvCodigo: "{item['tipoIgvCodigo']}"
+        }}"""
+        for item in items
+    )
+    items_graphql = f"[{items_graphql}]"
+
+    related_documents_graphql = ""
+    try:
+        order_bill = order_obj.orderbill
+    except ObjectDoesNotExist:
+        order_bill = None
+    if order_bill and order_bill.status == "E" and order_bill.n_receipt:
+        bill_type = str(order_bill.type or "")
+        if bill_type in ("1", "F", "01"):
+            tipo_doc = "01"
+        elif bill_type in ("2", "3", "B", "03"):
+            tipo_doc = "03"
+        else:
+            tipo_doc = "01" if order_obj.type_document == "F" else "03"
+        bill_date = order_bill.created_at or order_obj.create_at
+        bill_fecha = utc_to_local(bill_date).strftime("%Y-%m-%d") if bill_date else formatdate
+        related_documents_graphql = f""",
+            relatedDocuments: {{
+                tipoDocumentoCodigo: "{tipo_doc}",
+                serie: "{_gql_escape(order_bill.serial or order_obj.serial or '')}",
+                numero: "{int(order_bill.n_receipt)}",
+                fechaEmision: "{bill_fecha}"
+            }}"""
+
+    observation = _gql_escape(guide_obj.observation or "")
+    guide_origin_address = _gql_escape(origin_full or origin_address)
+    guide_arrival_address = _gql_escape(destiny_full or destiny_address)
+
+    graphql_query = f"""
+    mutation RegisterGuideTransportation {{
+        registerGuideTransportation(
+            client: {{
+                razonSocialNombres: "{_gql_escape(client_names.upper())}",
+                numeroDocumento: "{_gql_escape(client_nro_document)}",
+                codigoTipoEntidad: {int(client_type_document)},
+                clienteDireccion: "{_gql_escape(client_address or guide_origin_address)}",
+                clienteTelefono: "{_gql_escape(client_phone)}"
+            }},
+            guide: {{
+                serial: "{_gql_escape(serial)}",
+                number: "{_gql_escape(number)}",
+                emitDate: "{formatdate}",
+                emitHour: "{formatdate_hour}",
+                guideReasonTransfer: "{guide_reason}",
+                note: "{observation}"
+            }},
+            transportation: {{
+                transferDate: "{formatdate_transfer}",
+                totalWeight: "{float(guide_obj.total_weight)}",
+                quantityPackages: "{float(guide_obj.quantity_packages)}",
+                weightMeasurementUnit: "KGM"
+            }},
+            carrier: {{
+                mainVehicleLicensePlate: "{_gql_escape(truck_plate)}",
+                mainDriverDocumentNumber: "{_gql_escape(driver_document)}",
+                mainDriverNames: "{_gql_escape(driver_name.upper())}",
+                mainDriverLicense: "{_gql_escape(driver_license.upper())}"
+            }},
+            receiver: {{
+                receiverDocumentType: "{int(receiver_type_document)}",
+                receiverDocumentNumber: "{_gql_escape(receiver_nro_document)}",
+                receiverNames: "{_gql_escape(receiver_names.upper())}"
+            }},
+            points: {{
+                guideOriginDistrictId: "{_gql_escape(origin_ubigeo)}",
+                guideOriginAddress: "{guide_origin_address}",
+                guideOriginSerial: "",
+                guideArrivalDistrictId: "{_gql_escape(arrival_ubigeo)}",
+                guideArrivalAddress: "{guide_arrival_address}",
+                guideArrivalSerial: ""
+            }},
+            items: {items_graphql}{related_documents_graphql}
+        ) {{
+            message
+            error
+            operationId
+        }}
+    }}
+    """
+    print(graphql_query)
+    # --- MODO PRUEBA: comentar este bloque al pasar a producción (o poner FACT_DRY_RUN = False) ---
+    if FACT_DRY_RUN:
+        return _fact_dry_run_response(
+            "send_guide_transportation_fact (GUÍA TRANSPORTISTA)",
+            graphql_query,
+            {
+                "serie": serial,
+                "numero": number,
+            },
+        )
+    # --- FIN MODO PRUEBA ---
+
+    token = tokens.get(company_obj.ruc, "ID no encontrado")
+    if token == "ID no encontrado":
+        return {
+            "success": False,
+            "message": f"No hay token de facturación configurado para el RUC {company_obj.ruc}.",
+        }
+
+    headers = {
+        "Content-Type": "application/json",
+        "token": token,
+    }
+
+    try:
+        response = requests.post(GRAPHQL_URL, json={"query": graphql_query}, headers=headers)
+        response.raise_for_status()
+        result = response.json()
+
+        if result.get("errors"):
+            return {
+                "success": False,
+                "message": "Error GraphQL al registrar la guía transportista.",
+                "errors": result.get("errors"),
+            }
+
+        data = result.get("data", {}).get("registerGuideTransportation") or {}
+        has_error = bool(data.get("error"))
+        success = not has_error and bool(data.get("operationId") or data.get("message"))
+
+        if success and not has_error:
+            return {
+                "success": True,
+                "message": data.get("message"),
+                "operationId": data.get("operationId"),
+                "serie": serial,
+                "numero": number,
+            }
+
+        return {
+            "success": False,
+            "message": data.get("message") or "La operación no fue exitosa",
+            "error": data.get("error"),
+        }
+
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": f"Error en la solicitud: {str(e)}"}
+    except ValueError:
+        return {"success": False, "error": "La respuesta no es un JSON válido"}
