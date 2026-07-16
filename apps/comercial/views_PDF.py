@@ -227,37 +227,57 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
     for sub in Subsidiary.objects.exclude(phone__isnull=True).exclude(phone='').order_by('name'):
         subsidiary_phones.append((sub.name, sub.phone))
 
+    ruc_text = ''
     if company_obj:
         _address_line = (company_obj.address or '').strip()
         _company_lines = [company_obj.business_name or company_obj.short_name or '']
         if _address_line:
             _company_lines.append(_address_line)
-        _company_lines.append('RUC: ' + (company_obj.ruc or ''))
         tbh_business_name_address = '\n'.join([_line for _line in _company_lines if _line])
+        ruc_text = 'RUC: ' + (company_obj.ruc or '')
 
-    line = '-----------------------------------------------------'
-    name_document = 'GUÍA DE ENCOMIENDA'
-    data_title = 'DATOS DE ENVÍO'
-    serie = 'SERIE: ' + order_obj.serial
+    name_document = 'ORDEN DE SERVICIO'
+    serie = order_obj.serial or ''
     # colwiths_table = [2.57 / 2.2 * inch, 2.57 / 2.2 * inch]
     colwiths_table = [_wt * 50 / 100, _wt * 50 / 100]
     correlative = order_obj.correlative_sale
 
-    # I = Image(logo)
-    # I.drawHeight = 1.95 * inch / 2.9
-    # I.drawWidth = 7.4 * inch / 2.9
+    from .pdf_service_guides import _separator, _brand_logo
+    logo_img = _brand_logo(_wt * 0.55, 0.6 * inch)
     date = order_obj.create_at.date()
     _date_convert_zone = utc_to_local(order_obj.create_at)
     date_hour = _date_convert_zone.time()
     _formatdate = _date_convert_zone.strftime("%d/%m/%Y")
     _formattime = date_hour.strftime("%I:%M:%S %p")
 
+    # Estilos Helvetica exclusivos de este ticket
+    h_left = ParagraphStyle(
+        name='TicketHelvLeft', fontName='Helvetica', fontSize=8, leading=10, alignment=TA_LEFT)
+    h_center = ParagraphStyle(
+        name='TicketHelvCenter', fontName='Helvetica', fontSize=8, leading=10, alignment=TA_CENTER)
+    h_center_7 = ParagraphStyle(
+        name='TicketHelvCenter7', fontName='Helvetica', fontSize=7, leading=9, alignment=TA_CENTER)
+    h_justify = ParagraphStyle(
+        name='TicketHelvJustify', fontName='Helvetica', fontSize=8, leading=10, alignment=TA_JUSTIFY)
+    h_desc = ParagraphStyle(
+        name='TicketHelvDesc', fontName='Helvetica', fontSize=6.5, leading=8, alignment=TA_LEFT)
+    h_desc_right = ParagraphStyle(
+        name='TicketHelvDescRight', fontName='Helvetica', fontSize=6.5, leading=8, alignment=TA_RIGHT)
+    h_person = ParagraphStyle(
+        name='TicketHelvPerson', fontName='Helvetica', fontSize=7, leading=9, alignment=TA_LEFT)
+    h_person_right = ParagraphStyle(
+        name='TicketHelvPersonRight', fontName='Helvetica', fontSize=7, leading=9, alignment=TA_RIGHT)
+    h_terms = ParagraphStyle(
+        name='TicketHelvTerms', fontName='Helvetica', fontSize=6, leading=8, alignment=TA_JUSTIFY)
+    h_serie = ParagraphStyle(
+        name='TicketHelvSerie', fontName='Helvetica-Bold', fontSize=10, leading=11, alignment=TA_CENTER)
+
     rows = []
 
     if encomienda and encomienda.code_track:
         service_order_number = (
-            f'{order_obj.order_serial}-{order_obj.order_correlative}'
-            if order_obj.order_serial and order_obj.order_correlative
+            str(order_obj.order_correlative).lstrip('0') or '0'
+            if order_obj.order_correlative
             else str(order_obj.id)
         )
         td_code_track = (
@@ -267,140 +287,95 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         rows.append(td_code_track)
 
     td_date = ('FECHA EMISIÓN: ' + str(_formatdate), 'HORA: ' + str(_formattime))
-    td_user = (
-        Paragraph('ATENDIDO POR: ' + order_obj.user.username.upper(), styles["Square_left_2"]),
-        order_obj.subsidiary.name)
-    # ana_c1 = Table([td_code_track] + [td_date] + [td_user], colWidths=colwiths_table)
+    _transfer_date_txt = (
+        order_obj.transfer_date.strftime("%d/%m/%Y") if order_obj.transfer_date else '-'
+    )
+    td_transfer = ('FECHA TRASLADO: ' + _transfer_date_txt, '')
 
+    _date_row_idx = len(rows)  # fila de FECHA EMISIÓN (después del NRO. ORDEN si existe)
     rows.append(td_date)
-    rows.append(td_user)
+    rows.append(td_transfer)
     ana_c1 = Table(rows, colWidths=colwiths_table)
 
     my_style_table_title = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Square'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
         ('LEFTPADDING', (0, 0), (0, -1), 0.3),  # primera columna
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), -7),  # filas más pegadas entre sí
+        ('TOPPADDING', (0, _date_row_idx), (-1, _date_row_idx), 8),  # separa FECHA EMISIÓN de la fila de arriba
+        ('ALIGNMENT', (1, 0), (1, -1), 'RIGHT'),  # segunda columna
     ]
-
-    if encomienda and encomienda.code_track:
-        my_style_table_title += [
-            ('BOTTOMPADDING', (0, 0), (-1, -1), -1),
-            ('BOTTOMPADDING', (0, 1), (1, 2), -6),
-            ('ALIGNMENT', (1, 1), (1, 2), 'RIGHT'),
-            ('ALIGNMENT', (1, 0), (1, 0), 'RIGHT'),
-        ]
-    else:
-        my_style_table_title += [
-            ('BOTTOMPADDING', (0, 0), (-1, -1), -6),
-            ('ALIGNMENT', (1, 0), (1, 1), 'RIGHT'),
-        ]
     my_style_table = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Square'),
-        # ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        # ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-        # ('FONTNAME', (0, 1), (0, -1), 'Newgot'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), -6),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), -4),
         ('ALIGNMENT', (1, 1), (1, 1), 'RIGHT'),
         ('ALIGNMENT', (1, 0), (1, 0), 'RIGHT'),
-        # ('TOPPADDING', (0, 0), (-1, -1), 1),
         ('LEFTPADDING', (0, 0), (0, -1), 0.3),  # first column
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        # ('LINEBELOW', (0, 0), (-1, 0), 1, colors.darkblue),
-        # ('BACKGROUND', (0, 0), (0, 0), colors.lightgrey)
     ]
+    # Las filas de nombre (remitente/destinatario) ocupan ambas columnas para
+    # que el texto use todo el ancho y solo baje de línea cuando no entre.
+    my_style_person_sender = my_style_table + [('SPAN', (0, 0), (1, 0))]
 
-    my_style_table_recipients = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Square'),
-        # ('FONTNAME', (1, 3), (1, 3), 'allerta_medium'),
-        # ('FONTNAME', (1, -2), (-2, -1), 'allerta_medium'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('FONTSIZE', (1, 1), (1, 1), 10),
-        ('FONTNAME', (1, 1), (1, 1), 'Square-Bold'),
-        # ('ALIGNMENT', (1, 0), (1, -1), 'CENTER'),
-        # ('ALIGNMENT', (0, 1), (0, -1), 'CENTER'),
-        ('LEFTPADDING', (0, 0), (0, -1), 0.3),  # first column
-        ('LEFTPADDING', (1, 0), (1, -1), 0.3),  # second column
-        # ('LEFTPADDING', (2, 0), (2, -1), 1.3),  # third column
-        # ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        # ('BACKGROUND', (1, 1), (1, 1), colors.lightgrey),
-        # ('FONTSIZE', (1, 2), (1, 2), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), -4),
-    ]
     my_style_table2 = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Square'),
-        ('FONTNAME', (1, 3), (1, 3), 'allerta_medium'),
-        ('FONTNAME', (1, 2), (1, 2), 'allerta_medium'),
-        # ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('FONTSIZE', (1, 2), (1, 2), 14),
-        ('FONTSIZE', (1, 3), (1, 3), 12),
-        ('RIGHTPADDING', (1, 2), (1, 2), -10),  # second column third row
-        ('TOPPADDING', (1, 2), (1, 2), -5),  # second column third row
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
         ('LEFTPADDING', (0, 0), (0, -1), 0.3),  # first column
-        ('BOTTOMPADDING', (0, 0), (-1, -1), -2),
-        ('TOPPADDING', (1, 3), (1, 3), -1),  # second column fourth row
-        # ('BACKGROUND', (1, 2), (1, 2), colors.blue),
-        # ('BACKGROUND', (1, 3), (1, 3), colors.red),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), -6),  # filas más pegadas
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]
     my_style_code = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Square-Bold'),
-        # ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, -1), 10),
         ('LEFTPADDING', (0, 0), (0, -1), 0.3),  # first column
         ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-        # ('BACKGROUND', (1, 2), (1, 2), colors.lightgrey),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]
     my_style_hour_arrival = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Square'),
-        # ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
         ('LEFTPADDING', (0, 0), (0, -1), 0.3),  # first column
         ('BOTTOMPADDING', (0, 0), (-1, -1), -2),
-        # ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]
+    # Columnas detalle: DESCRIPCIÓN | CANT | UM | PESO | SUBTOTAL
     my_style_table3 = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Square'),
-        # ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('ALIGNMENT', (2, 0), (2, -1), 'CENTER'),  # third column
-        ('LEFTPADDING', (0, 0), (0, -1), 0.5),  # first column
-        ('BOTTOMPADDING', (0, 0), (-1, -1), -6),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 6.5),
+        ('ALIGNMENT', (1, 0), (1, -1), 'CENTER'),  # cant
+        ('ALIGNMENT', (2, 0), (2, -1), 'CENTER'),  # um
+        ('ALIGNMENT', (3, 0), (3, -1), 'CENTER'),  # peso
+        ('ALIGNMENT', (4, 0), (4, -1), 'RIGHT'),  # subtotal
+        ('LEFTPADDING', (0, 0), (0, -1), 0.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), -4),
         ('TOPPADDING', (0, 0), (-1, -1), -1),
-        ('ALIGNMENT', (3, 0), (3, -1), 'RIGHT'),  # four column
-        ('RIGHTPADDING', (3, 0), (3, -1), 0.5),  # four column
+        ('RIGHTPADDING', (4, 0), (4, -1), 0.5),
     ]
     my_style_table4 = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Square'),
-        # ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 6.5),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-        ('LEFTPADDING', (0, 0), (0, -1), 0.3),  # first column
-        # ('LEFTPADDING', (0, 0), (0, -1), 0.5),  # first column
-        ('ALIGNMENT', (1, 0), (1, -1), 'CENTER'),  # unit column
+        ('LEFTPADDING', (0, 0), (0, -1), 0.3),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGNMENT', (2, 0), (2, -1), 'CENTER'),  # quantity column
-        ('ALIGNMENT', (3, 0), (3, -1), 'RIGHT'),  # total column
-        ('RIGHTPADDING', (3, 0), (3, -1), 0.5),  # total column
-        # ('BACKGROUND', (2, 0), (2, -1), colors.lightgrey),
+        ('ALIGNMENT', (1, 0), (1, -1), 'CENTER'),  # cant
+        ('ALIGNMENT', (2, 0), (2, -1), 'CENTER'),  # um
+        ('ALIGNMENT', (3, 0), (3, -1), 'CENTER'),  # peso
+        ('ALIGNMENT', (4, 0), (4, -1), 'RIGHT'),  # subtotal
+        ('RIGHTPADDING', (4, 0), (4, -1), 0.5),
     ]
     my_style_table5 = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Square'),
-        # ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('FONTSIZE', (3, 2), (3, -1), 10),
-        ('FONTNAME', (3, 2), (3, -1), 'Square-Bold'),
-        ('RIGHTPADDING', (2, 0), (2, -1), 0),  # third column
+        ('FONTSIZE', (3, 0), (3, -1), 10),
+        ('FONTNAME', (3, 0), (3, -1), 'Helvetica-Bold'),
+        ('RIGHTPADDING', (2, 0), (2, -1), 6),  # separa S/ del número
         ('ALIGNMENT', (2, 0), (2, -1), 'RIGHT'),  # third column
         ('RIGHTPADDING', (3, 0), (3, -1), 0.3),  # four column
         ('ALIGNMENT', (3, 0), (3, -1), 'RIGHT'),  # four column
         ('LEFTPADDING', (0, 0), (0, -1), 0.5),  # first column
         ('BOTTOMPADDING', (0, 0), (-1, -1), -6),
-        # ('BACKGROUND', (3, 2), (3, -1), colors.lightgrey),
     ]
 
     ana_c1.setStyle(TableStyle(my_style_table_title))
@@ -432,19 +407,24 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         ana_hour_arrival = Table([td_hour_arrival], colWidths=colwiths_table)
         ana_hour_arrival.setStyle(TableStyle(my_style_hour_arrival))
 
-        td_sender = ('REMITENTE: ' + str(order_action_sender_obj.client.names), '')
+        td_sender = (Paragraph('REMITENTE: ' + str(order_action_sender_obj.client.names), h_person), '')
 
         if order_action_sender_obj.client.phone:
             td_sender_document = (
-                document_sender + ': ' + str(order_action_sender_obj.client.clienttype_set.first().document_number),
-                'TELEFONO: ' + str(order_action_sender_obj.client.phone))
+                Paragraph(
+                    document_sender + ': ' + str(order_action_sender_obj.client.clienttype_set.first().document_number),
+                    h_person),
+                Paragraph('TELEFONO: ' + str(order_action_sender_obj.client.phone), h_person_right))
             ana_c3 = Table([td_sender] + [td_sender_document], colWidths=colwiths_table)
-            ana_c3.setStyle(TableStyle(my_style_table))
+            ana_c3.setStyle(TableStyle(my_style_person_sender))
         else:
             td_sender_document = (
-                document_sender + ': ' + str(order_action_sender_obj.client.clienttype_set.first().document_number), '')
+                Paragraph(
+                    document_sender + ': ' + str(order_action_sender_obj.client.clienttype_set.first().document_number),
+                    h_person),
+                '')
             ana_c3 = Table([td_sender] + [td_sender_document], colWidths=colwiths_table)
-            ana_c3.setStyle(TableStyle(my_style_table))
+            ana_c3.setStyle(TableStyle(my_style_person_sender))
 
     else:
 
@@ -464,18 +444,19 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         ana_hour_arrival = Table([td_hour_arrival], colWidths=colwiths_table)
         ana_hour_arrival.setStyle(TableStyle(my_style_hour_arrival))
 
-        td_sender = ('REMITENTE: ' + str(order_action_sender_obj.order_addressee.names.upper()), '')
+        td_sender = (
+            Paragraph('REMITENTE: ' + str(order_action_sender_obj.order_addressee.names.upper()), h_person), '')
 
         if order_action_sender_obj.order_addressee.phone:
             td_sender_document = (
-                'DNI' + ': ' + ' ',
-                'TELEFONO: ' + str(order_action_sender_obj.order_addressee.phone))
+                Paragraph('DNI: ', h_person),
+                Paragraph('TELEFONO: ' + str(order_action_sender_obj.order_addressee.phone), h_person_right))
             ana_c3 = Table([td_sender] + [td_sender_document], colWidths=colwiths_table)
-            ana_c3.setStyle(TableStyle(my_style_table))
+            ana_c3.setStyle(TableStyle(my_style_person_sender))
         else:
-            td_sender_document = ('DNI' + ': ' + ' '),
+            td_sender_document = (Paragraph('DNI: ', h_person), '')
             ana_c3 = Table([td_sender] + [td_sender_document], colWidths=colwiths_table)
-            ana_c3.setStyle(TableStyle(my_style_table))
+            ana_c3.setStyle(TableStyle(my_style_person_sender))
 
     recipients = OrderAction.objects.filter(order=order_obj, type='D')
     _rows = []
@@ -485,62 +466,80 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
     for d in recipients:
         _phone = ''
         if d.client is None:
-            _names = Paragraph(d.order_addressee.names.upper(), styles["Center5"])
-            _phone = d.order_addressee.phone
-            _rows.append(['NOMBRES :', _names, ''])
-            _rows.append(['CEL : ' + _phone, '', ''])
-            _recipients_names_qr.append(str(d.order_addressee.names.upper()))
+            _names = (d.order_addressee.names or '').upper()
+            _phone = d.order_addressee.phone or ''
+            _rows.append((Paragraph('DESTINATARIO: ' + _names, h_person), ''))
+            if _phone:
+                _rows.append((
+                    Paragraph('DNI: ', h_person),
+                    Paragraph('TELEFONO: ' + str(_phone), h_person_right)))
+            else:
+                _rows.append((Paragraph('DNI: ', h_person), ''))
+            _recipients_names_qr.append(str(_names))
             _recipients_phone_qr.append(str(_phone))
         else:
             if d.client.phone is not None:
                 _phone = d.client.phone
-            _names = Paragraph(d.client.names.upper(), styles["Center5"])
-            _rows.append([str(d.client.clienttype_set.first().document_type.short_description) + ':' + str(
-                d.client.clienttype_set.first().document_number), '       CEL :' + _phone, ''])
-            _rows.append(['NOMBRES :', _names, ''])
-            _recipients_names_qr.append(str(d.client.names.upper()))
+            _names = (d.client.names or '').upper()
+            _doc_type = d.client.clienttype_set.first().document_type.short_description
+            _doc_number = d.client.clienttype_set.first().document_number
+            _rows.append((Paragraph('DESTINATARIO: ' + _names, h_person), ''))
+            if _phone:
+                _rows.append((
+                    Paragraph(_doc_type + ': ' + str(_doc_number), h_person),
+                    Paragraph('TELEFONO: ' + str(_phone), h_person_right)))
+            else:
+                _rows.append((Paragraph(_doc_type + ': ' + str(_doc_number), h_person), ''))
+            _recipients_names_qr.append(str(_names))
             _recipients_phone_qr.append(str(_phone))
-            _recipients_nro_document_qr.append(str(d.client.clienttype_set.first().document_number))
+            _recipients_nro_document_qr.append(str(_doc_number))
 
-    colwiths_table_recipients = [_wt * 22 / 100, _wt * 73 / 100, _wt * 5 / 100]
-
-    ana_c4 = Table([('DESTINATARIO(S):', '', '')] + _rows, colWidths=colwiths_table_recipients)
-
-    ana_c4.setStyle(TableStyle(my_style_table_recipients))
+    if not _rows:
+        _rows = [(Paragraph('DESTINATARIO: -', h_person), '')]
+    ana_c4 = Table(_rows, colWidths=colwiths_table)
+    # Cada destinatario ocupa 2 filas: la del nombre (par) abarca ambas columnas
+    _name_row_spans = [('SPAN', (0, i), (1, i)) for i in range(0, len(_rows), 2)]
+    ana_c4.setStyle(TableStyle(my_style_table + _name_row_spans))
 
     encomienda = getattr(order_obj, 'encomienda', None)
     address_delivery = '-'
 
     if encomienda and encomienda.address_delivery:
-        address_delivery = Paragraph(str(encomienda.address_delivery.upper()), styles["Justify"])
+        address_delivery = Paragraph(str(encomienda.address_delivery.upper()), h_justify)
 
     _origin_office = encomienda.office_origin if encomienda else None
     _destination_office = encomienda.office_destination if encomienda else None
-    destiny = Paragraph(': ' + str(_destination_office.short_name if _destination_office else '-'),
-                        styles["JustifyAllertaBig"])
+    origin_address = (
+        (_origin_office.address or _origin_office.short_name or '-').strip().upper()
+        if _origin_office else '-'
+    )
+    destination_address = (
+        (_destination_office.address or _destination_office.short_name or '-').strip().upper()
+        if _destination_office else '-'
+    )
 
-    td_type = ('TIPO', ': ENCOMIENDA')
-    td_origin = ('ORIGEN', ': ' + str(_origin_office.short_name if _origin_office else '-'))
-    td_destiny = ('DESTINO', destiny)
-    td_way_to_pay = ('COND.PAGO', ': ' + str(order_obj.get_way_to_pay_display()))
+    td_way_to_pay = ('FORMA DE PAGO', ': ' + str(order_obj.get_way_to_pay_display()))
     td_service = ('SERVICIO', ': ' + str(encomienda.get_type_guide_display() if encomienda else 'ENCOMIENDA'))
-    td_address_delivery = ('DIR. REP. ' + ' :', address_delivery)
-    # ana_c5 = Table([td_type] + [td_origin] + [td_destiny] + [td_way_to_pay] + [td_service],
-    #                colWidths=[_wt * 25 / 100, _wt * 75 / 100])
-    # ana_c5.setStyle(TableStyle(my_style_table2))
+    td_address_delivery = ('DIR. REP.', address_delivery)
 
     if encomienda and encomienda.address_delivery:
         ana_c5 = Table(
-            [td_type] + [td_origin] + [td_destiny] + [td_way_to_pay] + [td_service] + [td_address_delivery],
-            colWidths=[_wt * 20 / 100, _wt * 80 / 100])
-
+            [td_way_to_pay] + [td_service] + [td_address_delivery],
+            colWidths=[_wt * 28 / 100, _wt * 72 / 100])
     else:
-        ana_c5 = Table([td_type] + [td_origin] + [td_destiny] + [td_way_to_pay] + [td_service],
-                       colWidths=[_wt * 20 / 100, _wt * 80 / 100])
+        ana_c5 = Table([td_way_to_pay] + [td_service],
+                       colWidths=[_wt * 28 / 100, _wt * 72 / 100])
     ana_c5.setStyle(TableStyle(my_style_table2))
 
-    td_description = ('DESCRIPCIÓN', 'UND.', 'CANT.', 'TOTAL')
-    ana_c6 = Table([td_description], colWidths=[_wt * 58 / 100, _wt * 10 / 100, _wt * 10 / 100, _wt * 22 / 100])
+    col_detail = [
+        _wt * 38 / 100,  # descripción
+        _wt * 12 / 100,  # cant
+        _wt * 12 / 100,  # um
+        _wt * 16 / 100,  # peso
+        _wt * 22 / 100,  # subtotal
+    ]
+    td_description = ('DESCRIPCIÓN', 'CANT', 'UM', 'PESO', 'SUBTOTAL')
+    ana_c6 = Table([td_description], colWidths=col_detail)
     ana_c6.setStyle(TableStyle(my_style_table3))
 
     sub_total = 0
@@ -551,15 +550,16 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
     _details_q_qr = []
     _details_d_qr = []
     _detail_amount = ''
-    # _details_ic_qr = []
-    # _details_ix_qr = []
     for d in order_obj.orderdetail_set.all():
-        P0 = Paragraph(d.description.upper(), styles["JustifyDesc"])
+        P0 = Paragraph(d.description.upper(), h_desc)
+        _weight = getattr(d, 'weight', None)
+        weight_txt = str(round(_weight, 2)) if _weight not in (None, '') else '0'
         _rows.append(
             (P0,
-             _order_detail_unit_label(d),
              str(decimal.Decimal(round(d.quantity))),
-             Paragraph(str(round(d.amount, 2)), styles["JustifyDesc"])))
+             _order_detail_unit_label(d),
+             weight_txt,
+             Paragraph(str(round(d.amount, 2)), h_desc_right)))
         base_total = d.quantity * d.price_unit
         base_amount = base_total / decimal.Decimal(1.1800)
         igv = base_total - base_amount
@@ -569,34 +569,16 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         _details_q_qr.append(str(round(d.quantity)))
         _details_d_qr.append(d.description.upper())
         _detail_amount = str(round(d.amount, 2))
-        # if order_obj.way_to_pay == 'C':
-        #     _details_ic_qr.append(str(round(d.amount, 2)))
-        # elif order_obj.way_to_pay == 'D':
-        #     _details_ix_qr.append(str(round(d.amount, 2)))
 
-    ana_c7 = Table(_rows, colWidths=[_wt * 58 / 100, _wt * 10 / 100, _wt * 10 / 100, _wt * 22 / 100],
-                   rowHeights=0.30 * inch)
-
+    ana_c7 = Table(_rows, colWidths=col_detail, rowHeights=0.28 * inch)
     ana_c7.setStyle(TableStyle(my_style_table4))
 
-    td_gravada = ('OP.  GRAVADA', '', 'S/', str(decimal.Decimal(round(total, 2))))
-    td_inafecta = ('OP.  INAFECTA', '', 'S/', '0.00')
-    td_exonerada = ('OP.  EXONERADA', '', 'S/', '0.00')
-    td_descuento = ('DESCUENTO', '', 'S/', '0.00')
-    td_igv = ('I.G.V.  (18.00)', '', 'S/', '0.00')
     td_importe_total = ('IMPORTE TOTAL', '', 'S/', str(decimal.Decimal(round(total, 2))))
 
-    ana_c8 = Table([td_gravada] + [td_descuento] + [td_importe_total],
+    ana_c8 = Table([td_importe_total],
                    colWidths=[_wt * 60 / 100, _wt * 10 / 100, _wt * 17 / 100, _wt * 13 / 100])
 
     ana_c8.setStyle(TableStyle(my_style_table5))
-
-    my_style_table6 = [
-        # ('GRID', (0, 0), (-1, -1), 0.5, colors.blue),   # all columns
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),  # all columns
-        ('ALIGNMENT', (0, 0), (0, -1), 'CENTER'),  # first column
-        ('SPAN', (0, 0), (1, 0)),  # first row
-    ]
 
     current_time = datetime.now()
     _format_current_time = current_time.strftime("%d/%m/%Y %I:%M:%S %p")
@@ -626,11 +608,33 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         _detail_amount) + ',' + _user_qr + ',' + origin + ',' + destiny
     # print(datatable)
 
-    ana_c9 = Table([(qr_code(datatable), '')], colWidths=[_wt * 99 / 100, _wt * 1 / 100])
-    ana_c9.setStyle(TableStyle(my_style_table6))
+    # QR más pequeño dentro de un cuadro
+    _qr_widget = qr.QrCodeWidget(datatable)
+    _qr_bounds = _qr_widget.getBounds()
+    _qr_w = _qr_bounds[2] - _qr_bounds[0]
+    _qr_h = _qr_bounds[3] - _qr_bounds[1]
+    _qr_size = 3.4 * cm
+    _qr_drawing = Drawing(
+        _qr_size, _qr_size,
+        transform=[_qr_size / _qr_w, 0, 0, _qr_size / _qr_h, 0, 0])
+    _qr_drawing.add(_qr_widget)
+    _qr_box = Table([[_qr_drawing]], colWidths=[_qr_size + 8])
+    _qr_box.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 0.6, colors.HexColor('#d1d5db')),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    ana_c9 = Table([[_qr_box]], colWidths=[_wt])
+    ana_c9.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
 
-    footer = 'SON: ' + numero_a_moneda(total)
-    footer2 = 'ACEPTO LOS TÉRMINOS Y CONDICIONES DEL CONTRATO DE TRANSPORTE PUBLICADOS EN LA EMPRESA'
+    observation = (getattr(order_obj, 'observation', None) or '').strip()
 
     buff = io.BytesIO()
 
@@ -647,62 +651,74 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
                             leftMargin=ml,
                             topMargin=ms,
                             bottomMargin=mi,
-                            title='GUIA ENCOMIENDA'
+                            title='ORDEN DE SERVICIO'
                             )
     dictionary = []
-    # dictionary.append(I)
-    dictionary.append(Spacer(-25, -25))
-    dictionary.append(Paragraph(brand_title, styles["Helvetica_Bold_Center_13"]))
-    dictionary.append(Paragraph(tbh_business_name_address.replace("\n", "<br />"), styles["Helvetica_Center_7"]))
+    dictionary.append(Spacer(1, 10))
+    if logo_img:
+        dictionary.append(logo_img)
+    else:
+        dictionary.append(Paragraph(brand_title, styles["Helvetica_Bold_Center_13"]))
+    dictionary.append(Spacer(4, 4))
+    if tbh_business_name_address:
+        dictionary.append(Paragraph(tbh_business_name_address.replace("\n", "<br />"), styles["Helvetica_Center_7"]))
+    if ruc_text:
+        dictionary.append(Paragraph(ruc_text, styles["Helvetica_Bold_Center_7"]))
     dictionary.append(Spacer(2, 2))
     for sub_name, sub_phone in subsidiary_phones:
-        dictionary.append(Paragraph(f"{sub_name}: {sub_phone}", styles["Center"]))
-    dictionary.append(Spacer(1, 1))
-    dictionary.append(Paragraph(line, styles["Center2"]))
+        dictionary.append(Paragraph(f"{sub_name}: {sub_phone}", h_center_7))
+    dictionary.append(Spacer(6, 6))
+    dictionary.append(_separator(_wt))
+    dictionary.append(Spacer(2, 2))
     dictionary.append(Paragraph(name_document, styles["Helvetica_Bold_Center_10"]))
-    dictionary.append(Spacer(-4, -4))
-    dictionary.append(Paragraph(serie + ' - ' + correlative, styles["ticketing.regular"]))
+    dictionary.append(Spacer(4, 4))
+    dictionary.append(Paragraph(f'{serie} - {correlative}', h_serie))
     dictionary.append(Spacer(1, 1))
     dictionary.append(ana_c1)
-    dictionary.append(Spacer(1, 0))
-    dictionary.append(Paragraph(line, styles["Center2"]))
-    dictionary.append(Spacer(1, 0))
-    dictionary.append(Paragraph(data_title, styles["Center"]))
-    dictionary.append(Spacer(-2, -2))
-    dictionary.append(Paragraph(line, styles["Center2"]))
-    dictionary.append(Spacer(-2, -2))
+    dictionary.append(Spacer(6, 6))
+    dictionary.append(_separator(_wt))
+    dictionary.append(Spacer(2, 2))
+    dictionary.append(Paragraph('<b>origen:</b> ' + origin_address, style_custom_left))
+    dictionary.append(Spacer(2, 2))
+    dictionary.append(Paragraph('<b>destino:</b> ' + destination_address, style_custom_left))
+    dictionary.append(Spacer(6, 6))
+    dictionary.append(_separator(_wt))
+    dictionary.append(Spacer(2, 2))
+    dictionary.append(Paragraph('DATOS DEL REMITENTE', styles["Helvetica_Bold_Left_7"]))
+    dictionary.append(Spacer(1, 1))
     dictionary.append(ana_c3)
+    dictionary.append(Spacer(6, 6))
+    dictionary.append(_separator(_wt))
+    dictionary.append(Spacer(2, 2))
+    dictionary.append(Paragraph('DATOS DEL DESTINATARIO', styles["Helvetica_Bold_Left_7"]))
     dictionary.append(Spacer(1, 1))
-    dictionary.append(Paragraph(line, styles["Center2"]))
-    dictionary.append(Spacer(4, 4))
     dictionary.append(ana_c4)
-    dictionary.append(Spacer(1, 1))
-    # dictionary.append(ana_code)
-    # dictionary.append(Spacer(-2, -2))
-    # dictionary.append(ana_hour_arrival)
-    # dictionary.append(Spacer(-2, -2))
-    dictionary.append(Paragraph(line, styles["Center2"]))
-    dictionary.append(Spacer(-2, -2))
+    dictionary.append(Spacer(6, 6))
+    dictionary.append(_separator(_wt))
+    dictionary.append(Spacer(2, 2))
     dictionary.append(ana_c5)
-    dictionary.append(Spacer(1, 0))
-    dictionary.append(Paragraph(line, styles["Center2"]))
-    dictionary.append(Spacer(1, 0))
+    dictionary.append(Spacer(6, 6))
+    dictionary.append(_separator(_wt))
+    dictionary.append(Spacer(2, 2))
     dictionary.append(ana_c6)
-    dictionary.append(Spacer(1, 0))
-    dictionary.append(Paragraph(line, styles["Center2"]))
-    dictionary.append(Spacer(-2, -2))
+    dictionary.append(Spacer(6, 6))
+    dictionary.append(_separator(_wt))
+    dictionary.append(Spacer(2, 2))
     dictionary.append(ana_c7)
-    dictionary.append(Spacer(-2, -2))
-    dictionary.append(Paragraph(line, styles["Center2"]))
-    dictionary.append(Spacer(1, 0))
+    dictionary.append(Spacer(6, 6))
+    dictionary.append(_separator(_wt))
+    dictionary.append(Spacer(2, 2))
     dictionary.append(ana_c8)
-    dictionary.append(Spacer(1, 0))
-    dictionary.append(Paragraph(line, styles["Center2"]))
-    dictionary.append(Spacer(1, 0))
-    dictionary.append(Paragraph(footer, styles["Center"]))
-    dictionary.append(Spacer(-2, -2))
+    if observation:
+        dictionary.append(Spacer(6, 6))
+        dictionary.append(_separator(_wt))
+        dictionary.append(Spacer(2, 2))
+        dictionary.append(Paragraph('OBSERVACIÓN:', styles["Helvetica_Bold_Left_7"]))
+        dictionary.append(Spacer(2, 2))
+        dictionary.append(Paragraph(observation.upper(), h_left))
+    dictionary.append(Spacer(2, 2))
     dictionary.append(ana_c9)
-    dictionary.append(Spacer(-2, -2))
+    dictionary.append(Spacer(2, 2))
     dictionary.append(Paragraph(
         "TERMINOS Y CONDICIONES: <br/>"
         "1.    El remitente declara que la información y el contenido de la encomienda son veraces y de libre transporte. <br/>"
@@ -710,13 +726,13 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         "3.    La entrega se realizará al destinatario o persona autorizada, previa identificación. <br/>"
         "4.    La empresa no será responsable por demoras ocasionadas por caso fortuito o fuerza mayor. <br/>"
         "5.    Al contratar el servicio, el cliente acepta los presentes términos y condiciones. <br/>",
-        styles["JustifyArial"]))
-    dictionary.append(Spacer(1, 1))
-    dictionary.append(Paragraph(line, styles["Center2"]))
-    dictionary.append(Spacer(1, 1))
+        h_terms))
+    dictionary.append(Spacer(6, 6))
+    dictionary.append(_separator(_wt))
+    dictionary.append(Spacer(2, 2))
     dictionary.append(Paragraph(
         "¡Gracias por confiar en nosotros!",
-        styles["Center2"]))
+        h_center))
 
     doc.build(dictionary)
 

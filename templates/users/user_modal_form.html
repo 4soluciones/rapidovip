@@ -1,9 +1,12 @@
-<div class="modal-dialog modal-lg modal-dialog-scrollable">
-    <div class="modal-content rv-modal">
+<div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" role="document">
+    <div class="modal-content rv-modal rv-user-modal">
         <div class="modal-header">
-            <div>
-                <h5 class="modal-title"><i class="fas fa-user-plus"></i> Nuevo usuario</h5>
-                <p class="rv-modal-subtitle mb-0">Registre un usuario con acceso al sistema</p>
+            <div class="rv-user-modal-header">
+                <span class="rv-user-modal-icon" aria-hidden="true"><i class="fas fa-user-plus"></i></span>
+                <div>
+                    <h5 class="modal-title">Nuevo usuario</h5>
+                    <p class="rv-modal-subtitle mb-0">Registre un usuario con acceso al sistema</p>
+                </div>
             </div>
             <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
                 <span aria-hidden="true">&times;</span>
@@ -28,52 +31,66 @@
         <form id="user-modal-form">
             {% csrf_token %}
             <div class="modal-body">
-                <h6 class="rv-section-label">Datos de acceso</h6>
-                <div class="rv-form-grid">
-                    <div class="rv-form-group">
-                        <label>Usuario</label>
-                        {{ form.username }}
-                    </div>
-                    <div class="rv-form-group">
-                        <label>Correo electrónico</label>
-                        {{ form.email }}
-                    </div>
-                    <div class="rv-form-group">
-                        <label>Contraseña</label>
-                        {{ form.password }}
-                    </div>
-                    <div class="rv-form-group">
-                        <label>Confirmar contraseña</label>
-                        {{ form.password_confirm }}
-                    </div>
-                </div>
+                <div class="rv-user-modal-sections">
+                    <section class="rv-user-modal-block">
+                        <h6 class="rv-user-modal-block-title">
+                            <i class="fas fa-key"></i> Datos de acceso
+                        </h6>
+                        <div class="rv-form-grid rv-user-modal-grid">
+                            <div class="rv-form-group">
+                                <label for="{{ form.username.id_for_label }}">Usuario</label>
+                                {{ form.username }}
+                            </div>
+                            <div class="rv-form-group">
+                                <label for="{{ form.email.id_for_label }}">Correo electrónico</label>
+                                {{ form.email }}
+                            </div>
+                            <div class="rv-form-group">
+                                <label for="{{ form.password.id_for_label }}">Contraseña</label>
+                                {{ form.password }}
+                            </div>
+                            <div class="rv-form-group">
+                                <label for="{{ form.password_confirm.id_for_label }}">Confirmar contraseña</label>
+                                {{ form.password_confirm }}
+                            </div>
+                        </div>
+                    </section>
 
-                <h6 class="rv-section-label mt-3">Datos personales</h6>
-                <div class="rv-form-grid">
-                    <div class="rv-form-group rv-form-group-full">
-                        <label>Nombre completo</label>
-                        {{ form.full_name }}
-                    </div>
-                    <div class="rv-form-group">
-                        <label>Teléfono</label>
-                        {{ form.phone }}
-                    </div>
-                </div>
+                    <section class="rv-user-modal-block">
+                        <h6 class="rv-user-modal-block-title">
+                            <i class="fas fa-id-card"></i> Datos personales
+                        </h6>
+                        <div class="rv-form-grid rv-user-modal-grid">
+                            <div class="rv-form-group rv-form-group-full">
+                                <label for="{{ form.full_name.id_for_label }}">Nombre completo</label>
+                                {{ form.full_name }}
+                            </div>
+                            <div class="rv-form-group">
+                                <label for="{{ form.phone.id_for_label }}">Teléfono</label>
+                                {{ form.phone }}
+                            </div>
+                        </div>
+                    </section>
 
-                <h6 class="rv-section-label mt-3">Asignación</h6>
-                <div class="rv-form-grid">
-                    <div class="rv-form-group">
-                        <label>Sede</label>
-                        {{ form.subsidiary }}
-                    </div>
-                    <div class="rv-form-group">
-                        <label>Empresa</label>
-                        {{ form.company }}
-                    </div>
-                    <div class="rv-form-group">
-                        <label>Rol en sede</label>
-                        {{ form.rol }}
-                    </div>
+                    <section class="rv-user-modal-block">
+                        <h6 class="rv-user-modal-block-title">
+                            <i class="fas fa-building"></i> Asignación
+                        </h6>
+                        <div class="rv-form-grid rv-user-modal-grid rv-user-modal-grid-3">
+                            <div class="rv-form-group">
+                                <label for="{{ form.subsidiary.id_for_label }}">Sede</label>
+                                {{ form.subsidiary }}
+                            </div>
+                            <div class="rv-form-group">
+                                <label for="{{ form.company.id_for_label }}">Empresa</label>
+                                {{ form.company }}
+                            </div>
+                            <div class="rv-form-group">
+                                <label for="{{ form.rol.id_for_label }}">Rol en sede</label>
+                                {{ form.rol }}
+                            </div>
+                        </div>
+                    </section>
                 </div>
             </div>
             <div class="modal-footer">
