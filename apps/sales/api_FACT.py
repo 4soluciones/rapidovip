@@ -1,4 +1,4 @@
-﻿import requests
+import requests
 
 from .format_to_dates import utc_to_local
 from .models import *
@@ -57,7 +57,7 @@ def send_bill_commodity_fact(request, order_id):  # FACTURA DE ENCOMIENDA 4FACT
     client_first_address_address = str(client_first_address).replace('"', "'")
     client_document = client_obj_sender.clienttype_set.filter(document_type_id='06').first()
     register_date = utc_to_local(order_obj.create_at)
-    formatdate = order_obj.traslate_date.strftime("%Y-%m-%d")
+    formatdate = order_obj.transfer_date.strftime("%Y-%m-%d")
     hour_date = register_date.strftime("%H:%M:%S")
 
     items = []

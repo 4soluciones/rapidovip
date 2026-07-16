@@ -2511,15 +2511,86 @@ button.rv-btn-search {
 .rv-guide-card-head i { opacity: 0.75; font-size: 0.9rem; }
 
 .rv-guide-service-e .rv-guide-e-doc .rv-guide-card-head {
-    justify-content: space-between;
-    gap: 0.75rem;
-    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    align-items: center;
+}
+.rv-guide-card-head-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+}
+/* Series dentro de Documento y pago — 2 columnas como fechas */
+.rv-guide-service-e .rv-guide-e-doc .rv-guide-doc-groups {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem 0.45rem;
+    margin: 0 0 0.55rem;
+    width: 100%;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+.rv-guide-service-e .rv-guide-e-doc .rv-guide-doc-inline {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.25rem;
+    margin: 0;
+    min-width: 0;
+    width: 100%;
+}
+.rv-guide-service-e .rv-guide-e-doc .rv-guide-doc-inline .rv-guide-doc-field {
+    flex: 1 1 0;
+    min-width: 0;
+    margin: 0;
+}
+.rv-guide-service-e .rv-guide-e-doc .rv-guide-doc-field-serie {
+    flex: 1.05 1 0;
+}
+.rv-guide-service-e .rv-guide-e-doc .rv-guide-doc-field-corr {
+    flex: 0.95 1 0;
+}
+.rv-guide-service-e .rv-guide-e-doc .rv-guide-doc-field label {
+    display: block;
+    margin-bottom: 0.1rem;
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--rv-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rv-guide-service-e .rv-guide-e-doc .rv-guide-doc-inline .rv-form-control,
+.rv-guide-service-e .rv-guide-e-doc #id_correlative,
+.rv-guide-service-e .rv-guide-e-doc #id_order_correlative {
+    width: 100%;
+    min-width: 0;
+    min-height: 1.65rem;
+    padding: 0.12rem 0.2rem;
+    font-size: 0.72rem;
+    line-height: 1.2;
+}
+.rv-guide-service-e .rv-guide-e-doc .rv-guide-doc-voucher {
+    padding-left: 0;
+    border-left: none;
+    padding-top: 0;
+    border-top: none;
+}
+.rv-guide-service-e .rv-guide-e-doc .rv-guide-doc-locked {
+    background: #f1f5f9;
+    color: var(--rv-primary);
+    font-weight: 600;
+    cursor: not-allowed;
+    border-color: #dbe3ee;
 }
 .rv-guide-doc-inline {
     display: flex;
     align-items: flex-end;
     gap: 0.45rem;
-    margin-left: auto;
 }
 .rv-guide-doc-inline .rv-guide-doc-field {
     flex: 0 0 auto;
@@ -2549,7 +2620,6 @@ button.rv-btn-search {
     display: flex;
     align-items: flex-end;
     gap: 1rem;
-    margin-left: auto;
     flex-wrap: wrap;
 }
 .rv-guide-doc-groups .rv-guide-doc-inline {
@@ -2677,7 +2747,17 @@ button.rv-btn-search {
     grid-template-columns: 1fr 1fr;
     gap: 0.55rem 0.75rem;
 }
-.rv-guide-service-e .rv-guide-e-doc-fields > .rv-form-group {
+.rv-guide-service-e .rv-guide-e-doc-fields > .rv-form-group,
+.rv-guide-service-e .rv-guide-e-doc-fields > .rv-guide-e-dates {
+    min-width: 0;
+}
+.rv-guide-service-e .rv-guide-e-dates {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.55rem 0.75rem;
+}
+.rv-guide-service-e .rv-guide-e-dates > .rv-form-group {
     min-width: 0;
 }
 .rv-guide-service-e #e_user_display:disabled {
@@ -3802,10 +3882,26 @@ button.rv-btn-search {
         align-items: stretch;
     }
     .rv-guide-save-btn { width: 100%; justify-content: center; }
+    /* Series siempre en 2 columnas (como fechas) */
+    .rv-guide-service-e .rv-guide-e-doc .rv-guide-doc-groups {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.3rem 0.4rem;
+    }
+    .rv-guide-service-e .rv-guide-e-doc .rv-guide-doc-inline .rv-form-control,
+    .rv-guide-service-e .rv-guide-e-doc #id_correlative,
+    .rv-guide-service-e .rv-guide-e-doc #id_order_correlative {
+        font-size: 0.8rem;
+        min-height: 1.7rem;
+    }
     .rv-guide-service-e .rv-guide-e-doc-fields { grid-template-columns: 1fr; }
     .rv-guide-service-e .rv-guide-e-doc-fields > .rv-form-group {
         width: 100%;
         max-width: 100%;
+    }
+    /* Emisión + traslado siempre lado a lado */
+    .rv-guide-service-e .rv-guide-e-dates {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
     }
     .rv-guide-service-e input[type="date"].rv-form-control,
     .rv-guide-service-e input[type="time"].rv-form-control {
@@ -3902,6 +3998,15 @@ button.rv-btn-search {
     .rv-guide-service-e .rv-guide-e-summary-item {
         flex: 1 1 30%;
         min-width: 0;
+    }
+}
+
+@media (max-width: 420px) {
+    .rv-guide-service-e .rv-guide-e-dates label {
+        font-size: 0.72rem;
+    }
+    .rv-guide-service-e .rv-guide-e-dates .rv-e-input-icon {
+        font-size: 0.75rem;
     }
 }
 

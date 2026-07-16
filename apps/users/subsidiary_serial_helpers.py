@@ -40,8 +40,8 @@ def get_serial(subsidiary, company, service_type, document_type='T'):
 def get_next_correlative(subsidiary, company, service_type, document_type='T'):
     record = get_serial_record(subsidiary, company, service_type, document_type)
     if record:
-        return str(record.correlative + 1).zfill(6)
-    return '000001'
+        return str(record.correlative + 1).zfill(4)
+    return '0001'
 
 
 def commit_correlative(subsidiary, company, service_type, correlative_value, document_type='T'):

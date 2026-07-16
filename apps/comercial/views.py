@@ -768,7 +768,7 @@ def create_order(request):
             client_sender_addressee_obj.save()
 
         _type = str(data_orders["Type"])
-        traslate_date = str(data_orders["Date_traslate"])
+        transfer_date = str(data_orders["Date_transfer"])
         way_to_pay = str(data_orders["Way_to_pay"])
         igv = str(data_orders["Igv"])
         sub_total = str(data_orders["Sub_total"])
@@ -791,7 +791,7 @@ def create_order(request):
 
         # Guardando la cabecera Orden
         order_obj = Order(
-            traslate_date=traslate_date,
+            transfer_date=transfer_date,
             way_to_pay=way_to_pay,
             correlative_sale=new_correlative,
             serial=serial,
@@ -983,7 +983,7 @@ def create_order(request):
                 return response
 
 
-        open_cash = get_open_cash_for_subsidiary(subsidiary_obj, traslate_date)
+        open_cash = get_open_cash_for_subsidiary(subsidiary_obj, transfer_date)
         if not open_cash:
             data = {'error': "No existe una Apertura de Caja"}
             response = JsonResponse(data)
@@ -997,7 +997,7 @@ def create_order(request):
 
         if way_to_pay == 'C':
             save_cash_flow(cash_obj=cash_obj, order_obj=order_obj, user_obj=user_obj,
-                           cash_flow_transact_date=traslate_date,
+                           cash_flow_transact_date=transfer_date,
                            cash_flow_description=str(serial_description_cash),
                            cash_flow_type='E',
                            cash_flow_total=total)
@@ -1331,7 +1331,7 @@ def report_comodity_grid(request):
 
         order_set = Order.objects.filter(
             subsidiary=subsidiary_obj, type_order='E',
-            traslate_date__range=[start_date, end_date])
+            transfer_date__range=[start_date, end_date])
 
         if service_type != 'T':
             order_set = order_set.filter(service_type=service_type)
@@ -1373,7 +1373,7 @@ def report_comodity_grid(request):
                                              encomienda__office_destination__id=destiny,
                                              way_to_pay='D')
 
-        order_set = prefetch_orders_for_report(order_set).order_by('-traslate_date', '-id')
+        order_set = prefetch_orders_for_report(order_set).order_by('-transfer_date', '-id')
 
         if not order_set.exists():
             return JsonResponse({'error': 'No hay servicios registrados en el rango seleccionado.'},
@@ -1475,7 +1475,7 @@ def get_order_comodity_values(order_set=None):
         order_item = {
             'id': o.id,
             'company': o.company.short_name,
-            'traslate_date': o.traslate_date,
+            'transfer_date': o.transfer_date,
             'type_document': o.type_document,
             'type_document_label': o.get_type_document_display(),
             'service_type': o.service_type,
@@ -1637,7 +1637,7 @@ def cancel_commodity(request):
             #         cash_obj.delete()
 
         order_set = Order.objects.filter(
-            subsidiary=subsidiary_obj, type_order='E', traslate_date__range=[start_date, end_date])
+            subsidiary=subsidiary_obj, type_order='E', transfer_date__range=[start_date, end_date])
 
         if user_selected != 'T':
             user_select_obj = User.objects.get(id=int(user_selected))
@@ -1680,7 +1680,7 @@ def cancel_commodity(request):
                                              encomienda__office_destination__id=destiny,
                                              way_to_pay='D')
 
-        order_set = prefetch_orders_for_report(order_set).order_by('-traslate_date', '-id')
+        order_set = prefetch_orders_for_report(order_set).order_by('-transfer_date', '-id')
 
         order_dict = get_order_comodity_values(order_set=order_set)
 

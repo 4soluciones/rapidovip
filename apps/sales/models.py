@@ -123,7 +123,7 @@ class Order(models.Model):
     user = models.ForeignKey(User, verbose_name='Usuario', on_delete=models.CASCADE)
     truck = models.ForeignKey('comercial.Truck', on_delete=models.SET_NULL, null=True, blank=True)
     status = models.CharField('Estado', max_length=1, choices=STATUS_CHOICES, default='P')
-    traslate_date = models.DateField('Fecha de Traslado', null=True, blank=True)
+    transfer_date = models.DateField('Fecha de Traslado', null=True, blank=True)
     create_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     update_at = models.DateTimeField(auto_now=True)
     total = models.DecimalField('Total', max_digits=10, decimal_places=2, default=0)

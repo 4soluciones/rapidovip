@@ -600,7 +600,7 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
 
     current_time = datetime.now()
     _format_current_time = current_time.strftime("%d/%m/%Y %I:%M:%S %p")
-    _create_date = order_obj.traslate_date.strftime("%d/%m/%Y") + ' ' + str(_formattime)
+    _create_date = order_obj.transfer_date.strftime("%d/%m/%Y") + ' ' + str(_formattime)
     client_sender = str(_sender_qr)
     nro_document = str(_sender_document_qr)
     phone_sender = str(_sender_phone_qr)
@@ -1425,7 +1425,7 @@ def print_manifest_comidity(request, pk=None):  # Manifiesto de Encomiendas
     manifest_obj = Manifest.objects.get(id=pk)
     order_qs = Order.objects.filter(
         subsidiary=manifest_obj.subsidiary,
-        traslate_date=manifest_obj.created_at.date(),
+        transfer_date=manifest_obj.created_at.date(),
         type_order='E',
     ).prefetch_related('orderdetail_set', 'orderbill_set', 'orderaction_set')
     programming_obj = Programming.objects.filter(
@@ -1681,7 +1681,7 @@ def print_guide_comidity(request, pk=None):  # Guia Remision Transportista
     encomienda = getattr(order_obj, 'encomienda', None)
     programming_obj = Programming.objects.filter(
         truck=order_obj.truck,
-        departure_date=order_obj.traslate_date,
+        departure_date=order_obj.transfer_date,
     ).select_related('truck').first()
     date = datetime.now()
     _formatdate = date.strftime("%d/%m/%Y")
@@ -2329,7 +2329,7 @@ def print_report_commodity(request, start_date=None, end_date=None, user_selecte
     order_set = Order.objects.filter(
         subsidiary=subsidiary_obj,
         type_order='E',
-        traslate_date__range=[start_date, end_date],
+        transfer_date__range=[start_date, end_date],
     ).select_related('user', 'encomienda__office_destination')
 
     if user_select_obj is not None:
@@ -2387,7 +2387,7 @@ def print_report_commodity(request, start_date=None, end_date=None, user_selecte
         else:
             destiny_obj = '—'
 
-        _rows.append((o.traslate_date,
+        _rows.append((o.transfer_date,
                       o.serial,
                       str(o.correlative_sale),
                       _total_pay_counted,

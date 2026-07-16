@@ -766,7 +766,7 @@ def send_bill_passenger(order_id, is_demo=False):  # Factura boleto de viaje
     client_document = client_business_obj.clienttype_set.filter(document_type_id='06').first()
     register_date = utc_to_local(order_obj.create_at)
     formatdate = register_date.strftime("%d-%m-%Y")
-    date = order_obj.traslate_date.strftime("%d-%m-%Y")
+    date = order_obj.transfer_date.strftime("%d-%m-%Y")
     items = []
     index = 1
     base_amount = order_obj.total / decimal.Decimal(1.1800)

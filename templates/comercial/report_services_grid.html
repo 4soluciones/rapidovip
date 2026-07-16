@@ -39,7 +39,7 @@
             <tbody>
                 {% for o in order_set %}
                 <tr data-id="{{ o.id }}" class="{% if o.status == 'A' %}rv-report-row-cancelled{% elif o.type_commodity_destiny %}rv-report-row-exchange{% endif %}">
-                    <td class="rv-report-date">{{ o.traslate_date|date:"d/m/Y" }}</td>
+                    <td class="rv-report-date">{{ o.transfer_date|date:"d/m/Y" }}</td>
                     <td>
                         <span class="rv-report-svc rv-report-svc-{{ o.service_type|lower }}">{{ o.service_type_label|title }}</span>
                     </td>

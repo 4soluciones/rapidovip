@@ -169,14 +169,20 @@ var GuideServices = (function ($) {
             $('#e_address_delivery').prop('readonly', ro);
             if (ro) $('#e_address_delivery').val('');
         });
-        $('#e_issue_date').on('change', function () {
-            $('#id_traslate_date').val($(this).val() || '');
+        $('#e_transfer_date').on('change', function () {
+            $('#id_transfer_date').val($(this).val() || '');
         });
-        if ($('#e_issue_date').val()) {
-            $('#id_traslate_date').val($('#e_issue_date').val());
+        if ($('#e_transfer_date').val()) {
+            $('#id_transfer_date').val($('#e_transfer_date').val());
+        } else if ($('#e_issue_date').val()) {
+            $('#e_transfer_date').val($('#e_issue_date').val());
+            $('#id_transfer_date').val($('#e_issue_date').val());
         }
         if (!$('#e_issue_date').data('default-date')) {
             $('#e_issue_date').data('default-date', $('#e_issue_date').val());
+        }
+        if (!$('#e_transfer_date').data('default-date')) {
+            $('#e_transfer_date').data('default-date', $('#e_transfer_date').val() || $('#e_issue_date').val());
         }
 
         function toggleSenderAddress() {
@@ -317,8 +323,10 @@ var GuideServices = (function ($) {
         $('#e_way_to_pay').val($('#e_way_to_pay option:first').val()).trigger('change');
         $('#e_code').val('');
         var defaultIssueDate = $('#e_issue_date').data('default-date') || $('#e_issue_date').attr('value') || '';
+        var defaultTransferDate = $('#e_transfer_date').data('default-date') || defaultIssueDate;
         $('#e_issue_date').val(defaultIssueDate);
-        $('#id_traslate_date').val(defaultIssueDate);
+        $('#e_transfer_date').val(defaultTransferDate);
+        $('#id_transfer_date').val(defaultTransferDate);
         var originDefault = $('#e_subsidiary_origin').data('default');
         if (originDefault) {
             $('#e_subsidiary_origin').val(String(originDefault));
@@ -543,7 +551,7 @@ var GuideServices = (function ($) {
 
     function bindMudanza() {
         $('#m_service_date').on('change', function () {
-            $('#id_traslate_date').val($(this).val() || '');
+            $('#id_transfer_date').val($(this).val() || '');
         });
         $('#m_fare_amount').on('input', function () {
             $('#m_fare_display').text((parseFloat($(this).val()) || 0).toFixed(2));
@@ -653,6 +661,9 @@ var GuideServices = (function ($) {
         if ($btn.length && $btn.prop('disabled')) { toastr.warning(MSG_CASH_CLOSED); return false; }
 
         if (svc === 'E') {
+            if (!$('#e_transfer_date').val()) {
+                toastr.warning('Ingrese la fecha de traslado'); return false;
+            }
             if ($('#e_subsidiary_origin').val() === '0' || $('#e_subsidiary_destiny').val() === '0') {
                 toastr.warning('Seleccione origen y destino'); return false;
             }
@@ -690,7 +701,7 @@ var GuideServices = (function ($) {
             Order_Serial: $('#id_order_serie').val(),
             Order_Correlative: $('#id_order_correlative').val(),
             User: $('#id_user').val(),
-            Date_traslate: $('#id_traslate_date').val(),
+            Date_transfer: $('#id_transfer_date').val() || $('#e_transfer_date').val(),
             Cash: $('#id_cash').val(),
             Demo: 0,
             Employee: 0,
@@ -707,7 +718,7 @@ var GuideServices = (function ($) {
             payload.Way_to_pay = $('#e_way_to_pay').val();
             payload.Type_Guide = $('#e_type_guide').val();
             payload.Address_Delivery = $('#e_address_delivery').val();
-            payload.Arrival_Time = $('#e_arrival_time').val();
+            payload.Arrival_Time = '';
             payload.Code = ($('#e_code').val() || '').trim() || '0000';
             payload.Client_Sender_nro_document = $('#e_nro_document_sender').val();
             payload.Client_Sender = $('#e_sender').val();

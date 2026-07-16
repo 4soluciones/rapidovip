@@ -178,9 +178,9 @@ def assign_order_to_programming(order_obj, programming_obj, user):
 
     if order_obj.truck_id != programming_obj.truck_id:
         order_obj.truck = programming_obj.truck
-    order_obj.traslate_date = programming_obj.departure_date
+    order_obj.transfer_date = programming_obj.departure_date
     order_obj.status = 'S'
-    order_obj.save(update_fields=['truck', 'traslate_date', 'status', 'update_at'])
+    order_obj.save(update_fields=['truck', 'transfer_date', 'status', 'update_at'])
     return guide
 
 
