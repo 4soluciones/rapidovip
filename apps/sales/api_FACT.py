@@ -1155,28 +1155,30 @@ def send_guide_transportation_fact(guide_id):
     )
     items_graphql = f"[{items_graphql}]"
 
+    # Por el momento no se envían documentos relacionados (factura/boleta).
+    # Descomentar el bloque siguiente cuando 4FACT requiera relatedDocuments en GRT.
     related_documents_graphql = ""
-    try:
-        order_bill = order_obj.orderbill
-    except ObjectDoesNotExist:
-        order_bill = None
-    if order_bill and order_bill.status == "E" and order_bill.n_receipt:
-        bill_type = str(order_bill.type or "")
-        if bill_type in ("1", "F", "01"):
-            tipo_doc = "01"
-        elif bill_type in ("2", "3", "B", "03"):
-            tipo_doc = "03"
-        else:
-            tipo_doc = "01" if order_obj.type_document == "F" else "03"
-        bill_date = order_bill.created_at or order_obj.create_at
-        bill_fecha = utc_to_local(bill_date).strftime("%Y-%m-%d") if bill_date else formatdate
-        related_documents_graphql = f""",
-            relatedDocuments: {{
-                tipoDocumentoCodigo: "{tipo_doc}",
-                serie: "{_gql_escape(order_bill.serial or order_obj.serial or '')}",
-                numero: "{int(order_bill.n_receipt)}",
-                fechaEmision: "{bill_fecha}"
-            }}"""
+    # try:
+    #     order_bill = order_obj.orderbill
+    # except ObjectDoesNotExist:
+    #     order_bill = None
+    # if order_bill and order_bill.status == "E" and order_bill.n_receipt:
+    #     bill_type = str(order_bill.type or "")
+    #     if bill_type in ("1", "F", "01"):
+    #         tipo_doc = "01"
+    #     elif bill_type in ("2", "3", "B", "03"):
+    #         tipo_doc = "03"
+    #     else:
+    #         tipo_doc = "01" if order_obj.type_document == "F" else "03"
+    #     bill_date = order_bill.created_at or order_obj.create_at
+    #     bill_fecha = utc_to_local(bill_date).strftime("%Y-%m-%d") if bill_date else formatdate
+    #     related_documents_graphql = f""",
+    #         relatedDocuments: {{
+    #             tipoDocumentoCodigo: "{tipo_doc}",
+    #             serie: "{_gql_escape(order_bill.serial or order_obj.serial or '')}",
+    #             numero: "{int(order_bill.n_receipt)}",
+    #             fechaEmision: "{bill_fecha}"
+    #         }}"""
 
     observation = _gql_escape(guide_obj.observation or "")
     guide_origin_address = _gql_escape(origin_full or origin_address)
