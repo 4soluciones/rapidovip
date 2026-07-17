@@ -24,7 +24,7 @@
             <thead>
                 <tr>
                     <th>Fecha</th>
-                    <th>Servicio</th>
+                    <th>Orden Servicio</th>
                     <th>Comprobante</th>
                     <th>Remitente</th>
                     <th>Destinatario</th>
@@ -39,13 +39,18 @@
             <tbody>
                 {% for o in order_set %}
                 <tr data-id="{{ o.id }}" class="{% if o.status == 'A' %}rv-report-row-cancelled{% elif o.type_commodity_destiny %}rv-report-row-exchange{% endif %}">
-                    <td class="rv-report-date">{{ o.transfer_date|date:"d/m/Y" }}</td>
-                    <td>
-                        <span class="rv-report-svc rv-report-svc-{{ o.service_type|lower }}">{{ o.service_type_label|title }}</span>
+                    <td class="rv-report-date">
+                        <span>{{ o.create_date|date:"d/m/Y" }}</span>
+                        <small class="rv-report-date-transfer">Traslado: {{ o.transfer_date|date:"d/m/Y"|default:"—" }}</small>
                     </td>
                     <td>
-                        <span class="rv-report-doc">{{ o.serial }}-{{ o.correlative_sale }}</span>
-                        <small class="rv-report-doc-type">{{ o.type_document_label }}</small>
+                        <span class="rv-report-doc">{{ o.order_service_number }}</span>
+                    </td>
+                    <td>
+                        {% if o.type_document == 'F' or o.type_document == 'B' %}
+                            <span class="rv-report-doc">{{ o.serial }}-{{ o.correlative_sale }}</span>
+                            <small class="rv-report-doc-type">{{ o.type_document_label }}</small>
+                        {% else %}—{% endif %}
                     </td>
                     <td>{{ o.item_action_sender.0.client_names|default:"—"|upper }}</td>
                     <td>
@@ -80,7 +85,7 @@
                     </td>
                     <td class="rv-report-actions noExl">
                         {% if o.type_document == 'F' or o.type_document == 'B' %}
-                            <a class="rv-report-action-btn" href="{% url 'comercial:print_bill_order_commodity' o.id %}" target="_blank" title="Imprimir">
+                            <a class="rv-report-action-btn" href="{% url 'comercial:print_bill_order_commodity' o.id %}" target="_blank" title="Imprimir comprobante">
                                 <i class="fas fa-print"></i>
                             </a>
                         {% else %}
@@ -88,6 +93,9 @@
                                 <i class="fas fa-print"></i>
                             </a>
                         {% endif %}
+                        <a class="rv-report-action-btn" href="{% url 'comercial:print_ticket_order_commodity' o.id %}?download=1" download title="Descargar orden de servicio">
+                            <i class="fas fa-download"></i>
+                        </a>
                         {% if user_log_perm and o.status != 'A' %}
                             <button type="button" class="rv-report-action-btn rv-report-action-danger btn-cancel-service" data-id="{{ o.id }}" title="Anular">
                                 <i class="fas fa-ban"></i>
@@ -114,8 +122,8 @@
         if ($.fn.table2excel) {
             $('#report-services-table').table2excel({
                 exclude: '.noExl',
-                name: 'Reporte de servicios',
-                filename: 'reporte_servicios',
+                name: 'Reporte de encomiendas',
+                filename: 'reporte_encomiendas',
                 fileext: '.xls',
                 preserveColors: true
             });
@@ -123,24 +131,31 @@
     });
 
     $(document).off('click.reportCancel').on('click.reportCancel', '.btn-cancel-service', function () {
-        var orderId = $(this).data('id');
-        var reason = prompt('Motivo de anulación:');
-        if (!reason) return;
-        var $form = $('#report-search-form');
-        $.get('{% url "comercial:cancel_commodity" %}', {
-            pk: orderId,
-            reason: reason,
-            'start-date': $form.find('[name=start-date]').val(),
-            'end-date': $form.find('[name=end-date]').val(),
-            user: $form.find('[name=user]').val(),
-            way_to_pay: $form.find('[name=way_to_pay]').val(),
-            destiny: $form.find('[name=destiny]').val()
-        }).done(function (r) {
-            toastr.success(r.message || 'Servicio anulado correctamente.');
-            $('#report-results').html(r.grid);
-        }).fail(function (xhr) {
-            toastr.error(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error al anular.');
-        });
+        var $btn = $(this);
+        if ($btn.prop('disabled')) return;
+
+        var reason = (prompt('Motivo de anulación:') || '').trim();
+        if (!reason) {
+            toastr.warning('Debe indicar el motivo de anulación.');
+            return;
+        }
+        if (!confirm('¿Confirma anular esta encomienda? Esta acción no se puede deshacer.')) return;
+
+        $btn.prop('disabled', true).find('i').removeClass('fa-ban').addClass('fa-spinner fa-spin');
+
+        // El serialize del formulario incluye el token CSRF y todos los filtros vigentes
+        var payload = $('#report-search-form').serialize() +
+            '&' + $.param({ pk: $btn.data('id'), reason: reason });
+
+        $.post('{% url "comercial:cancel_commodity" %}', payload)
+            .done(function (r) {
+                toastr.success(r.message || 'Encomienda anulada correctamente.');
+                $('#report-results').html(r.grid);
+            })
+            .fail(function (xhr) {
+                toastr.error(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error al anular.');
+                $btn.prop('disabled', false).find('i').removeClass('fa-spinner fa-spin').addClass('fa-ban');
+            });
     });
 })();
 </script>

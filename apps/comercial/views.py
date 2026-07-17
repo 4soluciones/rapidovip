@@ -8,11 +8,13 @@ from http import HTTPStatus
 from django.contrib.auth.models import User
 from django.core import serializers
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from django.db.models import Prefetch
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.template import loader
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import View, TemplateView, UpdateView, CreateView
 
@@ -63,7 +65,14 @@ from apps.sales.views_SUNAT import (
     query_api_facturacioncloud,
     query_apis_net_dni_ruc,
 )
-from apps.users.models import DocumentType, Employee, Nationality, Subsidiary, UserSubsidiary
+from apps.users.models import (
+    DocumentType,
+    Employee,
+    Nationality,
+    Subsidiary,
+    SubsidiarySerial,
+    UserSubsidiary,
+)
 from apps.users.subsidiary_serial_helpers import get_serial
 from apps.users.roles import user_is_administrator
 from apps.users.views import CompanyUser, get_subsidiary_by_user
@@ -1296,6 +1305,23 @@ def get_programming_query_list(request):
         }, status=HTTPStatus.OK)
 
 
+def _filter_report_orders(subsidiary_obj, start_date, end_date,
+                          service_type='T', user_selected='T', way_to_pay='T', destiny='T'):
+    """Encomiendas del reporte según filtros; 'T' significa 'todos'."""
+    order_set = Order.objects.filter(
+        subsidiary=subsidiary_obj, type_order='E',
+        transfer_date__range=[start_date, end_date])
+    if service_type and service_type != 'T':
+        order_set = order_set.filter(service_type=service_type)
+    if user_selected and user_selected != 'T':
+        order_set = order_set.filter(user__id=int(user_selected))
+    if way_to_pay and way_to_pay != 'T':
+        order_set = order_set.filter(way_to_pay=way_to_pay)
+    if destiny and destiny != 'T':
+        order_set = order_set.filter(encomienda__office_destination__id=destiny)
+    return prefetch_orders_for_report(order_set).order_by('-transfer_date', '-id')
+
+
 def report_comodity_grid(request):
     if request.method == 'GET':
         user_id = request.user.id
@@ -1327,53 +1353,12 @@ def report_comodity_grid(request):
         user_id = request.user.id
         user_obj = User.objects.get(id=user_id)
         subsidiary_obj = get_subsidiary_by_user(user_obj)
-        user_select_obj = None
 
-        order_set = Order.objects.filter(
-            subsidiary=subsidiary_obj, type_order='E',
-            transfer_date__range=[start_date, end_date])
-
-        if service_type != 'T':
-            order_set = order_set.filter(service_type=service_type)
-
-        if user_selected != 'T':
-            user_select_obj = User.objects.get(id=int(user_selected))
-
-        if destiny == 'T' and way_to_pay == 'T':
-            if user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj)
-        if destiny == 'T' and way_to_pay == 'C':
-            if user_selected == 'T':
-                order_set = order_set.filter(way_to_pay='C')
-            elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj, way_to_pay='C')
-        if destiny == 'T' and way_to_pay == 'D':
-            if user_selected == 'T':
-                order_set = order_set.filter(way_to_pay='D')
-            elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj, way_to_pay='D')
-
-        if destiny != 'T' and way_to_pay == 'T':
-            if user_selected == 'T':
-                order_set = order_set.filter(encomienda__office_destination__id=destiny)
-            elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj,
-                                             encomienda__office_destination__id=destiny)
-        if destiny != 'T' and way_to_pay == 'C':
-            if user_selected == 'T':
-                order_set = order_set.filter(encomienda__office_destination__id=destiny, way_to_pay='C')
-            elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj,
-                                             encomienda__office_destination__id=destiny, way_to_pay='C')
-        if destiny != 'T' and way_to_pay == 'D':
-            if user_selected == 'T':
-                order_set = order_set.filter(encomienda__office_destination__id=destiny, way_to_pay='D')
-            elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj,
-                                             encomienda__office_destination__id=destiny,
-                                             way_to_pay='D')
-
-        order_set = prefetch_orders_for_report(order_set).order_by('-transfer_date', '-id')
+        order_set = _filter_report_orders(
+            subsidiary_obj, start_date, end_date,
+            service_type=service_type, user_selected=user_selected,
+            way_to_pay=way_to_pay, destiny=destiny,
+        )
 
         if not order_set.exists():
             return JsonResponse({'error': 'No hay servicios registrados en el rango seleccionado.'},
@@ -1393,6 +1378,401 @@ def report_comodity_grid(request):
             'user_log_perm': user_is_administrator(user_obj),
         }
         return JsonResponse({'grid': tpl.render(context, request)}, status=HTTPStatus.OK)
+
+
+def _destination_recipient(order_obj):
+    """Destinatario principal usado para la búsqueda y el comprobante."""
+    return order_obj.orderaction_set.filter(type='D', client__isnull=False).select_related(
+        'client',
+    ).prefetch_related(
+        'client__clienttype_set__document_type',
+        'client__clientaddress_set',
+    ).first()
+
+
+def _reception_orders(subsidiary_obj, company_obj, start_date=None, end_date=None, dni=''):
+    orders = Order.objects.filter(
+        type_order='E',
+        company=company_obj,
+        encomienda__office_destination=subsidiary_obj,
+    )
+    if dni:
+        orders = orders.filter(
+            orderaction__type='D',
+            orderaction__client__clienttype__document_number=dni,
+        )
+    elif start_date and end_date:
+        orders = orders.filter(transfer_date__range=[start_date, end_date])
+
+    return prefetch_orders_for_report(
+        orders.select_related('orderbill').distinct()
+    ).order_by('-transfer_date', '-id')
+
+
+def _reception_order_values(order_set):
+    rows = get_order_comodity_values(order_set)
+    orders_by_id = {order.id: order for order in order_set}
+    for row in rows:
+        order_obj = orders_by_id[row['id']]
+        recipient_action = _destination_recipient(order_obj)
+        recipient = recipient_action.client if recipient_action else None
+        client_type = recipient.clienttype_set.select_related('document_type').first() if recipient else None
+        order_bill = getattr(order_obj, 'orderbill', None)
+        row.update({
+            'recipient_document': client_type.document_number if client_type else '',
+            'recipient_document_type': client_type.document_type_id if client_type else '',
+            'recipient_phone': recipient.phone if recipient else '',
+            'status_transport_code': order_obj.encomienda.status_transport,
+            'status_transport_label': order_obj.encomienda.get_status_transport_display(),
+            'can_collect': (
+                order_obj.status != 'A'
+                and order_obj.way_to_pay == 'D'
+                and order_obj.type_document == 'T'
+                and order_bill is None
+            ),
+            'bill_pdf_available': order_bill is not None and order_bill.status == 'E',
+        })
+    return rows
+
+
+def reception_report(request):
+    """Reporte de encomiendas cuyo destino es la sede activa del usuario."""
+    user_obj = request.user
+    subsidiary_obj = get_subsidiary_by_user(user_obj)
+    company_obj = user_obj.companyuser.company_rotation
+    date_now = timezone.localdate()
+
+    if request.method == 'GET':
+        return render(request, 'comercial/reception_report.html', {
+            'date_now': date_now.strftime('%Y-%m-%d'),
+            'month_start': date_now.replace(day=1).strftime('%Y-%m-%d'),
+            'subsidiary': subsidiary_obj,
+        })
+
+    start_date_raw = (request.POST.get('start-date') or '').strip()
+    end_date_raw = (request.POST.get('end-date') or '').strip()
+    dni = ''.join(ch for ch in (request.POST.get('dni') or '').strip() if ch.isdigit())
+
+    if dni and len(dni) != 8:
+        return JsonResponse(
+            {'error': 'El DNI del destinatario debe contener exactamente 8 dígitos.'},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+
+    start_date = end_date = None
+    if not dni:
+        try:
+            start_date = date.fromisoformat(start_date_raw)
+            end_date = date.fromisoformat(end_date_raw)
+        except ValueError:
+            return JsonResponse(
+                {'error': 'Seleccione un rango de fechas válido o ingrese el DNI del destinatario.'},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+        if start_date > end_date:
+            return JsonResponse(
+                {'error': 'La fecha inicial no puede ser posterior a la fecha final.'},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+
+    order_set = list(_reception_orders(subsidiary_obj, company_obj, start_date, end_date, dni))
+    rows = _reception_order_values(order_set)
+    grid = loader.get_template('comercial/reception_report_grid.html').render({
+        'order_set': rows,
+        'count': len(rows),
+        'subsidiary': subsidiary_obj,
+        'dni': dni,
+        'f1': start_date,
+        'f2': end_date,
+    }, request)
+    return JsonResponse({'grid': grid, 'count': len(rows)}, status=HTTPStatus.OK)
+
+
+def _order_collect_amount(order_obj):
+    """Importe a cobrar: total de detalles o total de la orden, siempre a 2 decimales."""
+    amount = order_obj.sum_total_details()
+    if amount is None or amount == 0:
+        amount = order_obj.total or decimal.Decimal('0')
+    return decimal.Decimal(amount).quantize(decimal.Decimal('0.01'), rounding=decimal.ROUND_HALF_EVEN)
+
+
+def _resolve_billing_client(*, names, document_type_code, document_number, address=''):
+    """Crea o actualiza el cliente de facturación con los datos editados en el modal."""
+    names = (names or '').strip().upper()
+    document_type_code = (document_type_code or '').strip()
+    document_number = (document_number or '').strip().upper()
+    address = (address or '').strip().upper()
+
+    if not names:
+        raise ValueError('Ingrese el nombre o razón social del cliente.')
+    if document_type_code not in ('01', '04', '06', '07'):
+        raise ValueError('Seleccione un tipo de documento válido.')
+    if not document_number:
+        raise ValueError('Ingrese el número de documento del cliente.')
+    if document_type_code == '01' and len(document_number) != 8:
+        raise ValueError('El DNI debe contener exactamente 8 dígitos.')
+    if document_type_code == '06' and len(document_number) != 11:
+        raise ValueError('El RUC debe contener exactamente 11 dígitos.')
+
+    document_type = get_document_type(document_type_code)
+    client_type = ClientType.objects.filter(document_number=document_number).select_related('client').first()
+    if client_type:
+        client_obj = client_type.client
+        client_obj.names = names
+        client_obj.save(update_fields=['names'])
+        if client_type.document_type_id != document_type.id:
+            client_type.document_type = document_type
+            client_type.save(update_fields=['document_type'])
+    else:
+        nationality_obj = Nationality.objects.filter(id='9589').first() if document_type_code == '01' else None
+        client_obj = Client(names=names, nationality=nationality_obj)
+        client_obj.save()
+        ClientType.objects.create(
+            client=client_obj,
+            document_number=document_number,
+            document_type=document_type,
+        )
+
+    if address:
+        address_obj = client_obj.clientaddress_set.first()
+        if address_obj:
+            address_obj.address = address
+            address_obj.save(update_fields=['address'])
+        else:
+            ClientAddress.objects.create(client=client_obj, address=address)
+
+    return client_obj
+
+
+def reception_billing_data(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Método no permitido.'}, status=HTTPStatus.METHOD_NOT_ALLOWED)
+
+    subsidiary_obj = get_subsidiary_by_user(request.user)
+    company_obj = request.user.companyuser.company_rotation
+    try:
+        order_obj = Order.objects.select_related(
+            'company', 'encomienda__office_destination',
+        ).get(
+            pk=int(request.GET.get('order_id', 0)),
+            type_order='E',
+            company=company_obj,
+            encomienda__office_destination=subsidiary_obj,
+        )
+    except (Order.DoesNotExist, TypeError, ValueError):
+        return JsonResponse(
+            {'error': 'La encomienda no existe o no pertenece a la sede de destino del usuario.'},
+            status=HTTPStatus.NOT_FOUND,
+        )
+
+    if (
+        order_obj.status == 'A'
+        or order_obj.way_to_pay != 'D'
+        or order_obj.type_document != 'T'
+        or OrderBill.objects.filter(order=order_obj).exists()
+    ):
+        return JsonResponse(
+            {'error': 'La encomienda ya fue cobrada o no está pendiente de pago en destino.'},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+
+    recipient_action = _destination_recipient(order_obj)
+    recipient = recipient_action.client if recipient_action else None
+    client_type = recipient.clienttype_set.select_related('document_type').first() if recipient else None
+    address_obj = recipient.clientaddress_set.first() if recipient else None
+    serials = {
+        row.document_type: row.serial
+        for row in SubsidiarySerial.objects.filter(
+            subsidiary=subsidiary_obj,
+            company=company_obj,
+            service_type='E',
+            document_type__in=['B', 'F'],
+            active=True,
+        )
+    }
+    cash_obj = get_open_cash_for_subsidiary(subsidiary_obj, timezone.localdate())
+    amount = _order_collect_amount(order_obj)
+
+    return JsonResponse({
+        'order_id': order_obj.id,
+        'order_number': _order_service_label(order_obj),
+        'amount': f'{amount:.2f}',
+        'client': {
+            'names': (recipient.names if recipient else '') or '',
+            'document_type': client_type.document_type_id if client_type else '01',
+            'document_number': client_type.document_number if client_type else '',
+            'address': (address_obj.address if address_obj else '') or '',
+        },
+        'document_types': [
+            {'id': '01', 'label': 'DNI'},
+            {'id': '06', 'label': 'RUC'},
+            {'id': '04', 'label': 'C. Extranjería'},
+            {'id': '07', 'label': 'Pasaporte'},
+        ],
+        'serials': {
+            'B': serials.get('B', ''),
+            'F': serials.get('F', ''),
+        },
+        'cash': {
+            'is_open': bool(cash_obj),
+            'name': cash_obj.name if cash_obj else '',
+            'message': (
+                f'La caja “{cash_obj.name}” está abierta y validada para hoy. '
+                'El cobro se registrará automáticamente como una entrada.'
+                if cash_obj else
+                'No existe una caja abierta y validada para hoy. Apertúrela en Finanzas → Caja y gastos antes de cobrar.'
+            ),
+        },
+    }, status=HTTPStatus.OK)
+
+
+def collect_destination_payment(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido.'}, status=HTTPStatus.METHOD_NOT_ALLOWED)
+
+    document_type = (request.POST.get('document_type') or '').strip().upper()
+    if document_type not in ('B', 'F'):
+        return JsonResponse(
+            {'error': 'Seleccione boleta o factura.'},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+
+    subsidiary_obj = get_subsidiary_by_user(request.user)
+    company_obj = request.user.companyuser.company_rotation
+    today = timezone.localdate()
+
+    try:
+        with transaction.atomic():
+            order_obj = Order.objects.select_for_update().get(
+                pk=int(request.POST.get('order_id', 0)),
+                type_order='E',
+                company=company_obj,
+                encomienda__office_destination=subsidiary_obj,
+            )
+
+            if order_obj.status == 'A':
+                raise ValueError('No se puede cobrar una encomienda anulada.')
+            if (
+                order_obj.way_to_pay != 'D'
+                or order_obj.type_document != 'T'
+                or OrderBill.objects.filter(order=order_obj).exists()
+            ):
+                raise ValueError('La encomienda ya fue cobrada o no está pendiente de pago en destino.')
+
+            cash_obj = get_open_cash_for_subsidiary(subsidiary_obj, today)
+            if not cash_obj:
+                raise ValueError(
+                    'No existe una caja abierta y validada para hoy. '
+                    'Apertúrela en Finanzas → Caja y gastos antes de confirmar el cobro.'
+                )
+
+            client_names = (request.POST.get('client_names') or '').strip()
+            client_document_type = (request.POST.get('client_document_type') or '').strip()
+            client_document_number = (request.POST.get('client_document_number') or '').strip()
+            client_address = (request.POST.get('client_address') or '').strip()
+
+            billing_client = _resolve_billing_client(
+                names=client_names,
+                document_type_code=client_document_type,
+                document_number=client_document_number,
+                address=client_address,
+            )
+            if document_type == 'F':
+                if client_document_type != '06' or len(client_document_number) != 11:
+                    raise ValueError('Para emitir factura, el cliente debe tener un RUC válido.')
+                if not client_address:
+                    raise ValueError('Para emitir factura, indique la dirección del cliente.')
+
+            serial_record = SubsidiarySerial.objects.select_for_update().filter(
+                subsidiary=subsidiary_obj,
+                company=company_obj,
+                service_type='E',
+                document_type=document_type,
+                active=True,
+            ).first()
+            if not serial_record or not serial_record.serial:
+                raise ValueError(
+                    f'La sede {subsidiary_obj.name} no tiene una serie activa de '
+                    f'{"boleta" if document_type == "B" else "factura"}.'
+                )
+
+            correlative = str(serial_record.correlative + 1).zfill(4)
+            api_kwargs = {
+                'billing_client': billing_client,
+                'serial_override': serial_record.serial,
+                'correlative_override': correlative,
+                'emission_date': today,
+            }
+            if document_type == 'F':
+                result = send_bill_commodity_fact(request, order_obj.id, **api_kwargs)
+            else:
+                result = send_receipt_commodity_fact(request, order_obj.id, **api_kwargs)
+
+            if not result.get('success'):
+                details = result.get('errors') or result.get('error') or result.get('message')
+                raise RuntimeError(str(details or '4Fact rechazó la emisión del comprobante.'))
+
+            order_obj.type_document = document_type
+            order_obj.serial = serial_record.serial
+            order_obj.correlative_sale = correlative
+            order_obj.way_to_pay = 'C'
+            order_obj.client = billing_client
+            order_obj.save(update_fields=[
+                'type_document', 'serial', 'correlative_sale', 'way_to_pay', 'client', 'update_at',
+            ])
+
+            serial_record.correlative = int(correlative)
+            serial_record.save(update_fields=['correlative'])
+
+            OrderBill.objects.create(
+                order=order_obj,
+                serial=serial_record.serial,
+                type=result.get('tipo_de_comprobante') or ('1' if document_type == 'F' else '2'),
+                user=request.user,
+                n_receipt=int(correlative),
+                status='E',
+                created_at=timezone.now(),
+                invoice_id=result.get('operationId') or 0,
+                company=company_obj,
+            )
+
+            total = _order_collect_amount(order_obj)
+            save_cash_flow(
+                cash_obj=cash_obj,
+                order_obj=order_obj,
+                user_obj=request.user,
+                cash_flow_transact_date=today,
+                cash_flow_description=(
+                    f'COBRO EN DESTINO OS {_order_service_label(order_obj)} '
+                    f'- {serial_record.serial}-{correlative}'
+                )[:100],
+                cash_flow_type='E',
+                cash_flow_total=total,
+                document_type_attached=document_type,
+            )
+
+    except Order.DoesNotExist:
+        return JsonResponse(
+            {'error': 'La encomienda no existe o no pertenece a su sede.'},
+            status=HTTPStatus.NOT_FOUND,
+        )
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=HTTPStatus.BAD_REQUEST)
+    except RuntimeError as exc:
+        return JsonResponse(
+            {'error': f'No se pudo emitir el comprobante en 4Fact: {exc}'},
+            status=HTTPStatus.BAD_GATEWAY,
+        )
+
+    return JsonResponse({
+        'message': (
+            f'Cobro registrado correctamente en la caja “{cash_obj.name}”. '
+            f'El comprobante {serial_record.serial}-{correlative} fue emitido satisfactoriamente.'
+        ),
+        'order_id': order_obj.id,
+        'document_number': f'{serial_record.serial}-{correlative}',
+        'pdf_url': reverse('comercial:print_bill_order_commodity', kwargs={'pk': order_obj.id}),
+    }, status=HTTPStatus.OK)
 
 
 def check_commodity_destiny(o):
@@ -1476,6 +1856,8 @@ def get_order_comodity_values(order_set=None):
             'id': o.id,
             'company': o.company.short_name,
             'transfer_date': o.transfer_date,
+            'create_date': o.create_at,
+            'order_service_number': _order_service_label(o),
             'type_document': o.type_document,
             'type_document_label': o.get_type_document_display(),
             'service_type': o.service_type,
@@ -1573,133 +1955,76 @@ def get_truck(request):
 
 
 def cancel_commodity(request):
-    if request.method == 'GET':
-        start_date = str(request.GET.get('start-date'))
-        end_date = str(request.GET.get('end-date'))
-        order_id = int(request.GET.get('pk', ''))
-        user_selected = str(request.GET.get('user'))
-        way_to_pay = str(request.GET.get('way_to_pay'))
-        destiny = request.GET.get('destiny')
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Error de peticion.'}, status=HTTPStatus.BAD_REQUEST)
 
-        order_obj = Order.objects.get(pk=order_id)
+    user_obj = request.user
+    if not user_is_administrator(user_obj):
+        return JsonResponse({'error': 'No tiene permisos para anular encomiendas.'},
+                            status=HTTPStatus.FORBIDDEN)
 
-        type_order = order_obj.type_order
-        type_document = order_obj.type_document
+    reason = str(request.POST.get('reason', '')).strip()
+    if not reason:
+        return JsonResponse({'error': 'Debe indicar el motivo de anulación.'},
+                            status=HTTPStatus.BAD_REQUEST)
 
-        user_id = request.user.id
-        user_obj = User.objects.get(id=user_id)
-        subsidiary_obj = get_subsidiary_by_user(user_obj)
+    try:
+        order_obj = Order.objects.get(pk=int(request.POST.get('pk', 0)), type_order='E')
+    except (Order.DoesNotExist, ValueError):
+        return JsonResponse({'error': 'La encomienda no existe.'}, status=HTTPStatus.NOT_FOUND)
 
-        user_select_obj = None
+    if order_obj.status == 'A':
+        return JsonResponse({'error': 'La encomienda ya está anulada.'},
+                            status=HTTPStatus.BAD_REQUEST)
 
-        message = ''
+    message = 'Encomienda anulada correctamente.'
 
-        if type_order == 'E':
-            _motive = request.GET.get('reason')
-            if type_document == 'T':
-                order_obj.status = 'A'
-                order_obj.cancel_motive = _motive
-                order_obj.save()
-                cash_obj = CashFlow.objects.filter(order=order_obj)
-                cash_obj.delete()
+    # Boleta/factura emitida electrónicamente: primero se anula en SUNAT
+    if order_obj.type_document in ('B', 'F') and OrderBill.objects.filter(order=order_obj.id).exists():
+        r = annul_invoice(order_obj.id)
+        if not r.get('success'):
+            return JsonResponse(
+                {'error': 'Error de anulación en SUNAT. Actualice o vuelva a intentarlo.'},
+                status=HTTPStatus.INTERNAL_SERVER_ERROR)
+        message = 'Encomienda anulada correctamente en SUNAT.'
 
-            elif type_document == 'F' or type_document == 'B':
-                order_bill_set = OrderBill.objects.filter(order=order_id)
-                if order_bill_set.exists():
-                    # r = send_cancel_bill_nubefact(order_id, _motive)
-                    # enlace = r.get('enlace')
-                    r = annul_invoice(order_id)
-                    enlace = r.get('success')
-                    if enlace:
-                        order_obj.status = 'A'
-                        order_obj.save()
-                        cash_obj = CashFlow.objects.filter(order=order_obj)
-                        cash_obj.delete()
-                    else:
-                        data = {'error': "Error de anulación en sunat, "
-                                         "Actualice o vuelva a intentarlo"}
-                        response = JsonResponse(data)
-                        response.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
-                        return response
+    order_obj.status = 'A'
+    order_obj.cancel_motive = reason
+    order_obj.save()
+    CashFlow.objects.filter(order=order_obj).delete()
 
-            # elif type_document == 'B':
-            #     order_bill_set = OrderBill.objects.filter(order=order_id)
-            #     if order_bill_set.exists():
-            #         r = send_cancel_bill_nubefact(order_id, _motive)
-            #         enlace = r.get('enlace')
-            #         if enlace:
-            #             message = "Encomienda anulada correctamente en SUNAT"
-            #         else:
-            #             message = "Encomienda anulada Internamente, REVISAR ANULACION EN SUNAT"
-            #         order_obj.status = 'A'
-            #         order_obj.save()
-            #         cash_obj = CashFlow.objects.filter(order=order_obj)
-            #         cash_obj.delete()
+    # Re-render de la grilla con los mismos filtros del reporte
+    start_date = str(request.POST.get('start-date'))
+    end_date = str(request.POST.get('end-date'))
+    user_selected = str(request.POST.get('user', 'T'))
+    way_to_pay = str(request.POST.get('way_to_pay', 'T'))
+    destiny = request.POST.get('destiny', 'T')
+    service_type = request.POST.get('service_type', 'T')
 
-        order_set = Order.objects.filter(
-            subsidiary=subsidiary_obj, type_order='E', transfer_date__range=[start_date, end_date])
+    subsidiary_obj = get_subsidiary_by_user(user_obj)
+    order_set = _filter_report_orders(
+        subsidiary_obj, start_date, end_date,
+        service_type=service_type, user_selected=user_selected,
+        way_to_pay=way_to_pay, destiny=destiny,
+    )
+    order_dict = get_order_comodity_values(order_set=order_set)
 
-        if user_selected != 'T':
-            user_select_obj = User.objects.get(id=int(user_selected))
-
-            order_set = order_set
-
-        if destiny == 'T' and way_to_pay == 'T':
-            if user_selected == 'T':
-                order_set = order_set
-            elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj)
-        if destiny == 'T' and way_to_pay == 'C':
-            if user_selected == 'T':
-                order_set = order_set.filter(way_to_pay='C')
-            elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj, way_to_pay='C')
-        if destiny == 'T' and way_to_pay == 'D':
-            if user_selected == 'T':
-                order_set = order_set.filter(way_to_pay='D')
-            elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj, way_to_pay='D')
-
-        if destiny != 'T' and way_to_pay == 'T':
-            if user_selected == 'T':
-                order_set = order_set.filter(encomienda__office_destination__id=destiny)
-            elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj,
-                                             encomienda__office_destination__id=destiny)
-        if destiny != 'T' and way_to_pay == 'C':
-            if user_selected == 'T':
-                order_set = order_set.filter(encomienda__office_destination__id=destiny, way_to_pay='C')
-            elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj,
-                                             encomienda__office_destination__id=destiny, way_to_pay='C')
-        if destiny != 'T' and way_to_pay == 'D':
-            if user_selected == 'T':
-                order_set = order_set.filter(encomienda__office_destination__id=destiny, way_to_pay='D')
-            elif user_selected != 'T':
-                order_set = order_set.filter(user=user_select_obj,
-                                             encomienda__office_destination__id=destiny,
-                                             way_to_pay='D')
-
-        order_set = prefetch_orders_for_report(order_set).order_by('-transfer_date', '-id')
-
-        order_dict = get_order_comodity_values(order_set=order_set)
-
-        tpl = loader.get_template('comercial/report_services_grid.html')
-        context = {
-            'order_set': order_dict,
-            'count': len(order_dict),
-            'subsidiary': subsidiary_obj,
-            'f1': start_date,
-            'f2': end_date,
-            't': user_selected,
-            'w': way_to_pay,
-            'd': destiny,
-            'user_log_perm': user_is_administrator(user_obj),
-        }
-        return JsonResponse({
-            'message': message,
-            'grid': tpl.render(context, request)
-        }, status=HTTPStatus.OK)
+    tpl = loader.get_template('comercial/report_services_grid.html')
+    context = {
+        'order_set': order_dict,
+        'count': len(order_dict),
+        'subsidiary': subsidiary_obj,
+        'f1': start_date,
+        'f2': end_date,
+        't': user_selected,
+        'w': way_to_pay,
+        'd': destiny,
+        'user_log_perm': True,
+    }
+    return JsonResponse({
+        'message': message,
+        'grid': tpl.render(context, request)
+    }, status=HTTPStatus.OK)
 
 
 def get_modal_change(request):
@@ -1930,9 +2255,11 @@ class GuideAssignmentView(TemplateView):
         ).prefetch_related('carrier_guides').order_by('turn', 'id')
 
         pending_orders = Order.objects.filter(
-            status='P',
             type_order='E',
             service_type='E',
+            status='P',
+        ).exclude(
+            status='A',
         ).exclude(
             carrier_guide__status='I',
         ).select_related(
@@ -1948,6 +2275,8 @@ class GuideAssignmentView(TemplateView):
         assigned_guides = CarrierRemissionGuide.objects.filter(
             status='I',
             programming__departure_date=search_date,
+        ).exclude(
+            order__status='A',
         ).select_related(
             'order', 'order__orderbill', 'order__encomienda__office_destination',
             'programming', 'programming__truck', 'cargo_manifest', 'truck',
@@ -2141,6 +2470,9 @@ def assign_order_guide(request):
             continue
 
         label = _order_service_label(order_obj)
+        if order_obj.status == 'A':
+            warnings.append(f'{label}: la encomienda está anulada y no se puede asignar.')
+            continue
         validation_errors = validate_order_for_carrier_guide(order_obj, programming_obj)
         if validation_errors:
             warnings.append(f'{label}: ' + ' '.join(validation_errors))

@@ -10,6 +10,37 @@ var GuideServices = (function ($) {
 
     var MSG_CASH_CLOSED = 'La caja se encuentra cerrada. Para registrar encomiendas, primero debe aperturar caja.';
 
+    // Longitud exacta del número de documento según tipo (SUNAT: DNI 8, RUC 11)
+    var DOC_LENGTHS = { '01': 8, '06': 11 };
+    var DOC_NAMES = { '01': 'DNI', '06': 'RUC' };
+
+    function docLengthFor(type) {
+        return DOC_LENGTHS[type] || null;
+    }
+
+    function validateDocNumber(nro, type, who) {
+        var len = docLengthFor(type);
+        if (!len) return true;
+        var value = String(nro || '').trim();
+        if (!/^\d+$/.test(value) || value.length !== len) {
+            toastr.warning('El ' + (DOC_NAMES[type] || 'documento') + (who ? ' del ' + who : '') +
+                ' debe tener exactamente ' + len + ' dígitos');
+            return false;
+        }
+        return true;
+    }
+
+    function applyDocMaxLength($input, type) {
+        var len = docLengthFor(type);
+        if (len) {
+            $input.attr('maxlength', len);
+            var v = String($input.val() || '');
+            if (v.length > len) $input.val(v.slice(0, len));
+        } else {
+            $input.attr('maxlength', 20);
+        }
+    }
+
     function urls() {
         return {
             create: $form.data('url-create'),
@@ -200,6 +231,7 @@ var GuideServices = (function ($) {
             loadDocumentNumbers('E', t);
             if (t === 'F') {
                 $('#e_document_type_sender').val('06');
+                applyDocMaxLength($('#e_nro_document_sender'), '06');
             }
             toggleSenderAddress();
             recalcEncomiendaTotals();
@@ -230,6 +262,21 @@ var GuideServices = (function ($) {
 
         $('#e_document_type_sender').on('change', function () {
             toggleSenderAddress();
+            applyDocMaxLength($('#e_nro_document_sender'), $(this).val());
+        });
+        applyDocMaxLength($('#e_nro_document_sender'), $('#e_document_type_sender').val());
+        $(document).on('change', '.e-document-type-addressee', function () {
+            var $row = $(this).closest('.e-addressee-row');
+            applyDocMaxLength($row.find('.e-nro-document-addressee'), $(this).val());
+        });
+        $(document).on('input', '#e_nro_document_sender, .e-nro-document-addressee', function () {
+            var type = $(this).is('#e_nro_document_sender')
+                ? $('#e_document_type_sender').val()
+                : $(this).closest('.e-addressee-row').find('.e-document-type-addressee').val();
+            if (docLengthFor(type)) {
+                var clean = String($(this).val() || '').replace(/\D/g, '');
+                if (clean !== $(this).val()) $(this).val(clean);
+            }
         });
         $('#e_detail_price').on('input', function () {
             var q = parseFloat($('#e_detail_qty').val()) || 0;
@@ -247,6 +294,7 @@ var GuideServices = (function ($) {
             recalcEncomiendaTotals();
         });
         function searchSender() {
+            if (!validateDocNumber($('#e_nro_document_sender').val(), $('#e_document_type_sender').val(), 'remitente')) return;
             searchBusiness(
                 $('#e_nro_document_sender').val(),
                 $('#e_document_type_sender').val(),
@@ -260,6 +308,7 @@ var GuideServices = (function ($) {
         }
 
         function searchAddressee($row) {
+            if (!validateDocNumber($row.find('.e-nro-document-addressee').val(), $row.find('.e-document-type-addressee').val(), 'destinatario')) return;
             searchBusiness(
                 $row.find('.e-nro-document-addressee').val(),
                 $row.find('.e-document-type-addressee').val(),
@@ -311,6 +360,7 @@ var GuideServices = (function ($) {
                 '<label>&nbsp;</label><button type="button" class="rv-btn rv-btn-outline rv-btn-sm e-remove-addressee"><i class="fas fa-minus"></i></button>'
             );
             $('.e-addressee-rows').append($clone);
+            applyDocMaxLength($clone.find('.e-nro-document-addressee'), $clone.find('.e-document-type-addressee').val());
         });
         $(document).on('click', '.e-remove-addressee', function () {
             if ($('.e-addressee-row').length > 1) $(this).closest('.e-addressee-row').remove();
@@ -337,10 +387,12 @@ var GuideServices = (function ($) {
         $('#e_type_guide').val($('#e_type_guide option:first').val()).trigger('change');
         $('#e_document_type_sender').val('01');
         $('#e_nro_document_sender, #e_sender, #e_phone_sender').val('');
+        applyDocMaxLength($('#e_nro_document_sender'), '01');
         $('.e-address-sender-wrap').hide();
         $('.e-addressee-row').not(':first').remove();
         $('.e-addressee-row:first').find('input').val('');
         $('.e-addressee-row:first').find('select').prop('selectedIndex', 0);
+        applyDocMaxLength($('.e-addressee-row:first').find('.e-nro-document-addressee'), '01');
         $('#e_details_body').empty();
         $('#e_detail_desc, #e_detail_price, #e_detail_amount, #e_detail_weight').val('');
         $('#e_detail_qty').val('1');
@@ -407,6 +459,7 @@ var GuideServices = (function ($) {
             url = '/comercial/print_bill_order_commodity/' + response.order_id + '/?download=1';
         } else {
             url = '/comercial/print_ticket_order_commodity/' + response.order_id + '/?download=1';
+            filename = 'ORDEN DE SERVICIO ' + (response.serial || '') + '-' + (response.correlative || '') + '.pdf';
         }
 
         var isExternal = /^https?:\/\//i.test(url) && url.indexOf(window.location.origin) !== 0;
@@ -492,12 +545,18 @@ var GuideServices = (function ($) {
         var amount = parseFloat($('#e_detail_amount').val()) || 0;
         if (!desc) { toastr.warning('Ingrese descripción'); return; }
         if (qty <= 0) { toastr.warning('Cantidad inválida'); return; }
-        if (weight !== null && (isNaN(weight) || weight < 0)) {
-            toastr.warning('Peso inválido');
+        if (!$('#e_detail_unit').val()) {
+            toastr.warning('Escoja una unidad');
+            $('#e_detail_unit').focus();
             return;
         }
-        var weightDisplay = weight === null ? '—' : weight.toFixed(2) + ' kg';
-        var weightValue = weight === null ? '' : weight.toFixed(2);
+        if (weight === null || isNaN(weight) || weight <= 0) {
+            toastr.warning('Ingrese el peso del ítem');
+            $('#e_detail_weight').focus();
+            return;
+        }
+        var weightDisplay = weight.toFixed(2) + ' kg';
+        var weightValue = weight.toFixed(2);
         var unitId = $('#e_detail_unit').val() || '';
         var unitLabel = ($('#e_detail_unit option:selected').text() || 'SIN UND').trim().toUpperCase();
         $('#e_details_body').append(
@@ -668,6 +727,19 @@ var GuideServices = (function ($) {
                 toastr.warning('Seleccione origen y destino'); return false;
             }
             if ($('#e_details_body .rv-guide-e-detail-row').length === 0) { toastr.warning('Agregue detalle de encomienda'); return false; }
+            if ($('#e_nro_document_sender').val() &&
+                !validateDocNumber($('#e_nro_document_sender').val(), $('#e_document_type_sender').val(), 'remitente')) {
+                return false;
+            }
+            var addresseeDocsOk = true;
+            $('.e-addressee-row').each(function () {
+                var nro = $(this).find('.e-nro-document-addressee').val();
+                if (nro && !validateDocNumber(nro, $(this).find('.e-document-type-addressee').val(), 'destinatario')) {
+                    addresseeDocsOk = false;
+                    return false;
+                }
+            });
+            if (!addresseeDocsOk) return false;
             var phoneOk = false;
             $('.e-phone-addressee').each(function () { if ($(this).val()) phoneOk = true; });
             if (!phoneOk) { toastr.warning('Ingrese teléfono del destinatario'); return false; }

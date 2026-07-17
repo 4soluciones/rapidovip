@@ -118,6 +118,8 @@ def assign_order_to_programming(order_obj, programming_obj, user):
     """
     if not programming_obj:
         raise ValueError('Debe existir una programación para generar la guía transportista.')
+    if order_obj.status == 'A':
+        raise ValueError('No se puede asignar una encomienda anulada.')
 
     weight, packages = _order_totals(order_obj)
     related_doc = related_document_for_order(order_obj)

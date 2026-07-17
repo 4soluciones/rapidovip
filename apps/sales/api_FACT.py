@@ -1,4 +1,5 @@
 import requests
+from django.utils import timezone
 
 from .format_to_dates import utc_to_local
 from .models import *
@@ -13,7 +14,7 @@ GRAPHQL_URL = "https://ng.tuf4ctur4.net.pe/graphql"
 # Pruebas locales  -> FACT_DRY_RUN = True
 # Producción       -> FACT_DRY_RUN = False
 # ---------------------------------------------------------------------------
-FACT_DRY_RUN = False
+FACT_DRY_RUN = True
 
 
 tokens = {
@@ -46,18 +47,31 @@ def _fact_dry_run_response(label, payload, success_data):
     return result
 
 
-def send_bill_commodity_fact(request, order_id):  # FACTURA DE ENCOMIENDA 4FACT
+def send_bill_commodity_fact(
+        request, order_id, billing_client=None, serial_override=None,
+        correlative_override=None, emission_date=None,
+):  # FACTURA DE ENCOMIENDA 4FACT
     order_obj = Order.objects.get(id=int(order_id))
-    serial = order_obj.serial
-    correlative = order_obj.correlative_sale
+    serial = serial_override or order_obj.serial
+    correlative = correlative_override or order_obj.correlative_sale
     details = OrderDetail.objects.filter(order=order_obj)
-    client_obj_sender = Client.objects.filter(orderaction__order=order_obj, orderaction__type='R').first()
+    client_obj_sender = billing_client or order_obj.client
+    if client_obj_sender is None:
+        client_obj_sender = Client.objects.filter(
+            orderaction__order=order_obj, orderaction__type='R',
+        ).first()
+    if client_obj_sender is None:
+        return {'success': False, 'message': 'No se encontró el cliente para la factura.'}
     client_obj_sender_name = str(client_obj_sender.names).replace('"', "'")
     client_first_address = client_obj_sender.clientaddress_set.first()
+    if client_first_address is None:
+        return {'success': False, 'message': 'El cliente no tiene una dirección registrada.'}
     client_first_address_address = str(client_first_address).replace('"', "'")
     client_document = client_obj_sender.clienttype_set.filter(document_type_id='06').first()
-    register_date = utc_to_local(order_obj.create_at)
-    formatdate = order_obj.transfer_date.strftime("%Y-%m-%d")
+    if client_document is None:
+        return {'success': False, 'message': 'El cliente no tiene un RUC válido para la factura.'}
+    register_date = utc_to_local(timezone.now() if emission_date else order_obj.create_at)
+    formatdate = (emission_date or order_obj.transfer_date).strftime("%Y-%m-%d")
     hour_date = register_date.strftime("%H:%M:%S")
 
     items = []
@@ -107,10 +121,10 @@ def send_bill_commodity_fact(request, order_id):  # FACTURA DE ENCOMIENDA 4FACT
     mutation RegisterSale  {{
         registerSale(            
             cliente: {{
-                razonSocialNombres: "{client_obj_sender_name}",
+                razonSocialNombres: "{_gql_escape(client_obj_sender_name)}",
                 numeroDocumento: "{client_document.document_number}",
                 codigoTipoEntidad: 6,
-                clienteDireccion: "{client_first_address_address}"
+                clienteDireccion: "{_gql_escape(client_first_address_address)}"
             }},
             venta: {{
                 serie: "F{serial[1:]}",
@@ -154,8 +168,8 @@ def send_bill_commodity_fact(request, order_id):  # FACTURA DE ENCOMIENDA 4FACT
             "send_bill_commodity_fact (FACTURA)",
             graphql_query,
             {
-                "serie": order_obj.serial,
-                "numero": order_obj.correlative_sale,
+                "serie": serial,
+                "numero": correlative,
                 "tipo_de_comprobante": "1",
             },
         )
@@ -174,8 +188,8 @@ def send_bill_commodity_fact(request, order_id):  # FACTURA DE ENCOMIENDA 4FACT
                 "success": success,
                 "message": result.get("data", {}).get("registerSale", {}).get("message"),
                 "operationId": result.get("data", {}).get("registerSale", {}).get("operationId"),
-                "serie": order_obj.serial,
-                "numero": order_obj.correlative_sale,
+                "serie": serial,
+                "numero": correlative,
                 "tipo_de_comprobante": "1",
             }
         else:
@@ -191,24 +205,35 @@ def send_bill_commodity_fact(request, order_id):  # FACTURA DE ENCOMIENDA 4FACT
         return {"error": "La respuesta no es un JSON válido"}
 
 
-def send_receipt_commodity_fact(request, order_id):  # BOLETA DE ENCOMIENDA 4FACT
+def send_receipt_commodity_fact(
+        request, order_id, billing_client=None, serial_override=None,
+        correlative_override=None, emission_date=None,
+):  # BOLETA DE ENCOMIENDA 4FACT
     order_obj = Order.objects.get(id=int(order_id))
     subsidiary = order_obj.subsidiary
     subsidiary_id = subsidiary.id
     # serie = subsidiary.serial
-    serial = order_obj.serial
+    serial = serial_override or order_obj.serial
     # n_receipt = get_correlative(order_obj, 'B')
-    correlative = order_obj.correlative_sale
+    correlative = correlative_override or order_obj.correlative_sale
     details = OrderDetail.objects.filter(order=order_obj)
     client_first_address = ""
-    client_obj_sender = Client.objects.filter(orderaction__order=order_obj, orderaction__type='R').first()
+    client_obj_sender = billing_client or order_obj.client
+    if client_obj_sender is None:
+        client_obj_sender = Client.objects.filter(
+            orderaction__order=order_obj, orderaction__type='R',
+        ).first()
+    if client_obj_sender is None:
+        return {'success': False, 'message': 'No se encontró el cliente para la boleta.'}
     if client_obj_sender.clientaddress_set.first():
         client_first_address = client_obj_sender.clientaddress_set.first()
     # client_document = client_obj_sender.clienttype_set.filter(document_type_id='01').first()
     client_document_type_obj = client_obj_sender.clienttype_set.all().first()
+    if client_document_type_obj is None:
+        return {'success': False, 'message': 'El cliente no tiene documento registrado.'}
     client_document = client_document_type_obj.document_number
-    register_date = utc_to_local(order_obj.create_at)
-    formatdate = register_date.strftime("%Y-%m-%d")
+    register_date = utc_to_local(timezone.now() if emission_date else order_obj.create_at)
+    formatdate = (emission_date or register_date.date()).strftime("%Y-%m-%d")
     hour_date = register_date.strftime("%H:%M:%S")
 
     items = []
@@ -251,15 +276,16 @@ def send_receipt_commodity_fact(request, order_id):  # BOLETA DE ENCOMIENDA 4FAC
             }}"""
         for item in items
     )
+    items_graphql = f"[{items_graphql}]"
 
     graphql_query = f"""
         mutation RegisterSale  {{
             registerSale(            
                 cliente: {{
-                    razonSocialNombres: "{client_obj_sender.names}",
-                    numeroDocumento: "{client_document}",
+                    razonSocialNombres: "{_gql_escape(client_obj_sender.names)}",
+                    numeroDocumento: "{_gql_escape(client_document)}",
                     codigoTipoEntidad: {int(client_document_type_obj.document_type.id)},
-                    clienteDireccion: "{client_first_address}"
+                    clienteDireccion: "{_gql_escape(client_first_address)}"
                 }},
                 venta: {{
                     serie: "B{serial[1:]}",
@@ -304,8 +330,8 @@ def send_receipt_commodity_fact(request, order_id):  # BOLETA DE ENCOMIENDA 4FAC
             "send_receipt_commodity_fact (BOLETA)",
             graphql_query,
             {
-                "serie": order_obj.serial,
-                "numero": order_obj.correlative_sale,
+                "serie": serial,
+                "numero": correlative,
                 "tipo_de_comprobante": "2",
             },
         )
@@ -324,8 +350,8 @@ def send_receipt_commodity_fact(request, order_id):  # BOLETA DE ENCOMIENDA 4FAC
                 "success": success,
                 "message": result.get("data", {}).get("registerSale", {}).get("message"),
                 "operationId": result.get("data", {}).get("registerSale", {}).get("operationId"),
-                "serie": order_obj.serial,
-                "numero": order_obj.correlative_sale,
+                "serie": serial,
+                "numero": correlative,
                 "tipo_de_comprobante": "2",
             }
         else:

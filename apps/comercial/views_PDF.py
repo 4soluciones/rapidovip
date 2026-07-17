@@ -716,7 +716,7 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         dictionary.append(Paragraph('OBSERVACIÓN:', styles["Helvetica_Bold_Left_7"]))
         dictionary.append(Spacer(2, 2))
         dictionary.append(Paragraph(observation.upper(), h_left))
-    dictionary.append(Spacer(2, 2))
+    dictionary.append(Spacer(10, 10))
     dictionary.append(ana_c9)
     dictionary.append(Spacer(2, 2))
     dictionary.append(Paragraph(
@@ -738,8 +738,11 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
 
     response = HttpResponse(content_type='application/pdf')
 
-    response['Content-Disposition'] = 'inline; filename="WARE[{}].pdf"'.format(
-        order_obj.serial + '-' + order_obj.correlative_sale)
+    _os_serial = order_obj.order_serial or order_obj.serial or ''
+    _os_correlative = order_obj.order_correlative or order_obj.correlative_sale or ''
+    _disposition = 'attachment' if request.GET.get('download') else 'inline'
+    response['Content-Disposition'] = '{}; filename="ORDEN DE SERVICIO {}-{}.pdf"'.format(
+        _disposition, _os_serial, _os_correlative)
 
     tomorrow = datetime.now() + timedelta(days=1)
     tomorrow = tomorrow.replace(hour=0, minute=0, second=0)

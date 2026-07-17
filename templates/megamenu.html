@@ -56,21 +56,19 @@
 
             </li>
 
-            {% if can_see_reports %}
-
             <li>
 
                 <a href="#"><i class="fas fa-chart-bar"></i> Reportes</a>
 
                 <ul class="submenu">
 
-                    <li><a href="{% url 'comercial:report_comodity_grid' %}"><i class="fas fa-file-alt"></i> Reporte de servicios</a></li>
+                    <li><a href="{% url 'comercial:report_comodity_grid' %}"><i class="fas fa-file-alt"></i> Reporte de encomiendas</a></li>
+
+                    <li><a href="{% url 'comercial:reception_report' %}"><i class="fas fa-box-open"></i> Recepción de encomiendas</a></li>
 
                 </ul>
 
             </li>
-
-            {% endif %}
 
             {% if can_see_admin %}
 

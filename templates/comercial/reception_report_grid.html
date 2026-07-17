@@ -1,0 +1,155 @@
+<div class="rv-report-output">
+    <div class="rv-report-toolbar">
+        <div class="rv-report-toolbar-left">
+            <span class="rv-report-count">{{ count }} encomienda{{ count|pluralize:"s" }}</span>
+            {% if dni %}
+                <span class="rv-report-period"><i class="fas fa-id-card"></i> DNI {{ dni }}</span>
+            {% else %}
+                <span class="rv-report-period">{{ f1|date:"d/m/Y" }} — {{ f2|date:"d/m/Y" }}</span>
+            {% endif %}
+        </div>
+        {% if order_set %}
+        <div class="rv-report-toolbar-right">
+            <div class="rv-report-search-inline">
+                <i class="fas fa-search"></i>
+                <input type="text" id="reception-inline-search" class="rv-form-control"
+                       placeholder="Filtrar resultados…" autocomplete="off">
+            </div>
+            <button type="button" class="rv-btn rv-btn-outline rv-btn-sm" id="btn-reception-excel">
+                <i class="fas fa-file-excel"></i> Excel
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if order_set %}
+    <div class="rv-table-wrap rv-report-table-wrap">
+        <table class="rv-table rv-report-table rv-reception-table" id="reception-services-table">
+            <thead>
+                <tr>
+                    <th>Fecha de traslado</th>
+                    <th>Orden de servicio</th>
+                    <th>Comprobante</th>
+                    <th>Destinatario</th>
+                    <th>Detalle</th>
+                    <th>Importe</th>
+                    <th>Estado</th>
+                    <th class="noExl">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in order_set %}
+                <tr data-id="{{ order.id }}"
+                    class="{% if order.status == 'A' %}rv-report-row-cancelled{% elif order.can_collect %}rv-reception-row-pending{% endif %}">
+                    <td class="rv-report-date">
+                        <span>{{ order.transfer_date|date:"d/m/Y"|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <span class="rv-report-doc">{{ order.order_service_number }}</span>
+                        <small class="rv-report-doc-type">Origen: {{ order.company }}</small>
+                    </td>
+                    <td>
+                        {% if order.bill_pdf_available %}
+                            <span class="rv-report-doc">{{ order.serial }}-{{ order.correlative_sale }}</span>
+                            <small class="rv-report-doc-type">{{ order.type_document_label|title }}</small>
+                        {% else %}
+                            <span class="rv-reception-no-bill">Sin comprobante</span>
+                            {% if order.can_collect %}<small class="rv-report-pay rv-report-pay-d">Pendiente de cobro</small>{% endif %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        <strong class="rv-reception-recipient">
+                            {{ order.item_action_addressee.0.client_names|default:"—"|upper }}
+                        </strong>
+                        {% if order.recipient_document %}
+                            <small class="rv-reception-recipient-doc">
+                                <i class="fas fa-id-card"></i> {{ order.recipient_document }}
+                            </small>
+                        {% endif %}
+                    </td>
+                    <td class="rv-report-detail">
+                        {% for detail in order.item_detail_order %}
+                            <span>{{ detail.description|default:"Encomienda"|upper }}</span>
+                            <small>{{ detail.quantity|floatformat:0 }} {{ detail.unit_description|upper }}</small>
+                        {% empty %}
+                            —
+                        {% endfor %}
+                    </td>
+                    <td class="rv-report-amount">
+                        {% if order.status != 'A' %}
+                            <strong>S/ {{ order.total }}</strong>
+                            <small class="rv-report-pay rv-report-pay-{{ order.way_to_pay|lower }}">
+                                {{ order.way_to_pay_label|title }}
+                            </small>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if order.status == 'A' %}
+                            <span class="rv-report-status rv-report-status-cancel">Anulada</span>
+                        {% else %}
+                            <span class="rv-report-status rv-reception-status-{{ order.status_transport_code|lower }}">
+                                {{ order.status_transport_label|title }}
+                            </span>
+                            {% if order.can_collect %}
+                                <small class="rv-reception-payment-status">Pago pendiente</small>
+                            {% else %}
+                                <small class="rv-reception-payment-status is-paid">Pago registrado</small>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td class="rv-report-actions noExl">
+                        <a class="rv-report-action-btn"
+                           href="{% url 'comercial:print_ticket_order_commodity' order.id %}"
+                           target="_blank" title="Ver orden de servicio">
+                            <i class="fas fa-file-alt"></i>
+                        </a>
+                        {% if order.bill_pdf_available %}
+                            <a class="rv-report-action-btn rv-reception-action-pdf"
+                               href="{% url 'comercial:print_bill_order_commodity' order.id %}"
+                               target="_blank" title="Ver comprobante PDF">
+                                <i class="fas fa-file-pdf"></i>
+                            </a>
+                        {% elif order.can_collect %}
+                            <button type="button"
+                                    class="rv-report-action-btn rv-reception-action-collect btn-collect-destination"
+                                    data-id="{{ order.id }}" title="Cobrar y emitir comprobante">
+                                <i class="fas fa-cash-register"></i>
+                            </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="rv-report-empty rv-reception-empty">
+        <i class="fas fa-box-open"></i>
+        <p>No se encontraron encomiendas destinadas a <strong>{{ subsidiary.name }}</strong>
+            con los criterios seleccionados.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script type="text/javascript">
+(function () {
+    $('#reception-inline-search').on('input', function () {
+        var query = $(this).val().toLowerCase();
+        $('#reception-services-table tbody tr').each(function () {
+            $(this).toggle($(this).text().toLowerCase().indexOf(query) !== -1);
+        });
+    });
+
+    $('#btn-reception-excel').on('click', function () {
+        if ($.fn.table2excel) {
+            $('#reception-services-table').table2excel({
+                exclude: '.noExl',
+                name: 'Recepción de encomiendas',
+                filename: 'recepcion_encomiendas',
+                fileext: '.xls',
+                preserveColors: true
+            });
+        }
+    });
+})();
+</script>

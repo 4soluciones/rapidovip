@@ -1,0 +1,522 @@
+{% extends 'home.html' %}
+{% block title %}Recepción de encomiendas — RapidoVip{% endblock %}
+
+{% block body %}
+<div class="rv-page rv-report-page rv-reception-page">
+    <div class="rv-report-hero rv-reception-hero">
+        <div class="rv-report-hero-text">
+            <h1><i class="fas fa-box-open"></i> Recepción de encomiendas</h1>
+            <p>Consulte los envíos destinados a su sede y gestione de forma segura los cobros pendientes.</p>
+        </div>
+        <div class="rv-report-hero-meta">
+            <span class="rv-report-sede"><i class="fas fa-map-marker-alt"></i> Destino: {{ subsidiary.name }}</span>
+        </div>
+    </div>
+
+    <div class="rv-form-section rv-report-filters">
+        <form class="rv-filter-bar" id="reception-search-form" method="POST">
+            {% csrf_token %}
+            <div class="rv-reception-filter-grid">
+                <div class="rv-form-group">
+                    <label for="reception-start-date">Desde</label>
+                    <input type="date" class="rv-form-control" id="reception-start-date"
+                           name="start-date" value="{{ month_start }}">
+                </div>
+                <div class="rv-form-group">
+                    <label for="reception-end-date">Hasta</label>
+                    <input type="date" class="rv-form-control" id="reception-end-date"
+                           name="end-date" value="{{ date_now }}">
+                </div>
+                <div class="rv-form-group rv-reception-dni-group">
+                    <label for="reception-dni">DNI del destinatario</label>
+                    <div class="rv-input-icon-wrap">
+                        <i class="fas fa-id-card"></i>
+                        <input type="text" class="rv-form-control" id="reception-dni" name="dni"
+                               maxlength="8" inputmode="numeric" autocomplete="off"
+                               placeholder="Búsqueda exacta (8 dígitos)">
+                    </div>
+                    <small>Al ingresar un DNI se buscará sin limitar por fechas.</small>
+                </div>
+                <div class="rv-form-group rv-form-group-action">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="rv-btn rv-btn-search" id="btn-reception-search">
+                        <i class="fas fa-search"></i> Buscar encomiendas
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="rv-form-section rv-report-results-wrap">
+        <div id="reception-results" class="rv-report-results">
+            <div class="rv-report-empty">
+                <i class="fas fa-inbox"></i>
+                <p>Use el rango de fechas o ingrese el DNI del destinatario para consultar las encomiendas.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade rv-modal rv-collection-modal" id="destination-payment-modal"
+     tabindex="-1" role="dialog" aria-labelledby="destination-payment-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="destination-payment-title">
+                        <i class="fas fa-cash-register"></i> Cobrar encomienda en destino
+                    </h5>
+                    <div class="rv-modal-subtitle" id="collection-order-label">Preparando información…</div>
+                </div>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="destination-payment-form">
+                {% csrf_token %}
+                <input type="hidden" name="order_id" id="collection-order-id">
+                <div class="modal-body">
+                    <div class="rv-collection-loading" id="collection-loading">
+                        <i class="fas fa-spinner fa-spin"></i> Validando encomienda, series y caja…
+                    </div>
+                    <div id="collection-content" class="d-none">
+                        <div class="rv-collection-summary">
+                            <div class="rv-collection-summary-order">
+                                <span>Orden de servicio</span>
+                                <strong id="collection-order-number">—</strong>
+                            </div>
+                            <div class="rv-collection-summary-amount">
+                                <span>Importe a cobrar</span>
+                                <div class="rv-collection-amount-value">
+                                    <small>S/</small>
+                                    <strong id="collection-amount">0.00</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rv-collection-section">
+                            <h6><i class="fas fa-user-edit"></i> Datos del cliente</h6>
+                            <p class="rv-collection-client-hint">
+                                Se cargan por defecto los datos del destinatario. Puede editarlos para emitir
+                                boleta o factura a otro cliente.
+                            </p>
+                            <div class="rv-collection-client-fields">
+                                <div class="rv-collection-client-row">
+                                    <div class="rv-form-group rv-collection-field-type">
+                                        <label for="collection-client-doc-type">Tipo</label>
+                                        <select class="rv-form-control" id="collection-client-doc-type"
+                                                name="client_document_type" required>
+                                            <option value="01">DNI</option>
+                                            <option value="06">RUC</option>
+                                            <option value="04">C. EXT.</option>
+                                            <option value="07">PASAP.</option>
+                                        </select>
+                                    </div>
+                                    <div class="rv-form-group rv-collection-field-doc">
+                                        <label for="collection-client-doc">Número</label>
+                                        <div class="rv-doc-search-group" id="collection-client-doc-group">
+                                            <div class="rv-doc-search-field">
+                                                <input type="text" class="rv-form-control text-uppercase"
+                                                       id="collection-client-doc" name="client_document_number"
+                                                       maxlength="8" inputmode="numeric" required
+                                                       autocomplete="off" placeholder="N.º documento">
+                                                <div class="rv-doc-search-overlay" role="status" aria-live="polite" aria-busy="false">
+                                                    <span class="rv-doc-search-overlay-inner">
+                                                        <i class="fas fa-id-card rv-doc-search-overlay-icon" aria-hidden="true"></i>
+                                                        <span class="rv-doc-search-ring" aria-hidden="true"></span>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <button type="button" class="rv-doc-search-btn"
+                                                    id="collection-btn-search-client" title="Buscar documento">
+                                                <i class="fas fa-search rv-doc-search-btn-icon"></i>
+                                                <span class="rv-doc-search-btn-spinner" aria-hidden="true"></span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="rv-form-group rv-collection-field-name">
+                                        <label for="collection-client-name">Nombre o razón social</label>
+                                        <input type="text" class="rv-form-control text-uppercase" id="collection-client-name"
+                                               name="client_names" required autocomplete="off"
+                                               placeholder="Nombre completo o razón social">
+                                    </div>
+                                </div>
+                                <div class="rv-form-group rv-collection-client-address">
+                                    <label for="collection-client-address">
+                                        Dirección
+                                        <small id="collection-address-required" class="d-none">(requerida para factura)</small>
+                                    </label>
+                                    <input type="text" class="rv-form-control text-uppercase" id="collection-client-address"
+                                           name="client_address" autocomplete="off"
+                                           placeholder="Dirección fiscal o de facturación">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rv-collection-section">
+                            <h6><i class="fas fa-file-invoice-dollar"></i> Comprobante electrónico</h6>
+                            <div class="rv-collection-document-options">
+                                <label class="rv-document-option" id="collection-option-B">
+                                    <input type="radio" name="document_type" value="B">
+                                    <span class="rv-document-option-icon"><i class="fas fa-receipt"></i></span>
+                                    <span>
+                                        <strong>Boleta de venta</strong>
+                                        <small>Serie <b id="collection-serial-B">Sin configurar</b></small>
+                                    </span>
+                                </label>
+                                <label class="rv-document-option" id="collection-option-F">
+                                    <input type="radio" name="document_type" value="F">
+                                    <span class="rv-document-option-icon"><i class="fas fa-file-invoice"></i></span>
+                                    <span>
+                                        <strong>Factura</strong>
+                                        <small>Serie <b id="collection-serial-F">Sin configurar</b></small>
+                                    </span>
+                                </label>
+                            </div>
+                            <small class="rv-collection-help" id="collection-document-help"></small>
+                        </div>
+
+                        <div class="rv-collection-cash-status" id="collection-cash-status"></div>
+                        <label class="rv-collection-confirmation">
+                            <input type="checkbox" id="collection-confirm">
+                            <span>
+                                Confirmo que he verificado los datos del cliente, el tipo de comprobante,
+                                el importe y la caja indicada. Autorizo registrar este cobro como ingreso de caja
+                                y emitir el comprobante electrónico mediante 4Fact.
+                            </span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="rv-btn rv-btn-search" id="btn-confirm-collection" disabled>
+                        <i class="fas fa-shield-alt"></i> Confirmar cobro y emitir
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extrajs %}
+<script type="text/javascript">
+(function () {
+    var collectionData = null;
+    var DOC_LENGTHS = { '01': 8, '06': 11 };
+    var DOC_NAMES = { '01': 'DNI', '06': 'RUC' };
+
+    function searchReception() {
+        var $btn = $('#btn-reception-search');
+        $btn.prop('disabled', true);
+        $('#reception-results').html(
+            '<div class="rv-report-loading"><i class="fas fa-spinner fa-spin"></i> Consultando encomiendas de la sede…</div>'
+        );
+        $.ajax({
+            url: '{% url "comercial:reception_report" %}',
+            type: 'POST',
+            data: $('#reception-search-form').serialize(),
+            success: function (response) {
+                $('#reception-results').html(response.grid);
+            },
+            error: function (xhr) {
+                var message = xhr.responseJSON && xhr.responseJSON.error
+                    ? xhr.responseJSON.error : 'No fue posible consultar las encomiendas.';
+                toastr.warning(message);
+                $('#reception-results').html(
+                    '<div class="rv-report-empty"><i class="fas fa-exclamation-circle"></i><p>' +
+                    $('<div>').text(message).html() + '</p></div>'
+                );
+            },
+            complete: function () { $btn.prop('disabled', false); }
+        });
+    }
+
+    function formatAmount(value) {
+        var num = parseFloat(value);
+        if (isNaN(num)) return '0.00';
+        return num.toFixed(2);
+    }
+
+    function docLengthFor(type) {
+        return DOC_LENGTHS[type] || null;
+    }
+
+    function validateDocNumber(nro, type, who) {
+        var len = docLengthFor(type);
+        if (!len) return true;
+        var value = String(nro || '').trim();
+        if (!/^\d+$/.test(value) || value.length !== len) {
+            toastr.warning(
+                'El ' + (DOC_NAMES[type] || 'documento') + (who ? ' del ' + who : '') +
+                ' debe tener exactamente ' + len + ' dígitos'
+            );
+            return false;
+        }
+        return true;
+    }
+
+    function applyDocMaxLength($input, type) {
+        var len = docLengthFor(type);
+        if (len) {
+            $input.attr({ maxlength: len, inputmode: 'numeric' });
+            var value = String($input.val() || '').replace(/\D/g, '');
+            if (value.length > len) value = value.slice(0, len);
+            $input.val(value);
+        } else {
+            $input.attr({ maxlength: 20, inputmode: 'text' });
+        }
+    }
+
+    function setDocSearchLoading(loading) {
+        var $group = $('#collection-client-doc-group');
+        $group.toggleClass('is-searching', loading);
+        $group.find('.rv-doc-search-overlay').attr('aria-busy', loading ? 'true' : 'false');
+        $group.find('.rv-doc-search-btn').prop('disabled', loading);
+    }
+
+    function searchClientDocument() {
+        var type = $('#collection-client-doc-type').val();
+        var nro = ($('#collection-client-doc').val() || '').trim();
+        if (!nro) {
+            toastr.warning('Ingrese número de documento');
+            return;
+        }
+        if (!validateDocNumber(nro, type, 'cliente')) return;
+
+        setDocSearchLoading(true);
+        $.get('{% url "comercial:get_name_business" %}', { nro_document: nro, type: type })
+            .done(function (r) {
+                if (r.result) $('#collection-client-name').val(String(r.result).toUpperCase());
+                if (r.address) $('#collection-client-address').val(String(r.address).toUpperCase());
+                updateConfirmState();
+            })
+            .fail(function (xhr) {
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'No encontrado');
+            })
+            .always(function () {
+                setDocSearchLoading(false);
+            });
+    }
+
+    function refreshBillingOptions() {
+        if (!collectionData) return;
+        var $boleta = $('input[name="document_type"][value="B"]');
+        var $factura = $('input[name="document_type"][value="F"]');
+        var selected = $('input[name="document_type"]:checked').val();
+
+        $boleta.prop('disabled', !collectionData.serials.B);
+        $factura.prop('disabled', !collectionData.serials.F);
+        $('#collection-option-B').toggleClass('is-disabled', $boleta.prop('disabled'));
+        $('#collection-option-F').toggleClass('is-disabled', $factura.prop('disabled'));
+
+        if (selected === 'F' && $factura.prop('disabled')) {
+            if (!$boleta.prop('disabled')) $boleta.prop('checked', true);
+        }
+
+        selected = $('input[name="document_type"]:checked').val();
+        $('#collection-address-required').toggleClass('d-none', selected !== 'F');
+
+        if (selected === 'F') {
+            $('#collection-document-help').text(
+                'Factura seleccionada: el tipo de documento se estableció en RUC. Complete número, razón social y dirección.'
+            );
+        } else if (collectionData.serials.F) {
+            $('#collection-document-help').text(
+                'Puede emitir boleta o factura. Boleta usa DNI y factura usa RUC automáticamente.'
+            );
+        } else {
+            $('#collection-document-help').text('Se emitirá boleta con los datos del cliente.');
+        }
+        updateConfirmState();
+    }
+
+    function applyDocTypeForBill(targetType, label) {
+        var previousType = $('#collection-client-doc-type').val();
+        $('#collection-client-doc-type').val(targetType);
+        applyDocMaxLength($('#collection-client-doc'), targetType);
+        if (previousType !== targetType) {
+            $('#collection-client-doc').val('');
+            toastr.info(label + ' seleccionada: complete el ' + (DOC_NAMES[targetType] || 'documento') + ' del cliente.');
+            $('#collection-client-doc').focus();
+        }
+        refreshBillingOptions();
+    }
+
+    function applyFacturaRucMode() {
+        applyDocTypeForBill('06', 'Factura');
+    }
+
+    function applyBoletaDniMode() {
+        applyDocTypeForBill('01', 'Boleta');
+    }
+
+    function updateConfirmState() {
+        var canSubmit = collectionData && collectionData.cash.is_open &&
+            $('#collection-confirm').prop('checked') &&
+            $('input[name="document_type"]:checked:not(:disabled)').length > 0 &&
+            ($('#collection-client-name').val() || '').trim() &&
+            ($('#collection-client-doc').val() || '').trim();
+        $('#btn-confirm-collection').prop('disabled', !canSubmit);
+    }
+
+    $('#reception-search-form').on('submit', function (event) {
+        event.preventDefault();
+        var dni = $('#reception-dni').val().replace(/\D/g, '');
+        $('#reception-dni').val(dni);
+        if (dni && dni.length !== 8) {
+            toastr.warning('Ingrese los 8 dígitos del DNI.');
+            return;
+        }
+        searchReception();
+    });
+
+    $('#reception-dni').on('input', function () {
+        this.value = this.value.replace(/\D/g, '').slice(0, 8);
+        var searchingByDni = this.value.length > 0;
+        $('#reception-start-date, #reception-end-date').prop('disabled', searchingByDni);
+    });
+
+    $(document).on('click', '.btn-collect-destination', function () {
+        var orderId = $(this).data('id');
+        collectionData = null;
+        $('#destination-payment-form')[0].reset();
+        $('#collection-order-id').val(orderId);
+        $('#collection-content').addClass('d-none');
+        $('#collection-loading').removeClass('d-none').html(
+            '<i class="fas fa-spinner fa-spin"></i> Validando encomienda, series y caja…'
+        );
+        $('#btn-confirm-collection').prop('disabled', true);
+        $('#destination-payment-modal').modal('show');
+
+        $.get('{% url "comercial:reception_billing_data" %}', { order_id: orderId })
+            .done(function (data) {
+                collectionData = data;
+                $('#collection-order-label').text('Orden ' + data.order_number);
+                $('#collection-order-number').text(data.order_number);
+                $('#collection-amount').text(formatAmount(data.amount));
+                $('#collection-client-doc-type').val(data.client.document_type || '01');
+                $('#collection-client-doc').val(data.client.document_number || '');
+                $('#collection-client-name').val(data.client.names || '');
+                $('#collection-client-address').val(data.client.address || '');
+                $('#collection-serial-B').text(data.serials.B || 'Sin configurar');
+                $('#collection-serial-F').text(data.serials.F || 'Sin configurar');
+                applyDocMaxLength($('#collection-client-doc'), $('#collection-client-doc-type').val());
+
+                var $boleta = $('input[name="document_type"][value="B"]');
+                var $factura = $('input[name="document_type"][value="F"]');
+                if (data.serials.B) $boleta.prop('checked', true);
+                else if (data.serials.F) $factura.prop('checked', true);
+
+                $('#collection-cash-status')
+                    .toggleClass('is-valid', data.cash.is_open)
+                    .toggleClass('is-invalid', !data.cash.is_open)
+                    .html('<i class="fas ' + (data.cash.is_open ? 'fa-check-circle' : 'fa-exclamation-triangle') +
+                          '"></i><div><strong>' + (data.cash.is_open ? 'Caja validada' : 'Caja no disponible') +
+                          '</strong><span>' + $('<div>').text(data.cash.message).html() + '</span></div>');
+
+                refreshBillingOptions();
+                $('#collection-loading').addClass('d-none');
+                $('#collection-content').removeClass('d-none');
+            })
+            .fail(function (xhr) {
+                var message = xhr.responseJSON && xhr.responseJSON.error
+                    ? xhr.responseJSON.error : 'No se pudo preparar el cobro.';
+                $('#collection-loading').html(
+                    '<div class="rv-collection-load-error"><i class="fas fa-exclamation-circle"></i> ' +
+                    $('<div>').text(message).html() + '</div>'
+                );
+                toastr.error(message);
+            });
+    });
+
+    $('#collection-client-doc-type').on('change', function () {
+        applyDocMaxLength($('#collection-client-doc'), $(this).val());
+        if ($('input[name="document_type"]:checked').val() === 'F' && $(this).val() !== '06') {
+            $('input[name="document_type"][value="B"]').prop('checked', true);
+            toastr.info('Se cambió a boleta porque el documento ya no es RUC.');
+        }
+        refreshBillingOptions();
+    });
+
+    $('#collection-client-doc').on('input', function () {
+        var type = $('#collection-client-doc-type').val();
+        if (docLengthFor(type)) {
+            var clean = String($(this).val() || '').replace(/\D/g, '');
+            if (clean !== $(this).val()) $(this).val(clean);
+        }
+        updateConfirmState();
+    });
+
+    $('#collection-client-name, #collection-client-address').on('input', updateConfirmState);
+    $('#collection-confirm').on('change', updateConfirmState);
+
+    $('input[name="document_type"]').on('change', function () {
+        if (!$(this).is(':checked')) return;
+        if ($(this).val() === 'F') {
+            applyFacturaRucMode();
+        } else if ($(this).val() === 'B') {
+            applyBoletaDniMode();
+        } else {
+            refreshBillingOptions();
+        }
+    });
+
+    $('#collection-btn-search-client').on('click', searchClientDocument);
+    $('#collection-client-doc').on('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            searchClientDocument();
+        }
+    });
+
+    $('#destination-payment-form').on('submit', function (event) {
+        event.preventDefault();
+        if ($('#btn-confirm-collection').prop('disabled')) return;
+
+        var selected = $('input[name="document_type"]:checked').val();
+        var docType = $('#collection-client-doc-type').val();
+        var docNumber = ($('#collection-client-doc').val() || '').trim();
+        var address = ($('#collection-client-address').val() || '').trim();
+
+        if (!validateDocNumber(docNumber, docType, 'cliente')) return;
+        if (selected === 'F') {
+            if (docType !== '06' || docNumber.length !== 11) {
+                toastr.warning('Para factura el cliente debe tener un RUC válido de 11 dígitos.');
+                return;
+            }
+            if (!address) {
+                toastr.warning('Para factura indique la dirección del cliente.');
+                $('#collection-client-address').focus();
+                return;
+            }
+        }
+
+        var $button = $('#btn-confirm-collection');
+        $button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Emitiendo en 4Fact…');
+        var pdfWindow = window.open('', '_blank');
+
+        $.post('{% url "comercial:collect_destination_payment" %}', $(this).serialize())
+            .done(function (response) {
+                toastr.success(response.message);
+                $('#destination-payment-modal').modal('hide');
+                if (pdfWindow) pdfWindow.location = response.pdf_url;
+                else window.open(response.pdf_url, '_blank');
+                searchReception();
+            })
+            .fail(function (xhr) {
+                if (pdfWindow) pdfWindow.close();
+                var message = xhr.responseJSON && xhr.responseJSON.error
+                    ? xhr.responseJSON.error : 'No se pudo completar el cobro.';
+                toastr.error(message);
+                $button.prop('disabled', false);
+            })
+            .always(function () {
+                $button.html('<i class="fas fa-shield-alt"></i> Confirmar cobro y emitir');
+            });
+    });
+
+    searchReception();
+})();
+</script>
+{% endblock %}

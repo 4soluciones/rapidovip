@@ -562,9 +562,8 @@ def _encomienda_details_table(order_obj, use_base=False, width=None):
     return [head, Spacer(0, 0), body]
 
 
-def _bill_totals_table(order_obj, width=None):
-    """Totales de boleta/factura con desglose completo."""
-    wt = width or BILL_WT
+def _bill_amounts(order_obj):
+    """Calcula subtotal (gravada), IGV y total de la boleta/factura."""
     sub_total = decimal.Decimal('0')
     total = decimal.Decimal('0')
     igv_total = decimal.Decimal('0')
@@ -580,23 +579,27 @@ def _bill_totals_table(order_obj, width=None):
         total = decimal.Decimal(str(order_obj.total))
         sub_total = total / decimal.Decimal('1.18')
         igv_total = total - sub_total
+    return sub_total, igv_total, total
 
+
+def _bill_totals_table(order_obj, width=None):
+    """Totales de boleta/factura (sin OP. INAFECTA / OP. EXONERADA)."""
+    wt = width or BILL_WT
+    sub_total, igv_total, total = _bill_amounts(order_obj)
     rows = [
         ('OP. GRAVADA', sub_total),
-        ('OP. INAFECTA', decimal.Decimal('0')),
-        ('OP. EXONERADA', decimal.Decimal('0')),
-        # ('DESCUENTO', decimal.Decimal('0')),
         ('I.G.V. (18.00)', igv_total),
         ('IMPORTE TOTAL', total),
     ]
     data = [(label, '', 'S/', str(round(value, 2))) for label, value in rows]
-    tbl = Table(data, colWidths=[wt * 0.55, wt * 0.08, wt * 0.12, wt * 0.25])
+    tbl = Table(data, colWidths=[wt * 0.61, wt * 0.02, wt * 0.12, wt * 0.25])
     tbl.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -2), 'Square'),
-        ('FONTNAME', (0, -1), (-1, -1), 'Square-Bold'),
+        ('FONTNAME', (0, 0), (-1, -2), 'Helvetica'),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('ALIGNMENT', (2, 0), (3, -1), 'RIGHT'),
+        ('ALIGNMENT', (0, 0), (-1, -1), 'RIGHT'),
         ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
         ('TOPPADDING', (0, 0), (-1, -1), 0),
     ]))
@@ -922,9 +925,76 @@ def _totals_table(order_obj, show_igv=False, width=None, font_size=8):
     return tbl, total
 
 
-def _qr_block(order_obj, width=None):
+def _bill_client_doc_sunat_code(client_obj):
+    """Código SUNAT del documento del cliente: 6=RUC, 1=DNI, etc."""
+    if not client_obj:
+        return ''
+    client_type = client_obj.clienttype_set.select_related('document_type').first()
+    if not client_type:
+        return ''
+    doc = client_type.document_type
+    raw = (getattr(doc, 'sunat_code', None) or getattr(doc, 'id', None) or '')
+    raw = str(raw).strip()
+    if not raw:
+        return ''
+    try:
+        return str(int(raw))
+    except (TypeError, ValueError):
+        return raw.lstrip('0') or raw
+
+
+def _bill_qr_payload(order_obj, igv_total, total):
+    """
+    QR SUNAT:
+    RUC|01/03|serie|correlativo|igv|total|fecha|tipo_doc_cliente||
+    """
+    company = getattr(order_obj, 'company', None)
+    ruc = (company.ruc if company and company.ruc else '') or ''
+    order_bill = getattr(order_obj, 'orderbill', None)
+    bill_type = str(getattr(order_bill, 'type', '') or '')
+    if bill_type in ('1', 'F', '01') or order_obj.type_document == 'F':
+        tipo_cpe = '01'
+    else:
+        tipo_cpe = '03'
+    serie = order_obj.serial or getattr(order_bill, 'serial', None) or ''
+    correlativo = order_obj.correlative_sale or ''
+    if not correlativo and getattr(order_bill, 'n_receipt', None):
+        correlativo = str(order_bill.n_receipt)
+    bill_created_at = getattr(order_bill, 'created_at', None)
+    local_dt = utc_to_local(bill_created_at or order_obj.create_at)
+    fecha_qr = local_dt.strftime('%Y-%m-%d')
+    client_obj = _bill_client_obj(order_obj)
+    tipo_doc_cliente = _bill_client_doc_sunat_code(client_obj)
+    return '|'.join([
+        str(ruc),
+        tipo_cpe,
+        str(serie),
+        str(correlativo),
+        f'{round(igv_total, 2):.2f}',
+        f'{round(total, 2):.2f}',
+        fecha_qr,
+        str(tipo_doc_cliente),
+        '',
+        '',
+    ])
+
+
+def _bill_client_obj(order_obj):
+    # En cobros realizados en destino, Order.client guarda al destinatario facturado.
+    billing_client = getattr(order_obj, 'client', None)
+    if billing_client:
+        return billing_client
+    sender = OrderAction.objects.filter(order=order_obj, type='R').select_related('client').first()
+    if sender and sender.client_id:
+        return sender.client
+    return None
+
+
+def _qr_block(order_obj, width=None, igv_total=None, total=None):
     wt = width or THERMAL_WT
-    datatable = f'{order_obj.serial},{order_obj.correlative_sale}'
+    if igv_total is None or total is None:
+        _, igv_total, total = _bill_amounts(order_obj)
+    datatable = _bill_qr_payload(order_obj, igv_total, total)
     tbl = Table([(_qr_code(datatable), '')], colWidths=[wt * 0.99, wt * 0.01])
     tbl.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
@@ -973,9 +1043,10 @@ def _footer_terms_flowables(service_type='E'):
     return [Paragraph(text, s['terms_body'])]
 
 
-def _pdf_http_response(buff, order_obj, pk, request=None):
+def _pdf_http_response(buff, order_obj, pk, request=None, filename=None):
     response = HttpResponse(content_type='application/pdf')
-    filename = f'WARE[{order_obj.serial}-{order_obj.correlative_sale}].pdf'
+    if not filename:
+        filename = f'WARE[{order_obj.serial}-{order_obj.correlative_sale}].pdf'
     disposition = 'attachment' if request and request.GET.get('download') else 'inline'
     response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
     tomorrow = datetime.now() + timedelta(days=1)
@@ -1170,54 +1241,257 @@ def _bill_header(order_obj, doc_title):
     return elements
 
 
+def _bill_helvetica_styles():
+    """Estilos Helvetica exclusivos de boleta/factura encomienda."""
+    return {
+        'center': ParagraphStyle(
+            name='BillHelvCenter', fontName='Helvetica', fontSize=8, leading=10,
+            alignment=TA_CENTER, spaceBefore=0, spaceAfter=0, textColor=colors.black,
+        ),
+        'center_small': ParagraphStyle(
+            name='BillHelvCenterSmall', fontName='Helvetica', fontSize=7, leading=9,
+            alignment=TA_CENTER, spaceBefore=0, spaceAfter=0, textColor=colors.black,
+        ),
+        'center_bold': ParagraphStyle(
+            name='BillHelvCenterBold', fontName='Helvetica-Bold', fontSize=9, leading=11,
+            alignment=TA_CENTER, spaceBefore=0, spaceAfter=0, textColor=colors.black,
+        ),
+        'center_docno': ParagraphStyle(
+            name='BillHelvDocNo', fontName='Helvetica-Bold', fontSize=11, leading=12,
+            alignment=TA_CENTER, spaceBefore=1, spaceAfter=1, textColor=colors.black,
+        ),
+        'left': ParagraphStyle(
+            name='BillHelvLeft', fontName='Helvetica', fontSize=8, leading=10,
+            alignment=TA_LEFT, spaceBefore=0, spaceAfter=0, leftIndent=2, textColor=colors.black,
+        ),
+        'left_bold': ParagraphStyle(
+            name='BillHelvLeftBold', fontName='Helvetica-Bold', fontSize=8, leading=10,
+            alignment=TA_LEFT, spaceBefore=0, spaceAfter=0, leftIndent=2, textColor=colors.black,
+        ),
+        'detail': ParagraphStyle(
+            name='BillHelvDetail', fontName='Helvetica', fontSize=7, leading=9,
+            alignment=TA_LEFT, spaceBefore=0, spaceAfter=0, textColor=colors.black,
+        ),
+        'detail_center': ParagraphStyle(
+            name='BillHelvDetailCenter', fontName='Helvetica', fontSize=7, leading=9,
+            alignment=TA_CENTER, spaceBefore=0, spaceAfter=0, textColor=colors.black,
+        ),
+        'detail_right': ParagraphStyle(
+            name='BillHelvDetailRight', fontName='Helvetica', fontSize=7, leading=9,
+            alignment=TA_RIGHT, spaceBefore=0, spaceAfter=0, textColor=colors.black,
+        ),
+        'head': ParagraphStyle(
+            name='BillHelvHead', fontName='Helvetica-Bold', fontSize=7, leading=9,
+            alignment=TA_LEFT, spaceBefore=0, spaceAfter=0, textColor=colors.black,
+        ),
+        'head_center': ParagraphStyle(
+            name='BillHelvHeadCenter', fontName='Helvetica-Bold', fontSize=7, leading=9,
+            alignment=TA_CENTER, spaceBefore=0, spaceAfter=0, textColor=colors.black,
+        ),
+        'head_right': ParagraphStyle(
+            name='BillHelvHeadRight', fontName='Helvetica-Bold', fontSize=7, leading=9,
+            alignment=TA_RIGHT, spaceBefore=0, spaceAfter=0, textColor=colors.black,
+        ),
+    }
+
+
+def _header_bill_encomienda(order_obj, title, width=None, top_gap=10):
+    """Encabezado de boleta/factura (Helvetica, sin ORDEN DE SERVICIO)."""
+    wt = width or BILL_WT
+    s = _bill_helvetica_styles()
+    brand = _company_short_name(order_obj)
+    logo = _brand_logo(wt * 0.55, 0.6 * inch)
+    company_lines = _company_block(order_obj).split('\n')
+    ruc_line = (
+        company_lines.pop()
+        if company_lines and company_lines[-1].upper().startswith('RUC')
+        else None
+    )
+    company_text = '<br />'.join(company_lines) if company_lines else brand
+    company_flowables = [Paragraph(company_text, s['center_small'])]
+    if ruc_line:
+        company_flowables.extend([
+            Spacer(2, 2),
+            Paragraph(f'<b>{ruc_line}</b>', s['center_small']),
+        ])
+    elements = [
+        Spacer(1, top_gap),
+        logo if logo else Paragraph(brand.upper(), s['center_bold']),
+        Spacer(4, 4),
+        *company_flowables,
+        Spacer(4, 4),
+        _separator(wt),
+        Spacer(4, 4),
+        Paragraph(title, s['center_bold']),
+        Paragraph(f'{order_obj.serial} - {order_obj.correlative_sale}', s['center_docno']),
+        Spacer(4, 4),
+        _separator(wt),
+        Spacer(4, 4),
+    ]
+    return elements
+
+
+def _bill_client_block(order_obj, width=None):
+    """
+    Bloque CLIENTE:
+    - DNI/RUC + número
+    - razón social / nombre
+    - dirección (opcional)
+    Todo con Paragraph.
+    """
+    s = _bill_helvetica_styles()
+    client = _bill_client_obj(order_obj)
+    elements = [Paragraph('CLIENTE', s['left_bold'])]
+
+    doc_label = 'DOC'
+    doc_number = ''
+    names = ''
+    address = ''
+    if client:
+        names = (client.names or '').strip().upper()
+        client_type = client.clienttype_set.select_related('document_type').first()
+        if client_type:
+            if client_type.document_type_id:
+                # Preferir etiqueta corta: RUC / DNI
+                raw_id = str(client_type.document_type_id).strip()
+                try:
+                    code = int(raw_id)
+                except (TypeError, ValueError):
+                    code = None
+                if code == 6:
+                    doc_label = 'RUC'
+                elif code == 1:
+                    doc_label = 'DNI'
+                else:
+                    doc_label = (client_type.document_type.short_description or 'DOC').upper()
+            doc_number = (client_type.document_number or '').strip()
+        addr = client.clientaddress_set.first()
+        if addr and addr.address:
+            address = addr.address.strip().upper()
+
+    elements.append(Paragraph(f'{doc_label} {doc_number}'.strip(), s['left']))
+    elements.append(Paragraph(names or '-', s['left']))
+    if address:
+        elements.append(Paragraph(address, s['left']))
+    return elements
+
+
+def _bill_emission_meta_block(order_obj, width=None):
+    """FECHA DE EMISION / VENC / MONEDA / IGV."""
+    s = _bill_helvetica_styles()
+    order_bill = getattr(order_obj, 'orderbill', None)
+    bill_created_at = getattr(order_bill, 'created_at', None)
+    if bill_created_at:
+        date_str = utc_to_local(bill_created_at).strftime('%d/%m/%Y')
+    else:
+        date_str, _ = _order_datetime(order_obj)
+    return [
+        Paragraph(f'<b>FECHA EMISIÓN:</b> {date_str}', s['left']),
+        Paragraph(f'<b>FECHA DE VENC:</b> {date_str}', s['left']),
+        Paragraph('<b>MONEDA:</b> SOLES', s['left']),
+        Paragraph('<b>IGV:</b> 18.00 %', s['left']),
+    ]
+
+
+def _bill_details_table(order_obj, width=None):
+    """Detalle: [CANT.] | DESCRIPCION | P/U | TOTAL."""
+    wt = width or BILL_WT
+    s = _bill_helvetica_styles()
+    col_w = [wt * 0.14, wt * 0.50, wt * 0.18, wt * 0.18]
+    head = Table([[
+        Paragraph('[CANT.]', s['head']),
+        Paragraph('DESCRIPCION', s['head']),
+        Paragraph('P/U', s['head_right']),
+        Paragraph('TOTAL', s['head_right']),
+    ]], colWidths=col_w)
+    head.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 1),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    ]))
+
+    detail_rows = []
+    for detail in order_obj.orderdetail_set.all():
+        qty = detail.quantity or decimal.Decimal('0')
+        qty_display = str(int(qty)) if qty == qty.to_integral_value() else str(round(qty, 2))
+        unit_name = 'ZZ'
+        if detail.unit_id and detail.unit and detail.unit.description:
+            unit_name = detail.unit.description.strip().upper()
+        desc = f'ZZ SERVICIO DE TRANSPORTE {qty_display} {unit_name}'
+        price = str(round(detail.price_unit or 0, 2))
+        amount = str(round(detail.amount or (detail.quantity * detail.price_unit), 2))
+        detail_rows.append([
+            Paragraph(f'[ {qty_display} ]', s['detail_center']),
+            Paragraph(desc, s['detail']),
+            Paragraph(price, s['detail_right']),
+            Paragraph(amount, s['detail_right']),
+        ])
+
+    if not detail_rows:
+        return None
+
+    body = Table(detail_rows, colWidths=col_w)
+    body.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 1),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+    ]))
+    return [head, Spacer(0, 0), body]
+
+
+def _bill_payment_label(order_obj):
+    if order_obj.way_to_pay == 'C':
+        return 'CONTADO'
+    return (order_obj.get_way_to_pay_display() or 'CONTADO').upper().replace('AL ', '')
+
+
 def build_bill_encomienda(order_obj, pk, request=None):
-    _ensure_brand_font()
-    s = _local_styles()
+    s = _bill_helvetica_styles()
     order_bill = getattr(order_obj, 'orderbill', None)
     bill_type = str(getattr(order_bill, 'type', '') or '')
     if bill_type in ('1', 'F', '01') or order_obj.type_document == 'F':
         doc_title = 'FACTURA ELECTRÓNICA'
+        file_label = 'FACTURA ELECTRONICA'
     else:
         doc_title = 'BOLETA DE VENTA ELECTRÓNICA'
+        file_label = 'BOLETA ELECTRONICA'
 
     brand = _company_short_name(order_obj)
-    elements = _header_encomienda(order_obj, doc_title, width=BILL_WT, top_gap=10)
-    elements.extend([Spacer(2, 2), *_encomienda_shipping_block(order_obj, width=BILL_WT, include_client=True)])
+    elements = _header_bill_encomienda(order_obj, doc_title, width=BILL_WT, top_gap=10)
+    elements.extend(_bill_client_block(order_obj, width=BILL_WT))
+    elements.extend([Spacer(2, 3), *_bill_emission_meta_block(order_obj, width=BILL_WT)])
     elements.extend([Spacer(2, 2), _separator(BILL_WT), Spacer(2, 2)])
-    details = _encomienda_details_table(order_obj, width=BILL_WT)
+
+    details = _bill_details_table(order_obj, width=BILL_WT)
     if details:
         elements.extend(details)
 
-    observation = (getattr(order_obj, 'observation', None) or '').strip()
-    if observation:
-        elements.extend([
-            Spacer(2, 2),
-            _separator(BILL_WT),
-            Spacer(2, 2),
-            Paragraph('<font name="Newgot">OBSERVACIÓN:</font>', s['left_pad']),
-            Paragraph(f'<font name="Square">{observation.upper()}</font>', s['left_pad']),
-        ])
-
     total_tbl, total = _bill_totals_table(order_obj, width=BILL_WT)
+    _, igv_total, _ = _bill_amounts(order_obj)
+    payment = _bill_payment_label(order_obj)
     elements.extend([
-        Spacer(1, 1),
+        Spacer(1, 6),
         _separator(BILL_WT),
+        Spacer(1, 6),
         total_tbl,
-        Spacer(1, 7),
-        Paragraph(f'SON: {numero_a_moneda(total)}', s['center']),
+        Spacer(1, 6),
+        _separator(BILL_WT),
+        Spacer(1, 6),
+        Paragraph(f'<b>IMPORTE EN LETRAS:</b> {numero_a_moneda(total)}', s['left']),
+        Spacer(1, 4),
+        Paragraph(f'<b>FORMA DE PAGO:</b> [{payment}]', s['left']),
         Spacer(1, 7),
         Paragraph(
             'Representación impresa del comprobante electrónico. Consulte en https://www.tuf4ct.com/cpe/',
-            s['value'],
+            s['center'],
         ),
-        Paragraph('Emitido mediante PROVEEDOR autorizado por la SUNAT', s['value']),
+        Paragraph('Emitido mediante PROVEEDOR autorizado por la SUNAT', s['center']),
         Spacer(1, 1),
-        _qr_block(order_obj, width=BILL_WT),
-        Spacer(1, 1),
-        *_footer_terms_flowables('E'),
-        Spacer(1, 1),
-        _separator(BILL_WT),
-        Paragraph(_thanks_message(order_obj), s['center_small']),
+        _qr_block(order_obj, width=BILL_WT, igv_total=igv_total, total=total),
     ])
 
     counter = max(order_obj.orderdetail_set.count(), 1)
@@ -1229,7 +1503,7 @@ def build_bill_encomienda(order_obj, pk, request=None):
         leftMargin=0.05 * inch,
         topMargin=0.039 * inch,
         bottomMargin=0.039 * inch,
-        title=f'{doc_title} - {brand}',
+        title=f'{doc_title}',
     )
     doc.build(elements)
     return _pdf_http_response(buff, order_obj, pk, request)

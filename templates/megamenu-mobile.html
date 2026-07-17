@@ -33,10 +33,9 @@
         <div class="nav-section">Finanzas</div>
         <a href="{% url 'accounting:get_cash_control_list' %}"><i class="fas fa-cash-register"></i> Caja y gastos</a>
 
-        {% if can_see_reports %}
         <div class="nav-section">Reportes</div>
-        <a href="{% url 'comercial:report_comodity_grid' %}"><i class="fas fa-file-alt"></i> Reporte de servicios</a>
-        {% endif %}
+        <a href="{% url 'comercial:report_comodity_grid' %}"><i class="fas fa-file-alt"></i> Reporte de encomiendas</a>
+        <a href="{% url 'comercial:reception_report' %}"><i class="fas fa-box-open"></i> Recepción de encomiendas</a>
 
         {% if can_see_admin %}
         <div class="nav-section">Gestión</div>
