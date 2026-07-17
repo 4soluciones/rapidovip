@@ -96,7 +96,7 @@
                         <a class="rv-report-action-btn" href="{% url 'comercial:print_ticket_order_commodity' o.id %}?download=1" download title="Descargar orden de servicio">
                             <i class="fas fa-download"></i>
                         </a>
-                        {% if user_log_perm and o.status != 'A' %}
+                        {% if o.status != 'A' %}
                             <button type="button" class="rv-report-action-btn rv-report-action-danger btn-cancel-service" data-id="{{ o.id }}" title="Anular">
                                 <i class="fas fa-ban"></i>
                             </button>

@@ -1959,9 +1959,6 @@ def cancel_commodity(request):
         return JsonResponse({'error': 'Error de peticion.'}, status=HTTPStatus.BAD_REQUEST)
 
     user_obj = request.user
-    if not user_is_administrator(user_obj):
-        return JsonResponse({'error': 'No tiene permisos para anular encomiendas.'},
-                            status=HTTPStatus.FORBIDDEN)
 
     reason = str(request.POST.get('reason', '')).strip()
     if not reason:
@@ -2019,7 +2016,7 @@ def cancel_commodity(request):
         't': user_selected,
         'w': way_to_pay,
         'd': destiny,
-        'user_log_perm': True,
+        'user_log_perm': user_is_administrator(user_obj),
     }
     return JsonResponse({
         'message': message,
