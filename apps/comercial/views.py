@@ -23,7 +23,9 @@ from apps.accounting.views import Cash, CashFlow, save_cash_flow
 from apps.comercial.guide_helpers import get_serial_service, get_correlative_service
 from apps.comercial.service_helpers import (
     get_service_destiny_label,
+    filter_report_orders,
     prefetch_orders_for_report,
+    report_filter_url_value,
     save_service_for_order,
 )
 from apps.comercial.serial_helpers import (
@@ -1305,27 +1307,9 @@ def get_programming_query_list(request):
         }, status=HTTPStatus.OK)
 
 
-def _filter_report_orders(subsidiary_obj, start_date, end_date,
-                          service_type='T', user_selected='T', way_to_pay='T', destiny='T'):
-    """Encomiendas del reporte según filtros; 'T' significa 'todos'."""
-    order_set = Order.objects.filter(
-        subsidiary=subsidiary_obj, type_order='E',
-        transfer_date__range=[start_date, end_date])
-    if service_type and service_type != 'T':
-        order_set = order_set.filter(service_type=service_type)
-    if user_selected and user_selected != 'T':
-        order_set = order_set.filter(user__id=int(user_selected))
-    if way_to_pay and way_to_pay != 'T':
-        order_set = order_set.filter(way_to_pay=way_to_pay)
-    if destiny and destiny != 'T':
-        order_set = order_set.filter(encomienda__office_destination__id=destiny)
-    return prefetch_orders_for_report(order_set).order_by('-transfer_date', '-id')
-
-
 def report_comodity_grid(request):
     if request.method == 'GET':
-        user_id = request.user.id
-        user_obj = User.objects.get(id=user_id)
+        user_obj = request.user
         subsidiary_obj = get_subsidiary_by_user(user_obj)
         date_now = datetime.now().strftime("%Y-%m-%d")
         subsidiaries_set = Subsidiary.objects.all().exclude(id=subsidiary_obj.id)
@@ -1340,43 +1324,52 @@ def report_comodity_grid(request):
             'subsidiary': subsidiary_obj,
             'service_types': SERVICE_TYPE_CHOICES,
             'way_to_pay_choices': WAY_TO_PAY_CHOICES,
-            'user_log_perm': user_is_administrator(user_obj),
         })
 
-    elif request.method == 'POST':
-        start_date = str(request.POST.get('start-date'))
-        end_date = str(request.POST.get('end-date'))
-        user_selected = str(request.POST.get('user'))
-        way_to_pay = str(request.POST.get('way_to_pay'))
-        destiny = request.POST.get('destiny')
-        service_type = request.POST.get('service_type', 'T')
-        user_id = request.user.id
-        user_obj = User.objects.get(id=user_id)
-        subsidiary_obj = get_subsidiary_by_user(user_obj)
+    if request.method == 'POST':
+        start_date = (request.POST.get('start-date') or '').strip()
+        end_date = (request.POST.get('end-date') or '').strip()
+        service_type = (request.POST.get('service_type') or '').strip()
+        user_selected = (request.POST.get('user') or '').strip()
+        way_to_pay = (request.POST.get('way_to_pay') or '').strip()
+        destiny = (request.POST.get('destiny') or '').strip()
+        subsidiary_obj = get_subsidiary_by_user(request.user)
 
-        order_set = _filter_report_orders(
-            subsidiary_obj, start_date, end_date,
-            service_type=service_type, user_selected=user_selected,
-            way_to_pay=way_to_pay, destiny=destiny,
+        # Base: encomiendas emitidas en la sede del usuario, en el rango de fechas.
+        # "Todos" llega vacío / T / ALL → NO se agrega ese filtro.
+        order_set = Order.objects.filter(
+            subsidiary=subsidiary_obj,
+            type_order='E',
+            transfer_date__range=[start_date, end_date],
         )
+        if service_type and service_type.upper() not in ('T', 'ALL'):
+            order_set = order_set.filter(service_type=service_type)
+        if user_selected.isdigit():
+            order_set = order_set.filter(user_id=int(user_selected))
+        if way_to_pay and way_to_pay.upper() not in ('T', 'ALL'):
+            order_set = order_set.filter(way_to_pay=way_to_pay)
+        if destiny.isdigit():
+            order_set = order_set.filter(encomienda__office_destination_id=int(destiny))
 
-        if not order_set.exists():
-            return JsonResponse({'error': 'No hay servicios registrados en el rango seleccionado.'},
-                                status=HTTPStatus.INTERNAL_SERVER_ERROR)
-
+        order_set = prefetch_orders_for_report(order_set).order_by('-transfer_date', '-id')
         order_dict = get_order_comodity_values(order_set=order_set)
         tpl = loader.get_template('comercial/report_services_grid.html')
-        context = {
-            'order_set': order_dict,
-            'count': len(order_dict),
-            'subsidiary': subsidiary_obj,
-            'f1': start_date,
-            'f2': end_date,
-            't': user_selected,
-            'w': way_to_pay,
-            'd': destiny,
-            'user_log_perm': user_is_administrator(user_obj),
-        }
+        context = _report_grid_context(
+            order_dict, start_date, end_date, user_selected, way_to_pay, destiny,
+        )
+        if not order_dict:
+            return JsonResponse({
+                'error': (
+                    f'No hay encomiendas emitidas en {subsidiary_obj.name} '
+                    f'del {start_date} al {end_date}.'
+                ),
+                'grid': (
+                    '<div class="rv-report-empty"><i class="fas fa-inbox"></i>'
+                    f'<p>No hay encomiendas emitidas en <strong>{subsidiary_obj.name}</strong> '
+                    f'del {start_date} al {end_date}.</p></div>'
+                ),
+            }, status=HTTPStatus.OK)
+
         return JsonResponse({'grid': tpl.render(context, request)}, status=HTTPStatus.OK)
 
 
@@ -1816,35 +1809,29 @@ def get_order_comodity_values(order_set=None):
         for oa in o.orderaction_set.all():
 
             if oa.type == 'D':
-                _client_names = ''
-                if oa.client is None and oa.order_addressee.names == '':
-                    type_commodity_destiny = True
-                    _client_names = 'CANJE DE ENCOMIENDA'
+                if oa.client_id:
+                    _client_names = oa.client.names or ''
                 else:
-                    if oa.client is None:
-                        _client_names = oa.order_addressee.names
-                    else:
-                        _client_names = oa.client.names
+                    _client_names = (oa.order_addressee.names if oa.order_addressee_id else '') or ''
+                    if not _client_names:
+                        type_commodity_destiny = True
+                        _client_names = 'CANJE DE ENCOMIENDA'
 
-                item_action_a = {
+                item_action_addressee.append({
                     'id': oa.id,
-                    'client_names': _client_names
-                }
-                item_action_addressee.append(item_action_a)
+                    'client_names': _client_names,
+                })
 
             elif oa.type == 'R':
-
-                _client_sender_names = ''
-
-                if oa.client is None:
-                    _client_sender_names = oa.order_addressee.names
+                if oa.client_id:
+                    _client_sender_names = oa.client.names or ''
                 else:
-                    _client_sender_names = oa.client.names
-                item_action_s = {
+                    _client_sender_names = (oa.order_addressee.names if oa.order_addressee_id else '') or ''
+
+                item_action_sender.append({
                     'id': oa.id,
-                    'client_names': _client_sender_names
-                }
-                item_action_sender.append(item_action_s)
+                    'client_names': _client_sender_names,
+                })
 
         if o.truck_id:
             item_set_employee.append({
@@ -1854,7 +1841,7 @@ def get_order_comodity_values(order_set=None):
 
         order_item = {
             'id': o.id,
-            'company': o.company.short_name,
+            'company': o.company.short_name if o.company_id else '',
             'transfer_date': o.transfer_date,
             'create_date': o.create_at,
             'order_service_number': _order_service_label(o),
@@ -1876,7 +1863,7 @@ def get_order_comodity_values(order_set=None):
                 else '—'
             ),
             'destiny_label': destiny_label,
-            'user': o.user.username,
+            'user': o.user.username if o.user_id else '',
             'item_detail_order': item_detail_order,
             'item_route_destiny': item_route_destiny,
             'item_action_addressee': item_action_addressee,
@@ -1991,33 +1978,27 @@ def cancel_commodity(request):
     CashFlow.objects.filter(order=order_obj).delete()
 
     # Re-render de la grilla con los mismos filtros del reporte
-    start_date = str(request.POST.get('start-date'))
-    end_date = str(request.POST.get('end-date'))
-    user_selected = str(request.POST.get('user', 'T'))
-    way_to_pay = str(request.POST.get('way_to_pay', 'T'))
-    destiny = request.POST.get('destiny', 'T')
-    service_type = request.POST.get('service_type', 'T')
+    start_date = (request.POST.get('start-date') or '').strip()
+    end_date = (request.POST.get('end-date') or '').strip()
+    user_selected = request.POST.get('user')
+    way_to_pay = request.POST.get('way_to_pay')
+    destiny = request.POST.get('destiny')
+    service_type = request.POST.get('service_type')
 
     subsidiary_obj = get_subsidiary_by_user(user_obj)
-    order_set = _filter_report_orders(
+    order_set = filter_report_orders(
         subsidiary_obj, start_date, end_date,
-        service_type=service_type, user_selected=user_selected,
-        way_to_pay=way_to_pay, destiny=destiny,
+        service_type=service_type,
+        user_selected=user_selected,
+        way_to_pay=way_to_pay,
+        destiny=destiny,
     )
     order_dict = get_order_comodity_values(order_set=order_set)
 
     tpl = loader.get_template('comercial/report_services_grid.html')
-    context = {
-        'order_set': order_dict,
-        'count': len(order_dict),
-        'subsidiary': subsidiary_obj,
-        'f1': start_date,
-        'f2': end_date,
-        't': user_selected,
-        'w': way_to_pay,
-        'd': destiny,
-        'user_log_perm': user_is_administrator(user_obj),
-    }
+    context = _report_grid_context(
+        order_dict, start_date, end_date, user_selected, way_to_pay, destiny,
+    )
     return JsonResponse({
         'message': message,
         'grid': tpl.render(context, request)
@@ -2301,6 +2282,40 @@ def _order_service_label(order_obj):
     if (order_obj.order_serial or '').strip() and (order_obj.order_correlative or '').strip():
         return f'{order_obj.order_serial}-{order_obj.order_correlative}'
     return f'OS-{order_obj.id}'
+
+
+def _report_payment_totals(order_dict):
+    """Suma importes al contado (C) y pago destino (D); excluye anulados y canjes."""
+    total_cash = decimal.Decimal('0.00')
+    total_destination = decimal.Decimal('0.00')
+    for row in order_dict:
+        if row.get('status') == 'A' or row.get('type_commodity_destiny'):
+            continue
+        amount = decimal.Decimal(str(row.get('total') or 0))
+        if row.get('way_to_pay') == 'C':
+            total_cash += amount
+        elif row.get('way_to_pay') == 'D':
+            total_destination += amount
+    return (
+        total_cash.quantize(decimal.Decimal('0.00'), rounding=decimal.ROUND_HALF_EVEN),
+        total_destination.quantize(decimal.Decimal('0.00'), rounding=decimal.ROUND_HALF_EVEN),
+    )
+
+
+def _report_grid_context(order_dict, start_date, end_date, user_selected, way_to_pay, destiny):
+    total_cash, total_destination = _report_payment_totals(order_dict)
+    return {
+        'order_set': order_dict,
+        'count': len(order_dict),
+        'f1': start_date,
+        'f2': end_date,
+        't': report_filter_url_value(user_selected),
+        'w': report_filter_url_value(way_to_pay),
+        'd': report_filter_url_value(destiny),
+        'total_cash': total_cash,
+        'total_destination': total_destination,
+        'total_general': total_cash + total_destination,
+    }
 
 
 def validate_order_for_carrier_guide(order_obj, programming_obj):

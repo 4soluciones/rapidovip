@@ -105,6 +105,27 @@
                 </tr>
                 {% endfor %}
             </tbody>
+            <tfoot>
+                <tr class="rv-report-totals-row">
+                    <td colspan="6" class="rv-report-totals-label">Totales</td>
+                    <td colspan="5" class="rv-report-totals-values">
+                        <div class="rv-report-totals">
+                            <div class="rv-report-total rv-report-total-cash">
+                                <span>Al contado</span>
+                                <strong>S/ {{ total_cash }}</strong>
+                            </div>
+                            <div class="rv-report-total rv-report-total-destiny">
+                                <span>Pago destino</span>
+                                <strong>S/ {{ total_destination }}</strong>
+                            </div>
+                            <div class="rv-report-total rv-report-total-general">
+                                <span>Total general</span>
+                                <strong>S/ {{ total_general }}</strong>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            </tfoot>
         </table>
     </div>
 </div>

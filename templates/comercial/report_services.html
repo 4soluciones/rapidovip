@@ -28,7 +28,7 @@
                 <div class="rv-form-group">
                     <label for="filter-service-type">Tipo de servicio</label>
                     <select class="rv-form-control" id="filter-service-type" name="service_type">
-                        <option value="T">Todos</option>
+                        <option value="">Todos</option>
                         {% for code, label in service_types %}
                             <option value="{{ code }}">{{ label|title }}</option>
                         {% endfor %}
@@ -37,7 +37,7 @@
                 <div class="rv-form-group">
                     <label for="filter-user">Usuario</label>
                     <select class="rv-form-control" id="filter-user" name="user">
-                        <option value="T">Todos</option>
+                        <option value="">Todos</option>
                         {% for us in user_set %}
                             <option value="{{ us.user.id }}">{{ us.user.username|upper }}</option>
                         {% endfor %}
@@ -46,7 +46,7 @@
                 <div class="rv-form-group">
                     <label for="filter-way-to-pay">Forma de pago</label>
                     <select class="rv-form-control" id="filter-way-to-pay" name="way_to_pay">
-                        <option value="T">Todas</option>
+                        <option value="">Todas</option>
                         {% for code, label in way_to_pay_choices %}
                             <option value="{{ code }}">{{ label|title }}</option>
                         {% endfor %}
@@ -55,7 +55,7 @@
                 <div class="rv-form-group">
                     <label for="filter-destiny">Destino</label>
                     <select class="rv-form-control" id="filter-destiny" name="destiny">
-                        <option value="T">Todos</option>
+                        <option value="">Todos</option>
                         {% for s in subsidiaries_set %}
                             <option value="{{ s.id }}">{{ s.name }}</option>
                         {% endfor %}
@@ -97,6 +97,9 @@
             data: $(this).serialize(),
             success: function (r) {
                 $('#report-results').html(r.grid);
+                if (r.error) {
+                    toastr.warning(r.error);
+                }
             },
             error: function (xhr) {
                 var msg = xhr.responseJSON && xhr.responseJSON.error

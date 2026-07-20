@@ -1,4 +1,3 @@
-import decimal
 from datetime import datetime, time
 
 from django.db.models import Prefetch
@@ -73,3 +72,50 @@ def prefetch_orders_for_report(order_set):
         'encomienda__office_destination',
         'encomienda__office_origin',
     ).select_related('user', 'company', 'truck', 'encomienda')
+
+
+def _is_all_filter(value):
+    """True cuando el filtro significa 'todos' (sin restricción)."""
+    if value is None:
+        return True
+    return str(value).strip().upper() in ('', 'ALL', 'T', 'NONE', 'NULL')
+
+
+def normalize_report_filter(value):
+    """Devuelve None si el filtro es 'todos'; si no, el valor limpio."""
+    if _is_all_filter(value):
+        return None
+    return str(value).strip()
+
+
+def report_filter_url_value(value):
+    """Valor seguro para URLs del PDF: ALL cuando no hay filtro."""
+    normalized = normalize_report_filter(value)
+    return normalized if normalized else 'ALL'
+
+
+def filter_report_orders(subsidiary_obj, start_date, end_date,
+                         service_type=None, user_selected=None, way_to_pay=None, destiny=None):
+    """
+    Encomiendas emitidas en la sede.
+    Vacío / T / ALL = sin filtro en ese campo (no busca service_type='T').
+    """
+    service_type = (service_type or '').strip()
+    user_selected = (user_selected or '').strip()
+    way_to_pay = (way_to_pay or '').strip()
+    destiny = (destiny or '').strip()
+
+    order_set = Order.objects.filter(
+        subsidiary=subsidiary_obj,
+        type_order='E',
+        transfer_date__range=[start_date, end_date],
+    )
+    if service_type and service_type.upper() not in ('T', 'ALL'):
+        order_set = order_set.filter(service_type=service_type)
+    if user_selected.isdigit():
+        order_set = order_set.filter(user_id=int(user_selected))
+    if way_to_pay and way_to_pay.upper() not in ('T', 'ALL'):
+        order_set = order_set.filter(way_to_pay=way_to_pay)
+    if destiny.isdigit():
+        order_set = order_set.filter(encomienda__office_destination_id=int(destiny))
+    return prefetch_orders_for_report(order_set).order_by('-transfer_date', '-id')

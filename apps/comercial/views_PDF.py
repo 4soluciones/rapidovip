@@ -28,6 +28,7 @@ from apps.sales.number_to_letters import numero_a_moneda
 from apps.sales.models import Order, OrderAction, OrderBill, Manifest, OrderCommodity
 import io
 from .views import calculate_age
+from .service_helpers import filter_report_orders
 
 
 def _order_detail_unit_label(detail, use_description=False):
@@ -2337,27 +2338,15 @@ def print_report_commodity(request, start_date=None, end_date=None, user_selecte
     date = datetime.now()
     _formatdate = date.strftime("%d/%m/%Y")
 
-    user_id = request.user.id
-    user_obj = User.objects.get(id=user_id)
+    user_obj = request.user
     subsidiary_obj = get_subsidiary_by_user(user_obj)
-    user_select_obj = None
 
-    if user_selected != 'T':
-        user_select_obj = User.objects.get(id=int(user_selected))
-
-    order_set = Order.objects.filter(
-        subsidiary=subsidiary_obj,
-        type_order='E',
-        transfer_date__range=[start_date, end_date],
-    ).select_related('user', 'encomienda__office_destination')
-
-    if user_select_obj is not None:
-        order_set = order_set.filter(user=user_select_obj)
-    if way_to_pay in ('C', 'D'):
-        order_set = order_set.filter(way_to_pay=way_to_pay)
-    if destiny != 'T':
-        order_set = order_set.filter(encomienda__office_destination__id=destiny)
-    order_set = order_set.order_by('id')
+    order_set = filter_report_orders(
+        subsidiary_obj, start_date, end_date,
+        user_selected=user_selected,
+        way_to_pay=way_to_pay,
+        destiny=destiny,
+    ).order_by('id')
 
     _tbl_header = ('REPORTE DE ENCOMIENDAS',)
 
@@ -2376,84 +2365,112 @@ def print_report_commodity(request, start_date=None, end_date=None, user_selecte
     ]
     ana_c.setStyle(TableStyle(my_style_table_header))
 
-    td_title = ('FECHA', 'SERIE', 'NRO.', 'PAGO\n CONTADO', 'PAGO\n DESTINO', 'DESTINO', 'USUARIO',)
-    colwiths_table_title = [_bts * 20 / 100,
-                            _bts * 10 / 100,
-                            _bts * 10 / 100,
-                            _bts * 10 / 100,
-                            _bts * 10 / 100,
-                            _bts * 20 / 100,
-                            _bts * 20 / 100,
-                            ]
+    td_title = (
+        'FECHA',
+        'SERIE\nOS',
+        'NRO.\nOS',
+        'COMPROB.',
+        'PAGO\nCONTADO',
+        'PAGO\nDESTINO',
+        'DESTINO',
+        'USUARIO',
+    )
+    # Ancho útil A5 ≈ 5.3"; proporciones ajustadas a 8 columnas
+    colwiths_table_title = [
+        _bts * 12 / 100,  # fecha
+        _bts * 10 / 100,  # serie OS
+        _bts * 10 / 100,  # nro OS
+        _bts * 14 / 100,  # comprobante B/F
+        _bts * 11 / 100,  # contado
+        _bts * 11 / 100,  # destino $
+        _bts * 16 / 100,  # destino sede
+        _bts * 16 / 100,  # usuario
+    ]
     _rows = []
     _rows.append(td_title)
-    cont_counted = 0
-    cont_destination_payment = 0
+    cont_counted = decimal.Decimal('0.00')
+    cont_destination_payment = decimal.Decimal('0.00')
 
     for o in order_set:
-        _total_pay_counted = 0
-        _total_pay_destiny = 0
+        _total_pay_counted = decimal.Decimal('0.00')
+        _total_pay_destiny = decimal.Decimal('0.00')
+        amount = decimal.Decimal(str(o.sum_total_details() or o.total or 0)).quantize(
+            decimal.Decimal('0.00'), rounding=decimal.ROUND_HALF_EVEN,
+        )
 
         if o.status != 'A':
             if o.way_to_pay == 'C':
-                _total_pay_counted = o.total
+                _total_pay_counted = amount
+                cont_counted += amount
             elif o.way_to_pay == 'D':
-                _total_pay_destiny = o.total
+                _total_pay_destiny = amount
+                cont_destination_payment += amount
 
         encomienda = getattr(o, 'encomienda', None)
         if encomienda and encomienda.office_destination_id:
-            destiny_obj = encomienda.office_destination.short_name
+            destiny_obj = encomienda.office_destination.short_name or '—'
         else:
             destiny_obj = '—'
 
-        _rows.append((o.transfer_date,
-                      o.serial,
-                      str(o.correlative_sale),
-                      _total_pay_counted,
-                      _total_pay_destiny,
-                      destiny_obj,
-                      o.user.worker_set.last().employee.names
-                      ))
-        if o.status != 'A':
-            if o.way_to_pay == 'C':
-                cont_counted = cont_counted + o.total
-            elif o.way_to_pay == 'D':
-                cont_destination_payment = cont_destination_payment + o.total
+        user_label = o.user.username if o.user_id else '—'
+        worker = o.user.worker_set.last() if o.user_id else None
+        if worker and getattr(worker, 'employee_id', None):
+            user_label = worker.employee.names or user_label
+
+        os_serial = (o.order_serial or '').strip() or '—'
+        os_corr = (o.order_correlative or '').strip()
+        os_nro = os_corr.zfill(4) if os_corr else '—'
+        if o.type_document in ('B', 'F') and (o.serial or '').strip() and (o.correlative_sale or '').strip():
+            bill_label = f'{o.serial}-{str(o.correlative_sale).strip().zfill(4)}'
+        else:
+            bill_label = '—'
+
+        _rows.append((
+            o.transfer_date.strftime('%d/%m/%Y') if o.transfer_date else '—',
+            os_serial,
+            os_nro,
+            bill_label,
+            f'{_total_pay_counted:.2f}' if _total_pay_counted else '0.00',
+            f'{_total_pay_destiny:.2f}' if _total_pay_destiny else '0.00',
+            destiny_obj,
+            user_label,
+        ))
 
     ana_c3 = Table(_rows, colWidths=colwiths_table_title)
 
-    colwiths_table_totals = [_bts * 80 / 100, _bts * 10 / 100, _bts * 10 / 100]
+    colwiths_table_totals = [_bts * 55 / 100, _bts * 25 / 100, _bts * 20 / 100]
     p4 = Paragraph('TOTALES ENCOMIENDAS', styles["Center"])
     _tbl_totals = [
         ['', p4, ''],
-        ['', 'TOTAL PAGO CONTADO:', 'S/. ' + str(decimal.Decimal(round(cont_counted, 2)))],
-        ['', 'TOTAL PAGO DESTINO:', 'S/. ' + str(decimal.Decimal(round(cont_destination_payment, 2)))],
+        ['', 'TOTAL PAGO CONTADO:', 'S/. ' + str(cont_counted)],
+        ['', 'TOTAL PAGO DESTINO:', 'S/. ' + str(cont_destination_payment)],
+        ['', 'TOTAL GENERAL:', 'S/. ' + str(cont_counted + cont_destination_payment)],
     ]
     ana_c4 = Table(_tbl_totals, colWidths=colwiths_table_totals)
 
     detail_style = [
         ('FONTNAME', (0, 0), (-1, -1), 'Square'),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('FONTSIZE', (0, 0), (-1, -1), 6.5),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-        ('FONTNAME', (2, 1), (-5, -1), 'Square-Bold'),
-        # ('BACKGROUND', (2, 1), (-5, -1), colors.blue),
         ('FONTNAME', (0, 0), (-1, 0), 'Square'),
-        ('FONTNAME', (0, 0), (0, -1), 'Square'),
-        # ('FONTSIZE', (0, 0), (0, -1), 10),
-        ('FONTSIZE', (0, 0), (-1, 0), 9)
+        ('FONTSIZE', (0, 0), (-1, 0), 6.5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
     ]
     ana_c3.setStyle(TableStyle(detail_style))
 
     my_style_table_totals = [
         ('FONTNAME', (0, 0), (-1, -1), 'Square'),
-        # ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('VALIGN', (1, 0), (1, -1), 'MIDDLE'),  # first column
-        ('SPAN', (1, 0), (2, 0)),  # first row
-        ('ALIGNMENT', (1, 0), (2, -1), 'RIGHT'),  # second column
+        ('VALIGN', (1, 0), (1, -1), 'MIDDLE'),
+        ('SPAN', (1, 0), (2, 0)),
+        ('ALIGNMENT', (1, 0), (2, -1), 'RIGHT'),
+        ('FONTNAME', (1, -1), (2, -1), 'Square-Bold'),
     ]
     ana_c4.setStyle(TableStyle(my_style_table_totals))
 
