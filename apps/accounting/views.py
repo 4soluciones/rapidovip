@@ -194,50 +194,6 @@ def get_cash_control_list(request):
         return JsonResponse({'grid': grid}, status=HTTPStatus.OK)
 
 
-def _parse_decimal_amount(value, default='0.00'):
-
-    if value is None or str(value).strip() in ('', 'None'):
-
-        return decimal.Decimal(default)
-
-    try:
-
-        return decimal.Decimal(str(value).strip().replace(',', ''))
-
-    except decimal.InvalidOperation:
-
-        return decimal.Decimal(default)
-
-
-def _opening_amount_for_cash(cash_obj, amount_raw):
-
-    """Saldo de apertura: 0.00 si es la primera apertura de la caja."""
-
-    is_first_opening = not CashFlow.objects.filter(cash=cash_obj, type='A').exists()
-
-    if is_first_opening:
-
-        return decimal.Decimal('0.00')
-
-    if amount_raw is not None and str(amount_raw).strip() not in ('', 'None'):
-
-        try:
-
-            return decimal.Decimal(str(amount_raw).strip().replace(',', ''))
-
-        except decimal.InvalidOperation:
-
-            pass
-
-    last_close = cash_obj.cashflow_set.filter(type='C').order_by('transaction_date').last()
-
-    if last_close:
-
-        return last_close.total
-
-    return _parse_decimal_amount(cash_obj.initial, '0.00')
-
-
 def open_cash(request):
 
     if request.method == 'POST':
@@ -252,7 +208,39 @@ def open_cash(request):
 
         cash_obj = Cash.objects.get(id=int(_cash_id))
 
-        opening_total = _opening_amount_for_cash(cash_obj, _amount)
+        if _amount is None or str(_amount).strip() in ('', 'None'):
+
+            data = {'error': 'Debe ingresar el saldo de apertura.'}
+
+            response = JsonResponse(data)
+
+            response.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
+
+            return response
+
+        try:
+
+            opening_total = decimal.Decimal(str(_amount).strip().replace(',', ''))
+
+        except decimal.InvalidOperation:
+
+            data = {'error': 'El saldo de apertura no es válido.'}
+
+            response = JsonResponse(data)
+
+            response.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
+
+            return response
+
+        if opening_total < 0:
+
+            data = {'error': 'El saldo de apertura no puede ser negativo.'}
+
+            response = JsonResponse(data)
+
+            response.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
+
+            return response
 
         opening_date = parse_date(_date)
 
@@ -530,33 +518,15 @@ def update_entity(request):
 
 def get_initial_balance(request):
 
+    """Endpoint legado: ya no se usa el cierre anterior como apertura."""
+
     if request.method == 'GET':
-
-        id_cash = request.GET.get('cash', '')
-
-        cash_obj = Cash.objects.get(id=int(id_cash))
-
-        if not cash_obj.cashflow_set.filter(type='A').exists():
-
-            initial_balance = decimal.Decimal('0.00')
-
-        else:
-
-            initial_set = cash_obj.cashflow_set.filter(type='C').order_by('transaction_date').last()
-
-            if initial_set:
-
-                initial_balance = initial_set.total
-
-            else:
-
-                initial_balance = cash_obj.initial or decimal.Decimal('0.00')
 
         return JsonResponse({
 
-            'initial_balance': initial_balance,
+            'initial_balance': decimal.Decimal('0.00'),
 
-            'message': 'Saldo recuperado.',
+            'message': 'El saldo de apertura debe ser digitado por el usuario.',
 
         }, status=HTTPStatus.OK)
 

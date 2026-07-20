@@ -7,7 +7,7 @@
                 </div>
                 <div>
                     <h5 class="modal-title">Aperturar caja</h5>
-                    <p class="rv-modal-subtitle mb-0">Inicie el día operativo de la caja seleccionada</p>
+                    <p class="rv-modal-subtitle mb-0">Digite el saldo de apertura e inicie el día operativo</p>
                 </div>
             </div>
             <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
@@ -32,9 +32,10 @@
                         <label for="cash-date">Fecha de apertura</label>
                         <input type="date" class="rv-form-control" id="cash-date" name="cash-date" value="{{ formatdate }}" required>
                     </div>
-                    <div class="rv-form-group rv-form-group-full">
-                        <label for="cash-amount">Saldo inicial / día anterior</label>
-                        <input type="text" class="rv-form-control rv-amount-display" id="cash-amount" name="cash-amount" readonly placeholder="Seleccione una caja">
+                    <div class="rv-form-group rv-form-group-full rv-form-group-required">
+                        <label for="cash-amount">Saldo de apertura</label>
+                        <input type="number" class="rv-form-control" id="cash-amount" name="cash-amount"
+                               step="0.01" min="0" required placeholder="0.00">
                     </div>
                 </div>
             </div>

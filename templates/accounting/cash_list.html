@@ -182,6 +182,11 @@
             toastr.warning('Seleccione una fecha');
             return;
         }
+        var amount = $('#cash-amount').val();
+        if (amount === '' || amount === null || isNaN(parseFloat(amount))) {
+            toastr.warning('Ingrese el saldo de apertura');
+            return;
+        }
         $('#btn-save').prop('disabled', true);
         $.ajax({
             url: '{% url "accounting:open_cash" %}',
@@ -202,26 +207,13 @@
                 if (openDate) {
                     $('#id-start-date').val(openDate);
                 }
+                $('#cash-amount').val('');
                 $('#search-form').trigger('submit');
             },
             error: function (jqXhr) {
                 $('#btn-save').prop('disabled', false);
                 toastr.error(jqXhr.responseJSON?.error || 'Error al aperturar');
             }
-        });
-    });
-
-    $(document).on('change', '#id-select-cash', function () {
-        var val = $(this).val();
-        if (!val) {
-            $('#cash-amount').val('');
-            return;
-        }
-        $.get('{% url "accounting:get_initial_balance" %}', { cash: val }, function (response) {
-            var balance = parseFloat(response.initial_balance);
-            $('#cash-amount').val(isNaN(balance) ? '0.00' : balance.toFixed(2));
-        }).fail(function () {
-            $('#cash-amount').val('0.00');
         });
     });
 
