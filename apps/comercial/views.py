@@ -2233,6 +2233,7 @@ class GuideAssignmentView(TemplateView):
         ).prefetch_related('carrier_guides').order_by('turn', 'id')
 
         pending_orders = Order.objects.filter(
+            subsidiary=subsidiary_obj,
             type_order='E',
             service_type='E',
             status='P',
@@ -2470,6 +2471,7 @@ def assign_order_guide(request):
         return JsonResponse({'success': False, 'message': 'Programación no encontrada.'},
                             status=HTTPStatus.NOT_FOUND)
 
+    subsidiary_obj = get_subsidiary_by_user(request.user)
     assigned = []
     warnings = []
     for order_id in order_ids:
@@ -2482,6 +2484,9 @@ def assign_order_guide(request):
             continue
 
         label = _order_service_label(order_obj)
+        if subsidiary_obj and order_obj.subsidiary_id != subsidiary_obj.id:
+            warnings.append(f'{label}: no pertenece a la sede activa ({subsidiary_obj.name}).')
+            continue
         if order_obj.status == 'A':
             warnings.append(f'{label}: la encomienda está anulada y no se puede asignar.')
             continue
