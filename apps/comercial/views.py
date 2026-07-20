@@ -2221,6 +2221,7 @@ class GuideAssignmentView(TemplateView):
             search_date = today
 
         programmings = Programming.objects.filter(
+            subsidiary=subsidiary_obj,
             departure_date=search_date,
             status__in=['P', 'R'],
         ).select_related(
@@ -2254,6 +2255,7 @@ class GuideAssignmentView(TemplateView):
         assigned_guides = CarrierRemissionGuide.objects.filter(
             status='I',
             programming__departure_date=search_date,
+            programming__subsidiary=subsidiary_obj,
         ).exclude(
             order__status='A',
         ).select_related(
@@ -2263,6 +2265,7 @@ class GuideAssignmentView(TemplateView):
 
         cargo_manifests = CargoManifest.objects.filter(
             programming__departure_date=search_date,
+            programming__subsidiary=subsidiary_obj,
         ).exclude(status='X').select_related(
             'programming', 'truck',
         ).prefetch_related('carrier_guides')
@@ -2472,6 +2475,12 @@ def assign_order_guide(request):
                             status=HTTPStatus.NOT_FOUND)
 
     subsidiary_obj = get_subsidiary_by_user(request.user)
+    if subsidiary_obj and programming_obj.subsidiary_id != subsidiary_obj.id:
+        return JsonResponse({
+            'success': False,
+            'message': f'La programación no pertenece a la sede activa ({subsidiary_obj.name}).',
+        }, status=HTTPStatus.BAD_REQUEST)
+
     assigned = []
     warnings = []
     for order_id in order_ids:
@@ -2537,6 +2546,13 @@ def create_cargo_manifest(request):
         programming_obj = Programming.objects.select_related('truck', 'subsidiary', 'company').get(
             pk=programming_id,
         )
+
+        subsidiary_obj = get_subsidiary_by_user(request.user)
+        if subsidiary_obj and programming_obj.subsidiary_id != subsidiary_obj.id:
+            return JsonResponse({
+                'success': False,
+                'message': f'La programación no pertenece a la sede activa ({subsidiary_obj.name}).',
+            }, status=HTTPStatus.BAD_REQUEST)
 
         guides = list(
             CarrierRemissionGuide.objects.filter(
@@ -2617,7 +2633,20 @@ def unassign_order_guide(request):
         return JsonResponse({'success': False, 'message': 'Método no permitido.'}, status=HTTPStatus.BAD_REQUEST)
     try:
         guide_id = int(request.POST.get('guide_id') or 0)
-        guide = CarrierRemissionGuide.objects.select_related('order').get(pk=guide_id)
+        guide = CarrierRemissionGuide.objects.select_related(
+            'order', 'programming', 'subsidiary',
+        ).get(pk=guide_id)
+        subsidiary_obj = get_subsidiary_by_user(request.user)
+        guide_subsidiary_id = (
+            guide.subsidiary_id
+            or (guide.programming.subsidiary_id if guide.programming_id else None)
+            or (guide.order.subsidiary_id if guide.order_id else None)
+        )
+        if subsidiary_obj and guide_subsidiary_id and guide_subsidiary_id != subsidiary_obj.id:
+            return JsonResponse({
+                'success': False,
+                'message': f'La guía no pertenece a la sede activa ({subsidiary_obj.name}).',
+            }, status=HTTPStatus.BAD_REQUEST)
         unassign_carrier_guide(guide)
         return JsonResponse({
             'success': True,
