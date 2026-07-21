@@ -4278,6 +4278,20 @@ button.rv-btn-search {
 }
 .rv-report-pay-c { color: #059669; }
 .rv-report-pay-d { color: #d97706; }
+.rv-report-pay-collected {
+    display: block;
+    font-size: 0.65rem;
+    margin-top: 0.1rem;
+    font-weight: 600;
+    color: #047857;
+}
+.rv-report-pay-pending {
+    display: block;
+    font-size: 0.65rem;
+    margin-top: 0.1rem;
+    font-weight: 600;
+    color: #d97706;
+}
 
 .rv-report-status {
     display: inline-block;
