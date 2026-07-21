@@ -8,8 +8,10 @@
         <th>Conductor</th>
         <th>Sede</th>
         <th>Salida</th>
+        <th>Hora</th>
         <th>Llegada</th>
         <th>Estado</th>
+        <th>Observaciones</th>
         <th>Manifiesto</th>
     </tr>
     </thead>
@@ -34,6 +36,7 @@
                 {% if p.subsidiary %}{{ p.subsidiary.name }}{% else %}—{% endif %}
             </td>
             <td>{% if p.departure_date %}{{ p.departure_date|date:"d/m/Y" }}{% else %}—{% endif %}</td>
+            <td>{% if p.truck_exit %}{{ p.truck_exit|date:"H:i" }}{% else %}—{% endif %}</td>
             <td>{% if p.arrival_date %}{{ p.arrival_date|date:"d/m/Y" }}{% else %}—{% endif %}</td>
             <td>
                 {% if p.status == 'P' %}
@@ -47,6 +50,9 @@
                 {% else %}
                     <span class="rv-badge">{{ p.get_status_display }}</span>
                 {% endif %}
+            </td>
+            <td class="small text-muted">
+                {% if p.observation %}{{ p.observation|truncatechars:40 }}{% else %}—{% endif %}
             </td>
             <td class="small text-muted">
                 {% if p.serial or p.correlative %}{{ p.serial|default_if_none:'' }}{% if p.serial and p.correlative %}-{% endif %}{{ p.correlative|default_if_none:'' }}{% else %}—{% endif %}

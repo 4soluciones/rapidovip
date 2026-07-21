@@ -341,6 +341,20 @@ class ProgrammingList(View):
         return render(request, self.template_name, self.get_context_data())
 
 
+def _parse_truck_exit(departure_date, truck_exit_time):
+    """Combina fecha de salida + hora (HH:MM) en un datetime para truck_exit."""
+    time_str = (truck_exit_time or '').strip()
+    if not time_str:
+        return None
+    date_str = (departure_date or '').strip() or datetime.now().strftime('%Y-%m-%d')
+    for fmt in ('%Y-%m-%d %H:%M', '%Y-%m-%d %H:%M:%S'):
+        try:
+            return datetime.strptime(f'{date_str} {time_str}', fmt)
+        except ValueError:
+            continue
+    return None
+
+
 @csrf_exempt
 def new_programming(request):
     if request.method == 'POST':
@@ -351,6 +365,8 @@ def new_programming(request):
         subsidiary_origin = request.POST.get('origin', '')
         status = request.POST.get('status', 'P')
         service_type = request.POST.get('service_type', 'E')
+        truck_exit_time = request.POST.get('truck_exit', '')
+        observation = (request.POST.get('observation', '') or '').strip() or None
 
         user_id = request.user.id
         user_obj = User.objects.get(pk=int(user_id))
@@ -394,6 +410,8 @@ def new_programming(request):
             'price': price,
             'support_pilot': pilot_obj.full_name,
             'support_copilot': copilot_name or None,
+            'truck_exit': _parse_truck_exit(departure_date, truck_exit_time),
+            'observation': observation,
         }
         programming_obj = Programming.objects.create(**data_programming)
 
@@ -509,6 +527,8 @@ def update_programming(request):
         serial = request.POST.get('serial', '')
         correlative = request.POST.get('correlative', '')
         price = request.POST.get('price', '0.00')
+        truck_exit_time = request.POST.get('truck_exit', '')
+        observation = (request.POST.get('observation', '') or '').strip() or None
 
         if id_pilot:
             try:
@@ -539,6 +559,8 @@ def update_programming(request):
         programming_obj.serial = serial
         programming_obj.correlative = correlative
         programming_obj.price = price
+        programming_obj.truck_exit = _parse_truck_exit(departure_date, truck_exit_time)
+        programming_obj.observation = observation
         programming_obj.save()
 
         user_id = request.user.id
@@ -1016,13 +1038,15 @@ def create_order(request):
         return JsonResponse({
             'message': 'Cambios guardados con exito.',
             'msg_sunat': msg_sunat,
-            'document_type': _document_type,
+            'document_type': order_obj.type_document or _document_type,
+            'way_to_pay': way_to_pay,
             'sunat_pdf': sunat_pdf,
             'order_id': order_obj.id,
             'serial': order_obj.serial,
             'correlative': order_obj.correlative_sale,
             'order_serial': order_obj.order_serial,
             'order_correlative': order_obj.order_correlative,
+            'total': str(order_obj.total),
             'userSubsidiary': user_subsidiary_subsidiary,
             'userOffice': user_subsidiary_office,
             'userPrinter': user_subsidiary_printer,
@@ -2249,7 +2273,7 @@ class GuideAssignmentView(TemplateView):
             'subsidiary',
             'company',
             'cargo_manifest',
-        ).prefetch_related('carrier_guides').order_by('turn', 'id')
+        ).prefetch_related('carrier_guides').order_by('truck_exit', 'id')
 
         pending_orders = Order.objects.filter(
             subsidiary=subsidiary_obj,

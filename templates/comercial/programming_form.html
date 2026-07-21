@@ -116,6 +116,12 @@
             </div>
 
             <div class="rv-form-group">
+                <label for="id_truck_exit">Hora de salida</label>
+                <input type="time" class="rv-form-control" id="id_truck_exit" name="truck_exit"
+                       value="{% if programming_obj and programming_obj.truck_exit %}{{ programming_obj.truck_exit|date:'H:i' }}{% endif %}">
+            </div>
+
+            <div class="rv-form-group">
                 <label for="id_arrival_date">Fecha llegada</label>
                 <input type="date" class="rv-form-control" id="id_arrival_date" name="arrival_date"
                        value="{% if programming_obj and programming_obj.arrival_date %}{{ programming_obj.arrival_date|date:'Y-m-d' }}{% endif %}">
@@ -131,6 +137,14 @@
                         </option>
                     {% endfor %}
                 </select>
+            </div>
+
+            <div class="rv-form-group rv-form-group-full">
+                <label for="id_observation">Observaciones</label>
+                <input type="text" class="rv-form-control" id="id_observation" name="observation"
+                       maxlength="200"
+                       value="{% if programming_obj and programming_obj.observation %}{{ programming_obj.observation }}{% endif %}"
+                       placeholder="Notas del viaje (opcional)" autocomplete="off">
             </div>
         </div>
     </section>

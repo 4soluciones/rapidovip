@@ -67,6 +67,83 @@
 
 </div>
 
+{# Modal de impresión tras guardar encomienda #}
+<div class="modal fade rv-modal rv-guide-print-modal" id="guide-print-modal"
+     tabindex="-1" role="dialog" aria-labelledby="guide-print-title" aria-hidden="true"
+     data-backdrop="static" data-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <button type="button" class="rv-guide-print-close" data-dismiss="modal" aria-label="Cerrar">
+                <span aria-hidden="true">&times;</span>
+            </button>
+
+            <div class="rv-guide-print-hero">
+                <div class="rv-guide-print-hero-badge" aria-hidden="true">
+                    <i class="fas fa-check"></i>
+                </div>
+                <h5 class="rv-guide-print-hero-title" id="guide-print-title">Encomienda registrada</h5>
+                <p class="rv-guide-print-hero-sub" id="guide-print-subtitle">Seleccione los documentos a descargar</p>
+            </div>
+
+            <div class="modal-body">
+                <div class="rv-guide-print-summary">
+                    <div class="rv-guide-print-summary-os">
+                        <span>Orden de servicio</span>
+                        <strong id="guide-print-os-number">—</strong>
+                    </div>
+                    <div class="rv-guide-print-summary-grid">
+                        <div class="rv-guide-print-chip">
+                            <span>Forma de pago</span>
+                            <strong id="guide-print-payment">—</strong>
+                        </div>
+                        <div class="rv-guide-print-chip">
+                            <span>Total</span>
+                            <strong id="guide-print-total">S/ 0.00</strong>
+                        </div>
+                    </div>
+                    <div class="rv-guide-print-route" id="guide-print-route" hidden>
+                        <i class="fas fa-route" aria-hidden="true"></i>
+                        <span id="guide-print-route-text">—</span>
+                    </div>
+                </div>
+
+                <div class="rv-guide-print-section">
+                    <span class="rv-guide-print-section-label">Documentos</span>
+                    <div class="rv-guide-print-actions is-single" id="guide-print-actions">
+                        <button type="button" class="rv-guide-print-tile" id="guide-print-btn-os">
+                            <span class="rv-guide-print-tile-icon">
+                                <i class="fas fa-file-alt"></i>
+                            </span>
+                            <strong class="rv-guide-print-tile-title">Orden de servicio</strong>
+                            <small class="rv-guide-print-tile-meta" id="guide-print-os-label">—</small>
+                            <span class="rv-guide-print-tile-cta">
+                                <i class="fas fa-download"></i> Descargar
+                            </span>
+                        </button>
+
+                        <button type="button" class="rv-guide-print-tile rv-guide-print-tile--voucher" id="guide-print-btn-voucher" hidden>
+                            <span class="rv-guide-print-tile-icon">
+                                <i class="fas fa-file-invoice"></i>
+                            </span>
+                            <strong class="rv-guide-print-tile-title" id="guide-print-voucher-title">Comprobante</strong>
+                            <small class="rv-guide-print-tile-meta" id="guide-print-voucher-label">—</small>
+                            <span class="rv-guide-print-tile-cta">
+                                <i class="fas fa-download"></i> Descargar
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="rv-btn rv-btn-outline rv-guide-print-done" data-dismiss="modal">
+                    Listo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 

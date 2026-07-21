@@ -222,17 +222,20 @@ class FormTruck(forms.ModelForm):
 class FormProgramming(forms.ModelForm):
     class Meta:
         model = Programming
-        fields = ['departure_date', 'arrival_date', 'type', 'weight', 'truck', 'subsidiary', 'observation', 'order']
+        fields = [
+            'departure_date', 'arrival_date', 'service_type', 'weight',
+            'truck', 'subsidiary', 'observation', 'truck_exit', 'status',
+        ]
         labels = {
             'departure_date': 'Fecha Programada',
             'arrival_date': 'Fecha de llegada',
-            'type': 'Tipo',
+            'service_type': 'Servicio',
             'weight': 'Peso',
             'truck': 'Tracto',
             'subsidiary': 'Sucursal',
-            'observation': 'Observacion',
-            'order': 'Turno',
-
+            'observation': 'Observación',
+            'truck_exit': 'Hora de salida',
+            'status': 'Estado',
         }
 
         widgets = {
@@ -255,12 +258,10 @@ class FormProgramming(forms.ModelForm):
                     'autocomplete': 'off',
                 }
             ),
-            'type': forms.Select(
+            'service_type': forms.Select(
                 attrs={
                     'class': 'form-control',
-                    'placeholder': 'Selectione Tipo',
-                    # 'aria-describedby': 'serieHelpInline',
-
+                    'placeholder': 'Seleccione Servicio',
                 }
             ),
             'weight': forms.TextInput(
@@ -274,34 +275,34 @@ class FormProgramming(forms.ModelForm):
             'truck': forms.Select(
                 attrs={
                     'class': 'form-control',
-                    'placeholder': 'Selectione Tracto',
-                    # 'aria-describedby': 'serieHelpInline',
-
+                    'placeholder': 'Seleccione Tracto',
                 }
             ),
             'subsidiary': forms.Select(
                 attrs={
                     'class': 'form-control',
-                    'placeholder': 'Selectione Sucursal',
-                    # 'aria-describedby': 'serieHelpInline',
-
+                    'placeholder': 'Seleccione Sucursal',
                 }
             ),
             'observation': forms.TextInput(
                 attrs={
                     'class': 'form-control',
-                    'placeholder': 'Ingrese Observacion',
+                    'placeholder': 'Ingrese Observación',
                     'autocomplete': 'off',
                 }
             ),
-            'order': forms.Select(
+            'truck_exit': forms.DateTimeInput(
+                format='%Y-%m-%dT%H:%M',
                 attrs={
                     'class': 'form-control',
-                    'placeholder': 'Selectione Turno',
-                    # 'aria-describedby': 'serieHelpInline',
-
+                    'type': 'datetime-local',
+                    'autocomplete': 'off',
                 }
             ),
-
+            'status': forms.Select(
+                attrs={
+                    'class': 'form-control',
+                }
+            ),
         }
 

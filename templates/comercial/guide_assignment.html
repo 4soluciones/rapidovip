@@ -71,7 +71,7 @@
                             <option value="{{ p.id }}" {% if forloop.first %}selected{% endif %}>
                                 #{{ p.id }}
                                 · {% if p.truck %}{{ p.truck.license_plate }}{% else %}Sin unidad{% endif %}
-                                · {{ p.get_turn_display }}
+                                · {% if p.truck_exit %}{{ p.truck_exit|date:"H:i" }}{% else %}Sin hora{% endif %}
                                 · {{ p.support_pilot|default:'Sin conductor' }}
                             </option>
                             {% endfor %}
@@ -89,7 +89,8 @@
                          data-pilot="{{ p.support_pilot|default:'' }}"
                          data-copilot="{{ p.support_copilot|default:'' }}"
                          data-plate="{% if p.truck %}{{ p.truck.license_plate }}{% endif %}"
-                         data-turn="{{ p.get_turn_display }}"
+                         data-turn="{% if p.truck_exit %}{{ p.truck_exit|date:'H:i' }}{% endif %}"
+                         data-observation="{{ p.observation|default:'' }}"
                          data-status="{{ p.get_status_display }}"
                          data-has-manifest="{% if p.cargo_manifest %}1{% else %}0{% endif %}"
                          data-grt-count="{{ p.carrier_guides.all|length }}"
@@ -111,8 +112,8 @@
                     </div>
                     <dl class="rv-assignment-prog-meta">
                         <div>
-                            <dt>Horario</dt>
-                            <dd>{{ p.get_turn_display }}</dd>
+                            <dt>Hora salida</dt>
+                            <dd>{% if p.truck_exit %}{{ p.truck_exit|date:"H:i" }}{% else %}—{% endif %}</dd>
                         </div>
                         <div>
                             <dt>Salida</dt>
@@ -152,7 +153,7 @@
                         </div>
                     </dl>
                     {% if p.observation %}
-                    <p class="rv-assignment-prog-note">{{ p.observation }}</p>
+                    <p class="rv-assignment-prog-note"><strong>Obs:</strong> {{ p.observation }}</p>
                     {% endif %}
                 </article>
                 {% endfor %}

@@ -203,12 +203,489 @@ def _passenger_pdf_unavailable():
     )
 
 
+def _is_pending_destination_payment(order_obj):
+    """Pago destino aún no cobrado en sede (sin OrderBill asociado)."""
+    if order_obj.way_to_pay != 'D' or order_obj.status == 'A':
+        return False
+    if getattr(order_obj, 'orderbill', None) is not None:
+        return False
+    return not OrderBill.objects.filter(order_id=order_obj.pk).exists()
+
+
+def _print_destination_delivery_ticket(request, order_obj, pk):
+    """
+    Constancia de entrega para encomiendas con pago pendiente en destino.
+    Basada en la orden de servicio, simplificada para firma en recepción.
+    """
+    from .pdf_service_guides import _separator
+
+    encomienda = getattr(order_obj, 'encomienda', None)
+    _wt = 2.83 * inch - 4 * 0.05 * inch
+
+    company_obj = order_obj.company
+    company_name = 'RAPIDOVIP'
+    if company_obj:
+        company_name = (company_obj.business_name or company_obj.short_name or 'RAPIDOVIP').upper()
+
+    carrier_guide = getattr(order_obj, 'carrier_guide', None)
+    grt_number = carrier_guide.document_number() if carrier_guide else '—'
+
+    _date_convert_zone = utc_to_local(order_obj.create_at)
+    _formatdate = _date_convert_zone.strftime('%d/%m/%Y')
+    _transfer_date_txt = (
+        order_obj.transfer_date.strftime('%d/%m/%Y') if order_obj.transfer_date else '-'
+    )
+    _delivery_date_txt = '-'
+    if carrier_guide and carrier_guide.programming_id and carrier_guide.programming:
+        arrival = carrier_guide.programming.arrival_date
+        if arrival:
+            _delivery_date_txt = arrival.strftime('%d/%m/%Y')
+
+    h_left = ParagraphStyle(
+        name='DeliveryHelvLeft', fontName='Helvetica', fontSize=8, leading=10, alignment=TA_LEFT)
+    h_company = ParagraphStyle(
+        name='DeliveryHelvCompany', fontName='Helvetica', fontSize=6.5, leading=8, alignment=TA_CENTER)
+    h_subsidiary = ParagraphStyle(
+        name='DeliveryHelvSubsidiary', fontName='Helvetica-Bold', fontSize=9, leading=11, alignment=TA_LEFT)
+    h_date = ParagraphStyle(
+        name='DeliveryHelvDate', fontName='Helvetica', fontSize=6, leading=8, alignment=TA_LEFT)
+    h_section = ParagraphStyle(
+        name='DeliveryHelvSection', fontName='Helvetica-Bold', fontSize=7, leading=9, alignment=TA_LEFT)
+    h_entrega = ParagraphStyle(
+        name='DeliveryHelvEntrega', fontName='Helvetica', fontSize=6.5, leading=8, alignment=TA_LEFT)
+    h_desc = ParagraphStyle(
+        name='DeliveryHelvDesc', fontName='Helvetica', fontSize=6.5, leading=8, alignment=TA_LEFT)
+    h_desc_right = ParagraphStyle(
+        name='DeliveryHelvDescRight', fontName='Helvetica', fontSize=6.5, leading=8, alignment=TA_RIGHT)
+    h_person = ParagraphStyle(
+        name='DeliveryHelvPerson', fontName='Helvetica', fontSize=7, leading=9, alignment=TA_LEFT)
+    h_person_right = ParagraphStyle(
+        name='DeliveryHelvPersonRight', fontName='Helvetica', fontSize=7, leading=9, alignment=TA_RIGHT)
+    h_grt = ParagraphStyle(
+        name='DeliveryHelvGRT', fontName='Helvetica-Bold', fontSize=14, leading=16, alignment=TA_CENTER)
+    h_sign = ParagraphStyle(
+        name='DeliveryHelvSign', fontName='Helvetica', fontSize=7, leading=9, alignment=TA_CENTER)
+
+    colwiths_table = [_wt * 50 / 100, _wt * 50 / 100]
+
+    my_style_dates = [
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0.3),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), -2),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+    ]
+    my_style_section = [
+        ('LEFTPADDING', (0, 0), (-1, -1), 0.3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]
+    my_style_table = [
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), -4),
+        ('ALIGNMENT', (1, 0), (1, 0), 'RIGHT'),
+        ('LEFTPADDING', (0, 0), (0, -1), 0.3),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]
+    my_style_person_sender = my_style_table + [('SPAN', (0, 0), (1, 0))]
+    my_style_table2 = [
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('LEFTPADDING', (0, 0), (0, -1), 0.3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), -4),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]
+    my_style_table3 = [
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 6.5),
+        ('ALIGNMENT', (1, 0), (1, -1), 'CENTER'),
+        ('ALIGNMENT', (2, 0), (2, -1), 'CENTER'),
+        ('ALIGNMENT', (3, 0), (3, -1), 'CENTER'),
+        ('ALIGNMENT', (4, 0), (4, -1), 'RIGHT'),
+        ('LEFTPADDING', (0, 0), (0, -1), 0.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), -4),
+        ('TOPPADDING', (0, 0), (-1, -1), -1),
+        ('RIGHTPADDING', (4, 0), (4, -1), 0.5),
+    ]
+    my_style_table4 = [
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 6.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ('LEFTPADDING', (0, 0), (0, -1), 0.3),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGNMENT', (1, 0), (1, -1), 'CENTER'),
+        ('ALIGNMENT', (2, 0), (2, -1), 'CENTER'),
+        ('ALIGNMENT', (3, 0), (3, -1), 'CENTER'),
+        ('ALIGNMENT', (4, 0), (4, -1), 'RIGHT'),
+        ('RIGHTPADDING', (4, 0), (4, -1), 0.5),
+    ]
+    my_style_table5 = [
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('FONTSIZE', (3, 0), (3, -1), 10),
+        ('FONTNAME', (3, 0), (3, -1), 'Helvetica-Bold'),
+        ('RIGHTPADDING', (2, 0), (2, -1), 6),
+        ('ALIGNMENT', (2, 0), (2, -1), 'RIGHT'),
+        ('RIGHTPADDING', (3, 0), (3, -1), 0.3),
+        ('ALIGNMENT', (3, 0), (3, -1), 'RIGHT'),
+        ('LEFTPADDING', (0, 0), (0, -1), 0.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), -6),
+    ]
+
+    ana_c1 = Table([
+        [Paragraph('FECHA EMISIÓN: ' + str(_formatdate), h_date)],
+        [Paragraph('FECHA TRASLADO: ' + str(_transfer_date_txt), h_date)],
+        [Paragraph('FECHA ENTREGA: ' + str(_delivery_date_txt), h_date)],
+    ], colWidths=[_wt])
+    ana_c1.setStyle(TableStyle(my_style_dates))
+
+    def _section_title(text):
+        tbl = Table([[Paragraph(text, h_section)]], colWidths=[_wt])
+        tbl.setStyle(TableStyle(my_style_section))
+        return tbl
+
+    _destination_office = encomienda.office_destination if encomienda else None
+    subsidiary_address = '-'
+    if _destination_office:
+        subsidiary_address = (
+            (_destination_office.address or _destination_office.short_name or '-').strip().upper()
+        )
+    ana_subsidiary = Table([[Paragraph(subsidiary_address, h_subsidiary)]], colWidths=[_wt])
+    ana_subsidiary.setStyle(TableStyle(my_style_section))
+
+    order_action_sender_obj = OrderAction.objects.get(order=order_obj, type='R')
+    _sender_qr = ''
+    _sender_document_qr = ''
+    _sender_phone_qr = ''
+
+    if order_action_sender_obj.client:
+        document_sender = str(
+            order_action_sender_obj.client.clienttype_set.first().document_type.short_description)
+        _sender_document_qr = order_action_sender_obj.client.clienttype_set.first().document_number
+        _sender_phone_qr = order_action_sender_obj.client.phone or ''
+        _sender_qr = str(order_action_sender_obj.client.names)
+        td_sender = (Paragraph('REMITENTE: ' + str(order_action_sender_obj.client.names), h_person), '')
+        if order_action_sender_obj.client.phone:
+            td_sender_document = (
+                Paragraph(
+                    document_sender + ': ' + str(
+                        order_action_sender_obj.client.clienttype_set.first().document_number),
+                    h_person),
+                Paragraph('TELEFONO: ' + str(order_action_sender_obj.client.phone), h_person_right))
+        else:
+            td_sender_document = (
+                Paragraph(
+                    document_sender + ': ' + str(
+                        order_action_sender_obj.client.clienttype_set.first().document_number),
+                    h_person),
+                '')
+        ana_c3 = Table([td_sender] + [td_sender_document], colWidths=colwiths_table)
+        ana_c3.setStyle(TableStyle(my_style_person_sender))
+    else:
+        _sender_qr = str(order_action_sender_obj.order_addressee.names.upper())
+        _sender_phone_qr = str(order_action_sender_obj.order_addressee.phone or '')
+        td_sender = (
+            Paragraph('REMITENTE: ' + str(order_action_sender_obj.order_addressee.names.upper()), h_person),
+            '')
+        if order_action_sender_obj.order_addressee.phone:
+            td_sender_document = (
+                Paragraph('DNI: ', h_person),
+                Paragraph(
+                    'TELEFONO: ' + str(order_action_sender_obj.order_addressee.phone), h_person_right))
+        else:
+            td_sender_document = (Paragraph('DNI: ', h_person), '')
+        ana_c3 = Table([td_sender] + [td_sender_document], colWidths=colwiths_table)
+        ana_c3.setStyle(TableStyle(my_style_person_sender))
+
+    recipients = OrderAction.objects.filter(order=order_obj, type='D')
+    _rows = []
+    _recipients_names_qr = []
+    _recipients_phone_qr = []
+    _recipients_nro_document_qr = []
+    first_recipient_name = ''
+    first_recipient_doc = ''
+    for d in recipients:
+        _phone = ''
+        if d.client is None:
+            _names = (d.order_addressee.names or '').upper()
+            _phone = d.order_addressee.phone or ''
+            _rows.append((Paragraph('DESTINATARIO: ' + _names, h_person), ''))
+            if _phone:
+                _rows.append((
+                    Paragraph('DNI: ', h_person),
+                    Paragraph('TELEFONO: ' + str(_phone), h_person_right)))
+            else:
+                _rows.append((Paragraph('DNI: ', h_person), ''))
+            _recipients_names_qr.append(str(_names))
+            _recipients_phone_qr.append(str(_phone))
+            if not first_recipient_name:
+                first_recipient_name = _names
+                first_recipient_doc = 'DNI: —'
+        else:
+            if d.client.phone is not None:
+                _phone = d.client.phone
+            _names = (d.client.names or '').upper()
+            _doc_type = d.client.clienttype_set.first().document_type.short_description
+            _doc_number = d.client.clienttype_set.first().document_number
+            _rows.append((Paragraph('DESTINATARIO: ' + _names, h_person), ''))
+            if _phone:
+                _rows.append((
+                    Paragraph(_doc_type + ': ' + str(_doc_number), h_person),
+                    Paragraph('TELEFONO: ' + str(_phone), h_person_right)))
+            else:
+                _rows.append((Paragraph(_doc_type + ': ' + str(_doc_number), h_person), ''))
+            _recipients_names_qr.append(str(_names))
+            _recipients_phone_qr.append(str(_phone))
+            _recipients_nro_document_qr.append(str(_doc_number))
+            if not first_recipient_name:
+                first_recipient_name = _names
+                first_recipient_doc = f'{_doc_type}: {_doc_number}'
+
+    if not _rows:
+        _rows = [(Paragraph('DESTINATARIO: -', h_person), '')]
+        first_recipient_name = '-'
+        first_recipient_doc = 'DNI: —'
+    ana_c4 = Table(_rows, colWidths=colwiths_table)
+    _name_row_spans = [('SPAN', (0, i), (1, i)) for i in range(0, len(_rows), 2)]
+    ana_c4.setStyle(TableStyle(my_style_table + _name_row_spans))
+
+    is_reparto = bool(
+        encomienda
+        and encomienda.type_guide == 'R'
+        and (encomienda.address_delivery or '').strip()
+    )
+    delivery_address = (
+        (encomienda.address_delivery or '').strip().upper()
+        if is_reparto else 'ENTREGAR EN AGENCIA'
+    )
+    ana_entrega = Table([
+        (Paragraph('<b>DIRECCIÓN:</b> ' + delivery_address, h_entrega),),
+        (Paragraph('<b>DESTINATARIO:</b> ' + first_recipient_name, h_entrega),),
+        (Paragraph(first_recipient_doc, h_entrega),),
+    ], colWidths=[_wt])
+    ana_entrega.setStyle(TableStyle([
+        ('LEFTPADDING', (0, 0), (-1, -1), 0.3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+
+    col_detail = [
+        _wt * 38 / 100,
+        _wt * 12 / 100,
+        _wt * 12 / 100,
+        _wt * 16 / 100,
+        _wt * 22 / 100,
+    ]
+    ana_c6 = Table(
+        [('DESCRIPCIÓN', 'CANT', 'UM', 'PESO', 'SUBTOTAL')], colWidths=col_detail)
+    ana_c6.setStyle(TableStyle(my_style_table3))
+
+    total = 0
+    _rows_detail = []
+    _details_q_qr = []
+    _details_d_qr = []
+    _detail_amount = ''
+    for d in order_obj.orderdetail_set.all():
+        P0 = Paragraph(d.description.upper(), h_desc)
+        _weight = getattr(d, 'weight', None)
+        weight_txt = str(round(_weight, 2)) if _weight not in (None, '') else '0'
+        _rows_detail.append((
+            P0,
+            str(decimal.Decimal(round(d.quantity))),
+            _order_detail_unit_label(d),
+            weight_txt,
+            Paragraph(str(round(d.amount, 2)), h_desc_right),
+        ))
+        base_total = d.quantity * d.price_unit
+        total = total + base_total
+        _details_q_qr.append(str(round(d.quantity)))
+        _details_d_qr.append(d.description.upper())
+        _detail_amount = str(round(d.amount, 2))
+
+    ana_c7 = Table(_rows_detail, colWidths=col_detail, rowHeights=0.28 * inch)
+    ana_c7.setStyle(TableStyle(my_style_table4))
+
+    ana_c8 = Table(
+        [('IMPORTE TOTAL', '', 'S/', str(decimal.Decimal(round(total, 2))))],
+        colWidths=[_wt * 60 / 100, _wt * 10 / 100, _wt * 17 / 100, _wt * 13 / 100])
+    ana_c8.setStyle(TableStyle(my_style_table5))
+
+    current_time = datetime.now()
+    _format_current_time = current_time.strftime('%d/%m/%Y %I:%M:%S %p')
+    _formattime = _date_convert_zone.time().strftime('%I:%M:%S %p')
+    _create_date = (
+        (order_obj.transfer_date.strftime('%d/%m/%Y') if order_obj.transfer_date else _formatdate)
+        + ' ' + str(_formattime)
+    )
+    correlative = order_obj.order_correlative or order_obj.correlative_sale or ''
+    serie = order_obj.order_serial or order_obj.serial or ''
+    _origin_office = encomienda.office_origin if encomienda else None
+    origin = str(_origin_office.short_name if _origin_office else '-')
+    destiny = str(_destination_office.short_name if _destination_office else '-')
+    _user_qr = str(order_obj.user.username.upper()) if order_obj.user_id else ''
+    datatable = (
+        str(_format_current_time) + ',' + str(serie) + ',' + str(correlative) + ',' +
+        str(_create_date) + ',' + str(_sender_qr) + ',' + str(_sender_phone_qr) + ',' +
+        str(_sender_document_qr) + ',' +
+        ', '.join(item.strip() for item in _recipients_names_qr) + ',' +
+        ', '.join(item.strip() for item in _recipients_phone_qr) + ',' +
+        ', '.join(item.strip() for item in _recipients_nro_document_qr) + ',' +
+        ', '.join(item.strip() for item in _details_q_qr) + ',' +
+        ', '.join(item.strip() for item in _details_d_qr) + ',' +
+        'PAGO DESTINO,' + str(_detail_amount) + ',' + _user_qr + ',' + origin + ',' + destiny
+    )
+
+    _qr_widget = qr.QrCodeWidget(datatable)
+    _qr_bounds = _qr_widget.getBounds()
+    _qr_w = _qr_bounds[2] - _qr_bounds[0]
+    _qr_h = _qr_bounds[3] - _qr_bounds[1]
+    _qr_size = 2.2 * cm
+    _qr_drawing = Drawing(
+        _qr_size, _qr_size,
+        transform=[_qr_size / _qr_w, 0, 0, _qr_size / _qr_h, 0, 0])
+    _qr_drawing.add(_qr_widget)
+    _qr_box = Table([[_qr_drawing]], colWidths=[_qr_size + 6])
+    _qr_box.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 0.6, colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    ana_c9 = Table([[_qr_box]], colWidths=[_wt])
+    ana_c9.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+
+    ana_firma = Table([
+        [Paragraph('____________________', h_sign),
+         Paragraph('____________________', h_sign)],
+        [Paragraph('Firma', h_sign),
+         Paragraph('Documento de identidad', h_sign)],
+    ], colWidths=colwiths_table)
+    ana_firma.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, 0), 28),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 2),
+        ('TOPPADDING', (0, 1), (-1, 1), 2),
+    ]))
+
+    observation = (getattr(order_obj, 'observation', None) or '').strip()
+
+    buff = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buff,
+        pagesize=(2.83 * inch, 11.6 * inch),
+        rightMargin=0.0 * inch,
+        leftMargin=0.0 * inch,
+        topMargin=0.0 * inch,
+        bottomMargin=0.039 * inch,
+        title='CONSTANCIA DE ENTREGA',
+    )
+
+    dictionary = [
+        Spacer(1, 10),
+        Paragraph(company_name, h_company),
+        Spacer(4, 4),
+        Paragraph(str(grt_number), h_grt),
+        Spacer(6, 6),
+        ana_c1,
+        Spacer(6, 6),
+        Paragraph(subsidiary_address, h_subsidiary),
+        Spacer(6, 6),
+        _separator(_wt),
+        Spacer(2, 2),
+        _section_title('DATOS DEL REMITENTE'),
+        Spacer(1, 1),
+        ana_c3,
+        Spacer(6, 6),
+        _separator(_wt),
+        Spacer(2, 2),
+        _section_title('DATOS DEL DESTINATARIO'),
+        Spacer(1, 1),
+        ana_c4,
+        Spacer(6, 6),
+        _separator(_wt),
+        Spacer(2, 2),
+        _section_title('ENTREGA'),
+        Spacer(2, 2),
+        ana_entrega,
+        Spacer(6, 6),
+        _separator(_wt),
+        Spacer(2, 2),
+        ana_c6,
+        Spacer(4, 4),
+        _separator(_wt),
+        Spacer(2, 2),
+        ana_c7,
+        Spacer(6, 6),
+        _separator(_wt),
+        Spacer(2, 2),
+        ana_c8,
+    ]
+    if observation:
+        dictionary.extend([
+            Spacer(6, 6),
+            _separator(_wt),
+            Spacer(2, 2),
+            _section_title('OBSERVACIÓN:'),
+            Spacer(2, 2),
+            Paragraph(observation.upper(), h_left),
+        ])
+    dictionary.extend([
+        Spacer(8, 8),
+        ana_c9,
+        Spacer(10, 10),
+        _separator(_wt),
+        Spacer(2, 2),
+        Paragraph('FIRMA Y DOCUMENTO DE IDENTIDAD', styles['Helvetica_Bold_Center_8']),
+        Spacer(30, 30),
+        ana_firma,
+    ])
+
+    doc.build(dictionary)
+
+    response = HttpResponse(content_type='application/pdf')
+    _disposition = 'attachment' if request.GET.get('download') else 'inline'
+    response['Content-Disposition'] = '{}; filename="CONSTANCIA ENTREGA {}.pdf"'.format(
+        _disposition, grt_number)
+    tomorrow = datetime.now() + timedelta(days=1)
+    tomorrow = tomorrow.replace(hour=0, minute=0, second=0)
+    expires = datetime.strftime(tomorrow, '%a, %d-%b-%Y %H:%M:%S GMT')
+    response.set_cookie('ware', value=pk, expires=expires)
+    response.write(buff.getvalue())
+    buff.close()
+    return response
+
+
 def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
-    order_obj = Order.objects.select_related('encomienda').get(pk=pk)
+    order_obj = Order.objects.select_related(
+        'encomienda',
+        'encomienda__office_origin',
+        'encomienda__office_destination',
+        'company',
+        'user',
+        'orderbill',
+        'carrier_guide',
+        'carrier_guide__programming',
+    ).get(pk=pk)
     encomienda = getattr(order_obj, 'encomienda', None)
     if order_obj.service_type != 'E':
         from .pdf_service_guides import build_ticket_for_service
         return build_ticket_for_service(order_obj, pk, request)
+
+    force_delivery = (request.GET.get('delivery') or '').strip() in ('1', 'true', 'yes')
+    if force_delivery or _is_pending_destination_payment(order_obj):
+        return _print_destination_delivery_ticket(request, order_obj, pk)
 
     tbh_business_name_address = ''
 
@@ -238,10 +715,12 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         ruc_text = 'RUC: ' + (company_obj.ruc or '')
 
     name_document = 'ORDEN DE SERVICIO'
-    serie = order_obj.serial or ''
+    # Preferir serie/correlativo de la orden de servicio (todas las encomiendas lo tienen).
+    # En al contado, serial/correlative_sale corresponden a boleta/factura.
+    serie = order_obj.order_serial or order_obj.serial or ''
     # colwiths_table = [2.57 / 2.2 * inch, 2.57 / 2.2 * inch]
     colwiths_table = [_wt * 50 / 100, _wt * 50 / 100]
-    correlative = order_obj.correlative_sale
+    correlative = order_obj.order_correlative or order_obj.correlative_sale
 
     from .pdf_service_guides import _separator, _brand_logo
     logo_img = _brand_logo(_wt * 0.55, 0.6 * inch)

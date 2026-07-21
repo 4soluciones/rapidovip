@@ -448,20 +448,8 @@ var GuideServices = (function ($) {
         loadDocumentNumbers(svc, svc === 'E' ? $('#e_type_bill').val() : 'T');
     }
 
-    function downloadComprobante(response) {
-        if (!response || !response.order_id) return;
-        var url;
-        var filename = 'comprobante-' + response.order_id + '.pdf';
-        if (response.sunat_pdf) {
-            url = response.sunat_pdf;
-            filename = 'comprobante-sunat-' + response.order_id + '.pdf';
-        } else if (response.document_type === 'B' || response.document_type === 'F') {
-            url = '/comercial/print_bill_order_commodity/' + response.order_id + '/?download=1';
-        } else {
-            url = '/comercial/print_ticket_order_commodity/' + response.order_id + '/?download=1';
-            filename = 'ORDEN DE SERVICIO ' + (response.serial || '') + '-' + (response.correlative || '') + '.pdf';
-        }
-
+    function downloadPdf(url, filename) {
+        if (!url) return;
         var isExternal = /^https?:\/\//i.test(url) && url.indexOf(window.location.origin) !== 0;
 
         function saveBlob(blob) {
@@ -502,12 +490,164 @@ var GuideServices = (function ($) {
             })
             .then(saveBlob)
             .catch(function () {
-                toastr.warning('No se pudo descargar el comprobante');
+                toastr.warning('No se pudo descargar el documento');
             });
+    }
+
+    function downloadComprobante(response) {
+        if (!response || !response.order_id) return;
+        var url;
+        var filename = 'comprobante-' + response.order_id + '.pdf';
+        if (response.sunat_pdf) {
+            url = response.sunat_pdf;
+            filename = 'comprobante-sunat-' + response.order_id + '.pdf';
+        } else if (response.document_type === 'B' || response.document_type === 'F') {
+            url = '/comercial/print_bill_order_commodity/' + response.order_id + '/?download=1';
+        } else {
+            url = '/comercial/print_ticket_order_commodity/' + response.order_id + '/?download=1';
+            filename = 'ORDEN DE SERVICIO ' + (response.serial || '') + '-' + (response.correlative || '') + '.pdf';
+        }
+        downloadPdf(url, filename);
+    }
+
+    function downloadOrdenServicio(response) {
+        if (!response || !response.order_id) return;
+        var serial = response.order_serial || response.serial || '';
+        var correlative = response.order_correlative || response.correlative || '';
+        var filename = 'ORDEN DE SERVICIO ' + serial + '-' + correlative + '.pdf';
+        var url = '/comercial/print_ticket_order_commodity/' + response.order_id + '/?download=1';
+        downloadPdf(url, filename);
+    }
+
+    function downloadVoucher(response) {
+        if (!response || !response.order_id) return;
+        var url;
+        var filename = 'comprobante-' + response.order_id + '.pdf';
+        if (response.sunat_pdf) {
+            url = response.sunat_pdf;
+            filename = 'comprobante-sunat-' + response.order_id + '.pdf';
+        } else {
+            url = '/comercial/print_bill_order_commodity/' + response.order_id + '/?download=1';
+            var docLabel = response.document_type === 'F' ? 'FACTURA' : 'BOLETA';
+            filename = docLabel + ' ' + (response.serial || '') + '-' + (response.correlative || '') + '.pdf';
+        }
+        downloadPdf(url, filename);
+    }
+
+    function formatMoney(value) {
+        var n = parseFloat(value);
+        if (isNaN(n)) n = 0;
+        return 'S/ ' + n.toFixed(2);
+    }
+
+    function formatOsNumber(response) {
+        var serial = (response.order_serial || '').toString().trim();
+        var correlative = (response.order_correlative || '').toString().trim();
+        if (serial && correlative) return serial + '-' + correlative;
+        if (response.serial && response.correlative) return response.serial + '-' + response.correlative;
+        return response.order_id ? ('OS-' + response.order_id) : '—';
+    }
+
+    function paymentLabel(code) {
+        if (code === 'D') return 'Pago destino';
+        if (code === 'C') return 'Al contado';
+        if (code === 'S') return 'Servicio';
+        return 'Otro';
+    }
+
+    function voucherTitle(docType) {
+        if (docType === 'F') return 'Factura';
+        if (docType === 'B') return 'Boleta';
+        return 'Comprobante';
+    }
+
+    var pendingPrintResponse = null;
+
+    function openPrintModal(response, context) {
+        pendingPrintResponse = response || null;
+        if (!pendingPrintResponse || !pendingPrintResponse.order_id) return;
+
+        var wayToPay = response.way_to_pay || (context && context.wayToPay) || 'C';
+        var docType = response.document_type;
+        if (docType !== 'B' && docType !== 'F') {
+            docType = (context && context.docType) || docType;
+        }
+        var showVoucher = wayToPay === 'C' && (docType === 'B' || docType === 'F');
+        var osNumber = formatOsNumber(response);
+        var voucherNumber = (response.serial || '') + '-' + (response.correlative || '');
+        var total = formatMoney(response.total != null ? response.total : (context && context.total));
+        var routeText = (context && context.routeText) || '';
+
+        $('#guide-print-os-number').text(osNumber);
+        $('#guide-print-payment').text(paymentLabel(wayToPay));
+        $('#guide-print-total').text(total);
+        $('#guide-print-os-label').text('N° ' + osNumber);
+
+        if (routeText) {
+            $('#guide-print-route-text').text(routeText);
+            $('#guide-print-route').prop('hidden', false);
+        } else {
+            $('#guide-print-route').prop('hidden', true);
+        }
+
+        if (showVoucher) {
+            $('#guide-print-voucher-title').text(voucherTitle(docType));
+            $('#guide-print-voucher-label').text('N° ' + voucherNumber);
+            $('#guide-print-btn-voucher').prop('hidden', false);
+            $('#guide-print-actions').removeClass('is-single').addClass('is-dual');
+            $('#guide-print-subtitle').text('Descargue la orden de servicio y el comprobante');
+        } else {
+            $('#guide-print-btn-voucher').prop('hidden', true);
+            $('#guide-print-actions').removeClass('is-dual').addClass('is-single');
+            $('#guide-print-subtitle').text('Descargue la orden de servicio');
+        }
+
+        $('#guide-print-btn-os, #guide-print-btn-voucher').prop('disabled', false);
+        $('#guide-print-modal').modal('show');
+    }
+
+    function capturePrintContext() {
+        var origin = ($('#e_subsidiary_origin option:selected').text() || '').trim();
+        var destiny = ($('#e_subsidiary_destiny option:selected').text() || '').trim();
+        var routeText = '';
+        if (origin && destiny && destiny.toLowerCase().indexOf('seleccione') === -1) {
+            routeText = origin + ' → ' + destiny;
+        }
+        return {
+            wayToPay: $('#e_way_to_pay').val() || 'C',
+            docType: $('#e_type_bill').val() || 'T',
+            total: $('.e-total').first().text() || '0.00',
+            routeText: routeText
+        };
+    }
+
+    function bindPrintModal() {
+        $('#guide-print-btn-os').on('click', function () {
+            if (!pendingPrintResponse) return;
+            var $btn = $(this).prop('disabled', true);
+            downloadOrdenServicio(pendingPrintResponse);
+            setTimeout(function () { $btn.prop('disabled', false); }, 1200);
+        });
+        $('#guide-print-btn-voucher').on('click', function () {
+            if (!pendingPrintResponse) return;
+            var $btn = $(this).prop('disabled', true);
+            downloadVoucher(pendingPrintResponse);
+            setTimeout(function () { $btn.prop('disabled', false); }, 1200);
+        });
+        $('#guide-print-modal').on('hidden.bs.modal', function () {
+            pendingPrintResponse = null;
+        });
     }
 
     function handleSaveSuccess(response) {
         toastr.success(response.message);
+        var svc = activeService();
+        if (svc === 'E' && response && response.order_id) {
+            var context = capturePrintContext();
+            openPrintModal(response, context);
+            resetFormAfterSave();
+            return;
+        }
         downloadComprobante(response);
         resetFormAfterSave();
     }
@@ -959,6 +1099,7 @@ var GuideServices = (function ($) {
         bindMudanza();
         bindDelivery();
         bindCarga();
+        bindPrintModal();
         $('.rv-guide-btn-cancel').on('click', function () { location.reload(); });
         bindSubmit();
         setService(cfg.defaultService || activeService() || 'E');

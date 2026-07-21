@@ -93,12 +93,10 @@
                                                 <span class="badge badge-light">{{ programming.truck_exit|date:"H:i" }}</span>
                                             </td>
                                             <td>
-                                                {% if programming.type == 'E' %}
-                                                    <span class="badge badge-primary">Encomienda</span>
-                                                {% elif programming.type == 'V' %}
-                                                    <span class="badge badge-info">Viajes</span>
+                                                {% if programming.service_type == 'E' %}
+                                                    <span class="badge badge-primary">Encomiendas</span>
                                                 {% else %}
-                                                    <span class="badge badge-secondary">-</span>
+                                                    <span class="badge badge-secondary">{{ programming.get_service_type_display|default:"-" }}</span>
                                                 {% endif %}
                                             </td>
                                             <td>

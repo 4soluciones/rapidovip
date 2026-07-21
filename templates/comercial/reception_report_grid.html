@@ -98,11 +98,19 @@
                         {% endif %}
                     </td>
                     <td class="rv-report-actions noExl">
-                        <a class="rv-report-action-btn"
-                           href="{% url 'comercial:print_ticket_order_commodity' order.id %}"
-                           target="_blank" title="Ver orden de servicio">
-                            <i class="fas fa-file-alt"></i>
-                        </a>
+                        {% if order.can_collect %}
+                            <a class="rv-report-action-btn"
+                               href="{% url 'comercial:print_ticket_order_commodity' order.id %}?delivery=1&download=1"
+                               download title="Descargar constancia de entrega">
+                                <i class="fas fa-file-alt"></i>
+                            </a>
+                        {% else %}
+                            <a class="rv-report-action-btn"
+                               href="{% url 'comercial:print_ticket_order_commodity' order.id %}"
+                               target="_blank" title="Ver orden de servicio">
+                                <i class="fas fa-file-alt"></i>
+                            </a>
+                        {% endif %}
                         {% if order.bill_pdf_available %}
                             <a class="rv-report-action-btn rv-reception-action-pdf"
                                href="{% url 'comercial:print_bill_order_commodity' order.id %}"
