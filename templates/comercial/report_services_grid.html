@@ -72,6 +72,11 @@
                         {% if o.status != 'A' and not o.type_commodity_destiny %}
                             <strong>S/ {{ o.total }}</strong>
                             <small class="rv-report-pay rv-report-pay-{{ o.way_to_pay|lower }}">{{ o.way_to_pay_label|title }}</small>
+                            {% if o.destination_collected %}
+                                <small class="rv-report-pay-collected">Cobrado en destino</small>
+                            {% elif o.way_to_pay == 'D' %}
+                                <small class="rv-report-pay-pending">Pendiente de cobro</small>
+                            {% endif %}
                         {% else %}—{% endif %}
                     </td>
                     <td>{{ o.destiny_label|default:o.item_route_destiny.0.subsidiary|default:"—" }}</td>

@@ -71,7 +71,7 @@ def prefetch_orders_for_report(order_set):
         ),
         'encomienda__office_destination',
         'encomienda__office_origin',
-    ).select_related('user', 'company', 'truck', 'encomienda')
+    ).select_related('user', 'company', 'truck', 'encomienda', 'orderbill')
 
 
 def _is_all_filter(value):

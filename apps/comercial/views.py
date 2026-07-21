@@ -1420,7 +1420,6 @@ def _reception_order_values(order_set):
             'can_collect': (
                 order_obj.status != 'A'
                 and order_obj.way_to_pay == 'D'
-                and order_obj.type_document == 'T'
                 and order_bill is None
             ),
             'bill_pdf_available': order_bill is not None and order_bill.status == 'E',
@@ -1487,6 +1486,20 @@ def _order_collect_amount(order_obj):
     if amount is None or amount == 0:
         amount = order_obj.total or decimal.Decimal('0')
     return decimal.Decimal(amount).quantize(decimal.Decimal('0.01'), rounding=decimal.ROUND_HALF_EVEN)
+
+
+def _is_destination_payment_collected(order_obj):
+    """
+    Indica si un pago destino ya se cobró en la sede de destino.
+
+    No se usa way_to_pay (debe permanecer 'D'): el cobro queda registrado
+    con OrderBill y el CashFlow de entrada en la caja del destino.
+    """
+    if getattr(order_obj, 'orderbill', None) is not None:
+        return True
+    if OrderBill.objects.filter(order_id=order_obj.pk).exists():
+        return True
+    return CashFlow.objects.filter(order_id=order_obj.pk, type='E').exists()
 
 
 def _resolve_billing_client(*, names, document_type_code, document_number, address=''):
@@ -1561,8 +1574,7 @@ def reception_billing_data(request):
     if (
         order_obj.status == 'A'
         or order_obj.way_to_pay != 'D'
-        or order_obj.type_document != 'T'
-        or OrderBill.objects.filter(order=order_obj).exists()
+        or _is_destination_payment_collected(order_obj)
     ):
         return JsonResponse(
             {'error': 'La encomienda ya fue cobrada o no está pendiente de pago en destino.'},
@@ -1645,11 +1657,7 @@ def collect_destination_payment(request):
 
             if order_obj.status == 'A':
                 raise ValueError('No se puede cobrar una encomienda anulada.')
-            if (
-                order_obj.way_to_pay != 'D'
-                or order_obj.type_document != 'T'
-                or OrderBill.objects.filter(order=order_obj).exists()
-            ):
+            if order_obj.way_to_pay != 'D' or _is_destination_payment_collected(order_obj):
                 raise ValueError('La encomienda ya fue cobrada o no está pendiente de pago en destino.')
 
             cash_obj = get_open_cash_for_subsidiary(subsidiary_obj, today)
@@ -1705,13 +1713,14 @@ def collect_destination_payment(request):
                 details = result.get('errors') or result.get('error') or result.get('message')
                 raise RuntimeError(str(details or '4Fact rechazó la emisión del comprobante.'))
 
+            # way_to_pay permanece 'D': el dinero entra a la caja del destino (CashFlow)
+            # y el cobro se valida con OrderBill, no cambiando la forma de pago a contado.
             order_obj.type_document = document_type
             order_obj.serial = serial_record.serial
             order_obj.correlative_sale = correlative
-            order_obj.way_to_pay = 'C'
             order_obj.client = billing_client
             order_obj.save(update_fields=[
-                'type_document', 'serial', 'correlative_sale', 'way_to_pay', 'client', 'update_at',
+                'type_document', 'serial', 'correlative_sale', 'client', 'update_at',
             ])
 
             serial_record.correlative = int(correlative)
@@ -1839,6 +1848,14 @@ def get_order_comodity_values(order_set=None):
                 'names': o.truck.license_plate,
             })
 
+        order_bill = getattr(o, 'orderbill', None)
+        # Pago destino cobrado en sede destino: se marca con OrderBill, sin cambiar way_to_pay.
+        destination_collected = (
+            o.way_to_pay == 'D'
+            and order_bill is not None
+            and order_bill.status == 'E'
+        )
+
         order_item = {
             'id': o.id,
             'company': o.company.short_name if o.company_id else '',
@@ -1855,6 +1872,7 @@ def get_order_comodity_values(order_set=None):
                                                                      rounding=decimal.ROUND_HALF_EVEN),
             'way_to_pay': o.way_to_pay,
             'way_to_pay_label': o.get_way_to_pay_display(),
+            'destination_collected': destination_collected,
             'status': o.status,
             'status_label': o.get_status_display(),
             'status_transport': (
