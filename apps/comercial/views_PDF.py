@@ -203,15 +203,6 @@ def _passenger_pdf_unavailable():
     )
 
 
-def _is_pending_destination_payment(order_obj):
-    """Pago destino aún no cobrado en sede (sin OrderBill asociado)."""
-    if order_obj.way_to_pay != 'D' or order_obj.status == 'A':
-        return False
-    if getattr(order_obj, 'orderbill', None) is not None:
-        return False
-    return not OrderBill.objects.filter(order_id=order_obj.pk).exists()
-
-
 def _print_destination_delivery_ticket(request, order_obj, pk):
     """
     Constancia de entrega para encomiendas con pago pendiente en destino.
@@ -683,8 +674,11 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         from .pdf_service_guides import build_ticket_for_service
         return build_ticket_for_service(order_obj, pk, request)
 
+    # Constancia de entrega solo bajo pedido explícito (?delivery=1),
+    # p. ej. desde recepción de encomiendas. La emisión y reportes deben
+    # seguir devolviendo la orden de servicio.
     force_delivery = (request.GET.get('delivery') or '').strip() in ('1', 'true', 'yes')
-    if force_delivery or _is_pending_destination_payment(order_obj):
+    if force_delivery:
         return _print_destination_delivery_ticket(request, order_obj, pk)
 
     tbh_business_name_address = ''
