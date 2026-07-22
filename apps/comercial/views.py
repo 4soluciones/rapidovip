@@ -59,6 +59,7 @@ from apps.sales.models import (
     OrderCommodity,
     OrderDetail,
     SERVICE_TYPE_CHOICES,
+    TYPE_COMMODITY_CHOICES,
     Unit,
     WAY_TO_PAY_CHOICES,
 )
@@ -1399,15 +1400,80 @@ def report_comodity_grid(request):
 
 def _destination_recipient(order_obj):
     """Destinatario principal usado para la búsqueda y el comprobante."""
-    return order_obj.orderaction_set.filter(type='D', client__isnull=False).select_related(
+    with_client = order_obj.orderaction_set.filter(type='D', client__isnull=False).select_related(
         'client',
+    ).prefetch_related(
+        'client__clienttype_set__document_type',
+        'client__clientaddress_set',
+    ).first()
+    if with_client:
+        return with_client
+    return order_obj.orderaction_set.filter(type='D').select_related(
+        'client', 'order_addressee',
     ).prefetch_related(
         'client__clienttype_set__document_type',
         'client__clientaddress_set',
     ).first()
 
 
-def _reception_orders(subsidiary_obj, company_obj, start_date=None, end_date=None, dni=''):
+def _order_sender(order_obj):
+    """Remitente principal de la encomienda."""
+    return order_obj.orderaction_set.filter(type='R').select_related(
+        'client', 'order_addressee',
+    ).prefetch_related(
+        'client__clienttype_set__document_type',
+    ).first()
+
+
+def _client_party_payload(action):
+    """Datos legibles de remitente/destinatario para modales de recepción."""
+    if not action:
+        return {'names': '', 'document_type': '', 'document_number': '', 'phone': ''}
+    client = action.client if action.client_id else None
+    if client:
+        client_type = client.clienttype_set.select_related('document_type').first()
+        return {
+            'names': (client.names or '').upper(),
+            'document_type': client_type.document_type_id if client_type else '',
+            'document_number': client_type.document_number if client_type else '',
+            'phone': client.phone or '',
+        }
+    addressee = action.order_addressee if action.order_addressee_id else None
+    return {
+        'names': ((addressee.names if addressee else '') or '').upper(),
+        'document_type': '',
+        'document_number': '',
+        'phone': (addressee.phone if addressee else '') or '',
+    }
+
+
+def _normalize_delivery_filter(value):
+    raw = (value or 'pending').strip().lower()
+    if raw in ('delivered', 'entregadas', 'e'):
+        return 'delivered'
+    if raw in ('all', 'todas', 't'):
+        return 'all'
+    return 'pending'
+
+
+def _apply_reception_type_commodity(encomienda, type_commodity):
+    """Actualiza type_commodity y alinea status_transport cuando se entrega."""
+    code = (type_commodity or '').strip().upper()
+    valid_codes = {choice[0] for choice in TYPE_COMMODITY_CHOICES}
+    if code not in valid_codes:
+        raise ValueError('Seleccione un estado de encomienda válido.')
+    encomienda.type_commodity = code
+    update_fields = ['type_commodity']
+    if code == 'E':
+        encomienda.status_transport = 'E'
+        update_fields.append('status_transport')
+    encomienda.save(update_fields=update_fields)
+    return code
+
+
+def _reception_orders(
+    subsidiary_obj, company_obj, start_date=None, end_date=None, dni='', delivery_filter='pending',
+):
     orders = Order.objects.filter(
         type_order='E',
         company=company_obj,
@@ -1421,6 +1487,12 @@ def _reception_orders(subsidiary_obj, company_obj, start_date=None, end_date=Non
     elif start_date and end_date:
         orders = orders.filter(transfer_date__range=[start_date, end_date])
 
+    delivery_filter = _normalize_delivery_filter(delivery_filter)
+    if delivery_filter == 'delivered':
+        orders = orders.filter(encomienda__type_commodity='E')
+    elif delivery_filter == 'pending':
+        orders = orders.filter(encomienda__type_commodity='S')
+
     return prefetch_orders_for_report(
         orders.select_related('orderbill').distinct()
     ).order_by('-transfer_date', '-id')
@@ -1431,21 +1503,33 @@ def _reception_order_values(order_set):
     orders_by_id = {order.id: order for order in order_set}
     for row in rows:
         order_obj = orders_by_id[row['id']]
+        encomienda = order_obj.encomienda
         recipient_action = _destination_recipient(order_obj)
         recipient = recipient_action.client if recipient_action else None
         client_type = recipient.clienttype_set.select_related('document_type').first() if recipient else None
         order_bill = getattr(order_obj, 'orderbill', None)
+        origin_office = encomienda.office_origin
+        type_commodity = encomienda.type_commodity or 'S'
+        can_collect = (
+            order_obj.status != 'A'
+            and order_obj.way_to_pay == 'D'
+            and order_bill is None
+        )
+        is_delivered = type_commodity == 'E'
         row.update({
+            'origin_office': (
+                (origin_office.short_name or origin_office.name) if origin_office else '—'
+            ),
             'recipient_document': client_type.document_number if client_type else '',
             'recipient_document_type': client_type.document_type_id if client_type else '',
             'recipient_phone': recipient.phone if recipient else '',
-            'status_transport_code': order_obj.encomienda.status_transport,
-            'status_transport_label': order_obj.encomienda.get_status_transport_display(),
-            'can_collect': (
-                order_obj.status != 'A'
-                and order_obj.way_to_pay == 'D'
-                and order_bill is None
-            ),
+            'status_transport_code': encomienda.status_transport,
+            'status_transport_label': encomienda.get_status_transport_display(),
+            'type_commodity': type_commodity,
+            'type_commodity_label': encomienda.get_type_commodity_display(),
+            'is_cash': order_obj.way_to_pay == 'C',
+            'is_delivered': is_delivered,
+            'can_collect': can_collect,
             'bill_pdf_available': order_bill is not None and order_bill.status == 'E',
         })
     return rows
@@ -1463,11 +1547,13 @@ def reception_report(request):
             'date_now': date_now.strftime('%Y-%m-%d'),
             'month_start': date_now.replace(day=1).strftime('%Y-%m-%d'),
             'subsidiary': subsidiary_obj,
+            'type_commodity_choices': TYPE_COMMODITY_CHOICES,
         })
 
     start_date_raw = (request.POST.get('start-date') or '').strip()
     end_date_raw = (request.POST.get('end-date') or '').strip()
     dni = ''.join(ch for ch in (request.POST.get('dni') or '').strip() if ch.isdigit())
+    delivery_filter = _normalize_delivery_filter(request.POST.get('delivery-status'))
 
     if dni and len(dni) != 8:
         return JsonResponse(
@@ -1491,7 +1577,9 @@ def reception_report(request):
                 status=HTTPStatus.BAD_REQUEST,
             )
 
-    order_set = list(_reception_orders(subsidiary_obj, company_obj, start_date, end_date, dni))
+    order_set = list(_reception_orders(
+        subsidiary_obj, company_obj, start_date, end_date, dni, delivery_filter,
+    ))
     rows = _reception_order_values(order_set)
     grid = loader.get_template('comercial/reception_report_grid.html').render({
         'order_set': rows,
@@ -1500,6 +1588,7 @@ def reception_report(request):
         'dni': dni,
         'f1': start_date,
         'f2': end_date,
+        'delivery_filter': delivery_filter,
     }, request)
     return JsonResponse({'grid': grid, 'count': len(rows)}, status=HTTPStatus.OK)
 
@@ -1582,7 +1671,7 @@ def reception_billing_data(request):
     company_obj = request.user.companyuser.company_rotation
     try:
         order_obj = Order.objects.select_related(
-            'company', 'encomienda__office_destination',
+            'company', 'encomienda__office_destination', 'encomienda__office_origin',
         ).get(
             pk=int(request.GET.get('order_id', 0)),
             type_order='E',
@@ -1621,11 +1710,24 @@ def reception_billing_data(request):
     }
     cash_obj = get_open_cash_for_subsidiary(subsidiary_obj, timezone.localdate())
     amount = _order_collect_amount(order_obj)
+    encomienda = order_obj.encomienda
+    origin = encomienda.office_origin
 
     return JsonResponse({
         'order_id': order_obj.id,
         'order_number': _order_service_label(order_obj),
         'amount': f'{amount:.2f}',
+        'origin_office': (origin.short_name or origin.name) if origin else '—',
+        'type_commodity': encomienda.type_commodity or 'S',
+        'type_commodity_choices': [
+            {'code': code, 'label': label.title()} for code, label in TYPE_COMMODITY_CHOICES
+        ],
+        'delivery_url': (
+            reverse('comercial:print_ticket_order_commodity', kwargs={'pk': order_obj.id})
+            + '?delivery=1&download=1'
+        ),
+        'sender': _client_party_payload(_order_sender(order_obj)),
+        'recipient': _client_party_payload(recipient_action),
         'client': {
             'names': (recipient.names if recipient else '') or '',
             'document_type': client_type.document_type_id if client_type else '01',
@@ -1655,6 +1757,150 @@ def reception_billing_data(request):
     }, status=HTTPStatus.OK)
 
 
+def reception_delivery_data(request):
+    """Datos del modal de entrega para encomiendas al contado."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Método no permitido.'}, status=HTTPStatus.METHOD_NOT_ALLOWED)
+
+    subsidiary_obj = get_subsidiary_by_user(request.user)
+    company_obj = request.user.companyuser.company_rotation
+    try:
+        order_obj = Order.objects.select_related(
+            'company', 'orderbill',
+            'encomienda__office_destination', 'encomienda__office_origin',
+        ).prefetch_related(
+            'orderdetail_set__unit',
+            Prefetch(
+                'orderaction_set',
+                queryset=OrderAction.objects.select_related('client', 'order_addressee').prefetch_related(
+                    'client__clienttype_set__document_type',
+                ),
+            ),
+        ).get(
+            pk=int(request.GET.get('order_id', 0)),
+            type_order='E',
+            company=company_obj,
+            encomienda__office_destination=subsidiary_obj,
+        )
+    except (Order.DoesNotExist, TypeError, ValueError):
+        return JsonResponse(
+            {'error': 'La encomienda no existe o no pertenece a la sede de destino del usuario.'},
+            status=HTTPStatus.NOT_FOUND,
+        )
+
+    if order_obj.status == 'A':
+        return JsonResponse(
+            {'error': 'La encomienda está anulada.'},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+    if order_obj.way_to_pay != 'C':
+        return JsonResponse(
+            {'error': 'Esta acción aplica solo a encomiendas al contado.'},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+
+    encomienda = order_obj.encomienda
+    origin = encomienda.office_origin
+    destination = encomienda.office_destination
+    order_bill = getattr(order_obj, 'orderbill', None)
+    bill_available = order_bill is not None and order_bill.status == 'E'
+    details = []
+    for detail in order_obj.orderdetail_set.all():
+        unit_label = ''
+        if detail.unit_id:
+            unit_label = detail.unit.description or detail.unit.name or ''
+        details.append({
+            'description': (detail.description or 'Encomienda').upper(),
+            'quantity': float(detail.quantity or 0),
+            'weight': float(detail.weight or 0) if detail.weight is not None else None,
+            'unit': unit_label.upper(),
+        })
+
+    return JsonResponse({
+        'order_id': order_obj.id,
+        'order_number': _order_service_label(order_obj),
+        'amount': f'{_order_collect_amount(order_obj):.2f}',
+        'way_to_pay_label': (order_obj.get_way_to_pay_display() or '').title(),
+        'origin_office': (origin.short_name or origin.name) if origin else '—',
+        'destination_office': (
+            (destination.short_name or destination.name) if destination else '—'
+        ),
+        'transfer_date': order_obj.transfer_date.strftime('%d/%m/%Y') if order_obj.transfer_date else '—',
+        'create_date': (
+            timezone.localtime(order_obj.create_at).strftime('%d/%m/%Y %I:%M %p')
+            if order_obj.create_at else '—'
+        ),
+        'status_transport_label': encomienda.get_status_transport_display(),
+        'type_guide_label': encomienda.get_type_guide_display(),
+        'observation': (order_obj.observation or '').strip(),
+        'type_commodity': encomienda.type_commodity or 'S',
+        'type_commodity_choices': [
+            {'code': code, 'label': label.title()} for code, label in TYPE_COMMODITY_CHOICES
+        ],
+        'delivery_url': (
+            reverse('comercial:print_ticket_order_commodity', kwargs={'pk': order_obj.id})
+            + '?delivery=1&download=1'
+        ),
+        'order_service_url': reverse(
+            'comercial:print_ticket_order_commodity', kwargs={'pk': order_obj.id},
+        ),
+        'bill_pdf_available': bill_available,
+        'bill_label': (
+            f'{(order_obj.get_type_document_display() or "").title()} '
+            f'{order_obj.serial or ""}-{order_obj.correlative_sale or ""}'
+        ).strip() if bill_available else '',
+        'bill_pdf_url': (
+            reverse('comercial:print_bill_order_commodity', kwargs={'pk': order_obj.id})
+            if bill_available else ''
+        ),
+        'sender': _client_party_payload(_order_sender(order_obj)),
+        'recipient': _client_party_payload(_destination_recipient(order_obj)),
+        'details': details,
+    }, status=HTTPStatus.OK)
+
+
+def update_reception_type_commodity(request):
+    """Actualiza el estado type_commodity desde recepción (contado o destino)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido.'}, status=HTTPStatus.METHOD_NOT_ALLOWED)
+
+    subsidiary_obj = get_subsidiary_by_user(request.user)
+    company_obj = request.user.companyuser.company_rotation
+    type_commodity = (request.POST.get('type_commodity') or '').strip().upper()
+
+    try:
+        with transaction.atomic():
+            order_obj = Order.objects.select_for_update().select_related('encomienda').get(
+                pk=int(request.POST.get('order_id', 0)),
+                type_order='E',
+                company=company_obj,
+                encomienda__office_destination=subsidiary_obj,
+            )
+            if order_obj.status == 'A':
+                raise ValueError('No se puede actualizar una encomienda anulada.')
+            code = _apply_reception_type_commodity(order_obj.encomienda, type_commodity)
+    except Order.DoesNotExist:
+        return JsonResponse(
+            {'error': 'La encomienda no existe o no pertenece a su sede.'},
+            status=HTTPStatus.NOT_FOUND,
+        )
+    except (TypeError, ValueError) as exc:
+        return JsonResponse({'error': str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+    label = dict(TYPE_COMMODITY_CHOICES).get(code, code)
+    return JsonResponse({
+        'message': f'Estado actualizado a “{label.title()}”.',
+        'order_id': order_obj.id,
+        'type_commodity': code,
+        'type_commodity_label': label.title(),
+        'is_delivered': code == 'E',
+        'delivery_url': (
+            reverse('comercial:print_ticket_order_commodity', kwargs={'pk': order_obj.id})
+            + '?delivery=1&download=1'
+        ),
+    }, status=HTTPStatus.OK)
+
+
 def collect_destination_payment(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método no permitido.'}, status=HTTPStatus.METHOD_NOT_ALLOWED)
@@ -1666,13 +1912,14 @@ def collect_destination_payment(request):
             status=HTTPStatus.BAD_REQUEST,
         )
 
+    type_commodity = (request.POST.get('type_commodity') or 'S').strip().upper()
     subsidiary_obj = get_subsidiary_by_user(request.user)
     company_obj = request.user.companyuser.company_rotation
     today = timezone.localdate()
 
     try:
         with transaction.atomic():
-            order_obj = Order.objects.select_for_update().get(
+            order_obj = Order.objects.select_for_update().select_related('encomienda').get(
                 pk=int(request.POST.get('order_id', 0)),
                 type_order='E',
                 company=company_obj,
@@ -1777,6 +2024,8 @@ def collect_destination_payment(request):
                 document_type_attached=document_type,
             )
 
+            applied_type = _apply_reception_type_commodity(order_obj.encomienda, type_commodity)
+
     except Order.DoesNotExist:
         return JsonResponse(
             {'error': 'La encomienda no existe o no pertenece a su sede.'},
@@ -1790,13 +2039,16 @@ def collect_destination_payment(request):
             status=HTTPStatus.BAD_GATEWAY,
         )
 
+    type_label = dict(TYPE_COMMODITY_CHOICES).get(applied_type, applied_type)
     return JsonResponse({
         'message': (
             f'Cobro registrado correctamente en la caja “{cash_obj.name}”. '
-            f'El comprobante {serial_record.serial}-{correlative} fue emitido satisfactoriamente.'
+            f'El comprobante {serial_record.serial}-{correlative} fue emitido satisfactoriamente. '
+            f'Estado de encomienda: {type_label.title()}.'
         ),
         'order_id': order_obj.id,
         'document_number': f'{serial_record.serial}-{correlative}',
+        'type_commodity': applied_type,
         'pdf_url': reverse('comercial:print_bill_order_commodity', kwargs={'pk': order_obj.id}),
     }, status=HTTPStatus.OK)
 

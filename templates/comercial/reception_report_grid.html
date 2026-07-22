@@ -7,6 +7,17 @@
             {% else %}
                 <span class="rv-report-period">{{ f1|date:"d/m/Y" }} — {{ f2|date:"d/m/Y" }}</span>
             {% endif %}
+            {% if delivery_filter == 'delivered' %}
+                <span class="rv-report-period rv-reception-filter-tag is-delivered">
+                    <i class="fas fa-check-circle"></i> Entregadas
+                </span>
+            {% elif delivery_filter == 'all' %}
+                <span class="rv-report-period rv-reception-filter-tag">Todas</span>
+            {% else %}
+                <span class="rv-report-period rv-reception-filter-tag is-pending">
+                    <i class="fas fa-clock"></i> Pendientes de entrega
+                </span>
+            {% endif %}
         </div>
         {% if order_set %}
         <div class="rv-report-toolbar-right">
@@ -40,13 +51,13 @@
             <tbody>
                 {% for order in order_set %}
                 <tr data-id="{{ order.id }}"
-                    class="{% if order.status == 'A' %}rv-report-row-cancelled{% elif order.can_collect %}rv-reception-row-pending{% endif %}">
+                    class="{% if order.status == 'A' %}rv-report-row-cancelled{% elif order.is_delivered %}rv-reception-row-delivered{% elif order.can_collect %}rv-reception-row-pending{% endif %}">
                     <td class="rv-report-date">
                         <span>{{ order.transfer_date|date:"d/m/Y"|default:"—" }}</span>
                     </td>
                     <td>
                         <span class="rv-report-doc">{{ order.order_service_number }}</span>
-                        <small class="rv-report-doc-type">Origen: {{ order.company }}</small>
+                        <small class="rv-report-doc-type">Origen: {{ order.origin_office }}</small>
                     </td>
                     <td>
                         {% if order.bill_pdf_available %}
@@ -83,28 +94,37 @@
                             </small>
                         {% else %}—{% endif %}
                     </td>
-                    <td>
+                    <td class="rv-reception-status-cell">
                         {% if order.status == 'A' %}
                             <span class="rv-report-status rv-report-status-cancel">Anulada</span>
                         {% else %}
-                            <span class="rv-report-status rv-reception-status-{{ order.status_transport_code|lower }}">
-                                {{ order.status_transport_label|title }}
-                            </span>
-                            {% if order.can_collect %}
-                                <small class="rv-reception-payment-status">Pago pendiente</small>
-                            {% else %}
-                                <small class="rv-reception-payment-status is-paid">Pago registrado</small>
-                            {% endif %}
+                            <div class="rv-reception-status-stack">
+                                <span class="rv-report-status rv-reception-commodity-{{ order.type_commodity|lower }}">
+                                    {{ order.type_commodity_label|title }}
+                                </span>
+                                {% if order.status_transport_label|upper != order.type_commodity_label|upper %}
+                                    <span class="rv-report-status rv-reception-status-{{ order.status_transport_code|lower }}">
+                                        {{ order.status_transport_label|title }}
+                                    </span>
+                                {% endif %}
+                                {% if not order.is_cash %}
+                                    {% if order.can_collect %}
+                                        <span class="rv-reception-payment-status">Pago pendiente</span>
+                                    {% else %}
+                                        <span class="rv-reception-payment-status is-paid">Pago registrado</span>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
                         {% endif %}
                     </td>
                     <td class="rv-report-actions noExl">
-                        {% if order.can_collect %}
-                            <a class="rv-report-action-btn"
-                               href="{% url 'comercial:print_ticket_order_commodity' order.id %}?delivery=1&download=1"
-                               download title="Descargar constancia de entrega">
-                                <i class="fas fa-file-alt"></i>
-                            </a>
-                        {% else %}
+                        {% if order.is_cash and order.status != 'A' and not order.is_delivered %}
+                            <button type="button"
+                                    class="rv-report-action-btn rv-reception-action-deliver btn-cash-delivery"
+                                    data-id="{{ order.id }}" title="Registrar entrega">
+                                <i class="fas fa-box-open"></i>
+                            </button>
+                        {% elif not order.can_collect %}
                             <a class="rv-report-action-btn"
                                href="{% url 'comercial:print_ticket_order_commodity' order.id %}"
                                target="_blank" title="Ver orden de servicio">

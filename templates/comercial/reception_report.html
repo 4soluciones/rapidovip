@@ -27,6 +27,14 @@
                     <input type="date" class="rv-form-control" id="reception-end-date"
                            name="end-date" value="{{ date_now }}">
                 </div>
+                <div class="rv-form-group">
+                    <label for="reception-delivery-status">Estado de entrega</label>
+                    <select class="rv-form-control" id="reception-delivery-status" name="delivery-status">
+                        <option value="pending" selected>Pendientes de entrega</option>
+                        <option value="delivered">Entregadas</option>
+                        <option value="all">Todas</option>
+                    </select>
+                </div>
                 <div class="rv-form-group rv-reception-dni-group">
                     <label for="reception-dni">DNI del destinatario</label>
                     <div class="rv-input-icon-wrap">
@@ -153,6 +161,28 @@
                             </div>
                         </div>
 
+                        <div class="rv-collection-section rv-collection-constancy-section">
+                            <div class="rv-collection-section-head">
+                                <h6><i class="fas fa-file-signature"></i> Constancia de entrega</h6>
+                                <small>Opcional · para firma en recepción</small>
+                            </div>
+                            <p class="rv-collection-client-hint">
+                                Descargue la constancia si el destinatario debe firmar la recepción
+                                antes o después de registrar el cobro.
+                            </p>
+                            <a class="rv-delivery-doc-btn rv-collection-constancy-btn"
+                               id="btn-collection-download-constancy" href="#" download>
+                                <span class="rv-delivery-doc-icon is-constancy">
+                                    <i class="fas fa-file-download"></i>
+                                </span>
+                                <span class="rv-delivery-doc-copy">
+                                    <strong>Descargar constancia de entrega</strong>
+                                    <small>Documento para firma del destinatario</small>
+                                </span>
+                                <i class="fas fa-download rv-delivery-doc-arrow"></i>
+                            </a>
+                        </div>
+
                         <div class="rv-collection-section">
                             <h6><i class="fas fa-file-invoice-dollar"></i> Comprobante electrónico</h6>
                             <div class="rv-collection-document-options">
@@ -176,6 +206,16 @@
                             <small class="rv-collection-help" id="collection-document-help"></small>
                         </div>
 
+                        <div class="rv-collection-section">
+                            <h6><i class="fas fa-clipboard-check"></i> Estado de la encomienda</h6>
+                            <p class="rv-collection-client-hint">
+                                Elija el estado final. Al confirmar el cobro se aplicará el seleccionado
+                                (incluye internado o anulado).
+                            </p>
+                            <input type="hidden" name="type_commodity" id="collection-type-commodity" value="S">
+                            <div class="rv-commodity-status-options" id="collection-type-commodity-options"></div>
+                        </div>
+
                         <div class="rv-collection-cash-status" id="collection-cash-status"></div>
                         <label class="rv-collection-confirmation">
                             <input type="checkbox" id="collection-confirm">
@@ -197,14 +237,188 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade rv-modal rv-collection-modal rv-delivery-modal" id="cash-delivery-modal"
+     tabindex="-1" role="dialog" aria-labelledby="cash-delivery-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header rv-delivery-modal-header">
+                <div class="rv-delivery-header-copy">
+                    <span class="rv-delivery-header-eyebrow">Recepción · Al contado</span>
+                    <h5 class="modal-title" id="cash-delivery-title">Entrega de encomienda</h5>
+                    <div class="rv-modal-subtitle" id="delivery-order-label">Preparando información…</div>
+                </div>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body rv-delivery-modal-body">
+                <div class="rv-collection-loading" id="delivery-loading">
+                    <i class="fas fa-spinner fa-spin"></i> Cargando datos de la encomienda…
+                </div>
+                <div id="delivery-content" class="d-none">
+                    <div class="rv-delivery-hero">
+                        <div class="rv-delivery-hero-main">
+                            <span class="rv-delivery-hero-label">Orden de servicio</span>
+                            <strong id="delivery-order-number">—</strong>
+                            <div class="rv-delivery-route" id="delivery-route">
+                                <span id="delivery-origin-office">—</span>
+                                <i class="fas fa-long-arrow-alt-right"></i>
+                                <span id="delivery-destination-office">—</span>
+                            </div>
+                        </div>
+                        <div class="rv-delivery-hero-aside">
+                            <div class="rv-delivery-amount-card">
+                                <span>Importe</span>
+                                <div class="rv-collection-amount-value">
+                                    <small>S/</small>
+                                    <strong id="delivery-amount">0.00</strong>
+                                </div>
+                            </div>
+                            <span class="rv-delivery-pay-badge" id="delivery-way-to-pay">Al contado</span>
+                        </div>
+                    </div>
+
+                    <div class="rv-delivery-meta-grid">
+                        <div class="rv-delivery-meta-item">
+                            <span>Fecha traslado</span>
+                            <strong id="delivery-transfer-date">—</strong>
+                        </div>
+                        <div class="rv-delivery-meta-item">
+                            <span>Registrado</span>
+                            <strong id="delivery-create-date">—</strong>
+                        </div>
+                        <div class="rv-delivery-meta-item">
+                            <span>Estado transporte</span>
+                            <strong id="delivery-status-transport">—</strong>
+                        </div>
+                        <div class="rv-delivery-meta-item">
+                            <span>Tipo de guía</span>
+                            <strong id="delivery-type-guide">—</strong>
+                        </div>
+                    </div>
+
+                    <div class="rv-delivery-parties">
+                        <article class="rv-delivery-party-card">
+                            <div class="rv-delivery-party-head">
+                                <span class="rv-delivery-party-icon"><i class="fas fa-user"></i></span>
+                                <div>
+                                    <small>Remitente</small>
+                                    <strong id="delivery-sender-name">—</strong>
+                                </div>
+                            </div>
+                            <div class="rv-delivery-party-rows">
+                                <div><i class="fas fa-id-card"></i><span id="delivery-sender-doc">—</span></div>
+                                <div id="delivery-sender-phone-row" class="d-none">
+                                    <i class="fas fa-phone"></i><span id="delivery-sender-phone">—</span>
+                                </div>
+                            </div>
+                        </article>
+                        <article class="rv-delivery-party-card is-recipient">
+                            <div class="rv-delivery-party-head">
+                                <span class="rv-delivery-party-icon"><i class="fas fa-user-check"></i></span>
+                                <div>
+                                    <small>Destinatario</small>
+                                    <strong id="delivery-recipient-name">—</strong>
+                                </div>
+                            </div>
+                            <div class="rv-delivery-party-rows">
+                                <div><i class="fas fa-id-card"></i><span id="delivery-recipient-doc">—</span></div>
+                                <div id="delivery-recipient-phone-row" class="d-none">
+                                    <i class="fas fa-phone"></i><span id="delivery-recipient-phone">—</span>
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+
+                    <section class="rv-delivery-panel">
+                        <div class="rv-delivery-panel-head">
+                            <h6><i class="fas fa-boxes"></i> Detalle de bultos</h6>
+                        </div>
+                        <div id="delivery-details" class="rv-delivery-details"></div>
+                        <p id="delivery-observation" class="rv-delivery-observation d-none"></p>
+                    </section>
+
+                    <section class="rv-delivery-panel">
+                        <div class="rv-delivery-panel-head">
+                            <h6><i class="fas fa-file-alt"></i> Documentos</h6>
+                            <small>Disponibles para consulta o reimpresión</small>
+                        </div>
+                        <div class="rv-delivery-doc-actions">
+                            <a class="rv-delivery-doc-btn" id="btn-delivery-order-service"
+                               href="#" target="_blank" rel="noopener">
+                                <span class="rv-delivery-doc-icon is-order"><i class="fas fa-file-alt"></i></span>
+                                <span class="rv-delivery-doc-copy">
+                                    <strong>Orden de servicio</strong>
+                                    <small>Ticket / guía operativa</small>
+                                </span>
+                                <i class="fas fa-external-link-alt rv-delivery-doc-arrow"></i>
+                            </a>
+                            <a class="rv-delivery-doc-btn is-disabled" id="btn-delivery-bill-pdf"
+                               href="#" target="_blank" rel="noopener" aria-disabled="true">
+                                <span class="rv-delivery-doc-icon is-bill"><i class="fas fa-file-invoice"></i></span>
+                                <span class="rv-delivery-doc-copy">
+                                    <strong>Comprobante</strong>
+                                    <small id="delivery-bill-label">No disponible</small>
+                                </span>
+                                <i class="fas fa-external-link-alt rv-delivery-doc-arrow"></i>
+                            </a>
+                            <a class="rv-delivery-doc-btn" id="btn-delivery-constancy"
+                               href="#" download>
+                                <span class="rv-delivery-doc-icon is-constancy"><i class="fas fa-file-signature"></i></span>
+                                <span class="rv-delivery-doc-copy">
+                                    <strong>Constancia de entrega</strong>
+                                    <small>Descargar para firma en recepción</small>
+                                </span>
+                                <i class="fas fa-download rv-delivery-doc-arrow"></i>
+                            </a>
+                        </div>
+                    </section>
+
+                    <section class="rv-delivery-panel">
+                        <div class="rv-delivery-panel-head">
+                            <h6><i class="fas fa-clipboard-check"></i> Estado de la encomienda</h6>
+                            <small>Seleccione una opción antes de validar</small>
+                        </div>
+                        <p class="rv-delivery-status-hint">
+                            Por defecto queda en <strong>Sin entregar</strong>. Elija el estado y use
+                            <strong>Validar encomienda y entregar</strong> para confirmar la entrega.
+                            La constancia puede descargarse por separado cuando lo necesite.
+                        </p>
+                        <input type="hidden" id="delivery-type-commodity" value="S">
+                        <input type="hidden" id="delivery-order-id" value="">
+                        <div class="rv-commodity-status-options" id="delivery-type-commodity-options"></div>
+                    </section>
+                </div>
+            </div>
+            <div class="modal-footer rv-delivery-modal-footer">
+                <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cerrar</button>
+                <button type="button" class="rv-btn rv-btn-outline" id="btn-delivery-apply-status">
+                    <i class="fas fa-save"></i> Guardar estado
+                </button>
+                <button type="button" class="rv-btn rv-btn-search" id="btn-delivery-validate">
+                    <i class="fas fa-check-double"></i> Validar encomienda y entregar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extrajs %}
 <script type="text/javascript">
 (function () {
     var collectionData = null;
+    var deliveryData = null;
+    var csrfToken = $('#reception-search-form [name=csrfmiddlewaretoken]').val();
     var DOC_LENGTHS = { '01': 8, '06': 11 };
     var DOC_NAMES = { '01': 'DNI', '06': 'RUC' };
+    var STATUS_ICONS = {
+        S: 'fa-clock',
+        E: 'fa-check-circle',
+        A: 'fa-ban',
+        I: 'fa-warehouse'
+    };
 
     function searchReception() {
         var $btn = $('#btn-reception-search');
@@ -236,6 +450,94 @@
         var num = parseFloat(value);
         if (isNaN(num)) return '0.00';
         return num.toFixed(2);
+    }
+
+    function escapeHtml(value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+
+    function partyDocLabel(party) {
+        if (!party) return 'Sin documento';
+        var doc = (party.document_number || '').trim();
+        if (!doc) return 'Sin documento';
+        var type = party.document_type || '';
+        return (DOC_NAMES[type] || 'Doc.') + ' ' + doc;
+    }
+
+    function renderTypeCommodityOptions($container, $hidden, choices, selected) {
+        var current = selected || 'S';
+        $hidden.val(current);
+        var html = (choices || []).map(function (item) {
+            var active = item.code === current ? ' is-active' : '';
+            var icon = STATUS_ICONS[item.code] || 'fa-circle';
+            return (
+                '<button type="button" class="rv-commodity-status-btn rv-commodity-status-' +
+                String(item.code).toLowerCase() + active + '" data-code="' + escapeHtml(item.code) +
+                '" aria-pressed="' + (item.code === current ? 'true' : 'false') + '">' +
+                '<span class="rv-commodity-status-leading"><i class="fas ' + icon + '"></i></span>' +
+                '<span class="rv-commodity-status-copy">' +
+                '<strong>' + escapeHtml(item.label) + '</strong>' +
+                '</span>' +
+                '<span class="rv-commodity-status-check" aria-hidden="true">' +
+                '<i class="fas fa-check"></i></span></button>'
+            );
+        }).join('');
+        $container.html(html);
+    }
+
+    function bindTypeCommodityClicks($container, $hidden) {
+        $container.off('click.rvStatus').on('click.rvStatus', '.rv-commodity-status-btn', function () {
+            var code = $(this).data('code');
+            $hidden.val(code);
+            $container.find('.rv-commodity-status-btn')
+                .removeClass('is-active')
+                .attr('aria-pressed', 'false');
+            $(this).addClass('is-active').attr('aria-pressed', 'true');
+        });
+    }
+
+    function fillParty($name, $doc, $phone, $phoneRow, party) {
+        $name.text((party && party.names) || '—');
+        $doc.text(partyDocLabel(party));
+        var phone = party && party.phone ? String(party.phone).trim() : '';
+        if (phone) {
+            $phone.text(phone);
+            $phoneRow.removeClass('d-none');
+        } else {
+            $phone.text('—');
+            $phoneRow.addClass('d-none');
+        }
+    }
+
+    function setDeliveryDocLink($link, url, enabled, labelText) {
+        if (enabled && url) {
+            $link.removeClass('is-disabled')
+                .attr({ href: url, 'aria-disabled': 'false', tabindex: '0' });
+        } else {
+            $link.addClass('is-disabled')
+                .attr({ href: '#', 'aria-disabled': 'true', tabindex: '-1' });
+        }
+        if (labelText != null) {
+            $link.find('.rv-delivery-doc-copy small').first().text(labelText);
+        }
+    }
+
+    function updateTypeCommodity(orderId, typeCommodity) {
+        return $.post('{% url "comercial:update_reception_type_commodity" %}', {
+            csrfmiddlewaretoken: csrfToken,
+            order_id: orderId,
+            type_commodity: typeCommodity
+        });
+    }
+
+    function downloadConstancy(url) {
+        if (!url) return;
+        var link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', '');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 
     function docLengthFor(type) {
@@ -382,6 +684,7 @@
         collectionData = null;
         $('#destination-payment-form')[0].reset();
         $('#collection-order-id').val(orderId);
+        $('#collection-type-commodity').val('S');
         $('#collection-content').addClass('d-none');
         $('#collection-loading').removeClass('d-none').html(
             '<i class="fas fa-spinner fa-spin"></i> Validando encomienda, series y caja…'
@@ -402,6 +705,30 @@
                 $('#collection-serial-B').text(data.serials.B || 'Sin configurar');
                 $('#collection-serial-F').text(data.serials.F || 'Sin configurar');
                 applyDocMaxLength($('#collection-client-doc'), $('#collection-client-doc-type').val());
+
+                renderTypeCommodityOptions(
+                    $('#collection-type-commodity-options'),
+                    $('#collection-type-commodity'),
+                    data.type_commodity_choices,
+                    'S'
+                );
+                bindTypeCommodityClicks(
+                    $('#collection-type-commodity-options'),
+                    $('#collection-type-commodity')
+                );
+                $('#btn-collection-download-constancy')
+                    .attr('href', data.delivery_url || '#')
+                    .removeClass('is-busy is-disabled')
+                    .off('click.rvConstancy')
+                    .on('click.rvConstancy', function (event) {
+                        event.preventDefault();
+                        var url = $(this).attr('href');
+                        if (!url || url === '#') {
+                            toastr.warning('La constancia no está disponible.');
+                            return;
+                        }
+                        downloadConstancy(url);
+                    });
 
                 var $boleta = $('input[name="document_type"][value="B"]');
                 var $factura = $('input[name="document_type"][value="F"]');
@@ -427,6 +754,184 @@
                     $('<div>').text(message).html() + '</div>'
                 );
                 toastr.error(message);
+            });
+    });
+
+    $(document).on('click', '.btn-cash-delivery', function () {
+        var orderId = $(this).data('id');
+        deliveryData = null;
+        $('#delivery-order-id').val(orderId);
+        $('#delivery-type-commodity').val('S');
+        $('#delivery-content').addClass('d-none');
+        $('#delivery-loading').removeClass('d-none').html(
+            '<i class="fas fa-spinner fa-spin"></i> Cargando datos de la encomienda…'
+        );
+        $('#cash-delivery-modal').modal('show');
+
+        $.get('{% url "comercial:reception_delivery_data" %}', { order_id: orderId })
+            .done(function (data) {
+                deliveryData = data;
+                $('#delivery-order-label').text('Orden ' + data.order_number);
+                $('#delivery-order-number').text(data.order_number);
+                $('#delivery-origin-office').text(data.origin_office || '—');
+                $('#delivery-destination-office').text(data.destination_office || '—');
+                $('#delivery-amount').text(formatAmount(data.amount));
+                $('#delivery-way-to-pay').text(data.way_to_pay_label || 'Al contado');
+                $('#delivery-transfer-date').text(data.transfer_date || '—');
+                $('#delivery-create-date').text(data.create_date || '—');
+                $('#delivery-status-transport').text(data.status_transport_label || '—');
+                $('#delivery-type-guide').text(data.type_guide_label || '—');
+
+                fillParty(
+                    $('#delivery-sender-name'),
+                    $('#delivery-sender-doc'),
+                    $('#delivery-sender-phone'),
+                    $('#delivery-sender-phone-row'),
+                    data.sender
+                );
+                fillParty(
+                    $('#delivery-recipient-name'),
+                    $('#delivery-recipient-doc'),
+                    $('#delivery-recipient-phone'),
+                    $('#delivery-recipient-phone-row'),
+                    data.recipient
+                );
+
+                var detailsHtml = (data.details || []).map(function (item) {
+                    var qty = escapeHtml(item.quantity) + ' ' + escapeHtml(item.unit || '');
+                    var weight = item.weight ? (' · ' + escapeHtml(item.weight) + ' kg') : '';
+                    return (
+                        '<div class="rv-delivery-detail-item">' +
+                        '<div class="rv-delivery-detail-main">' +
+                        '<strong>' + escapeHtml(item.description) + '</strong>' +
+                        '<small>' + qty + weight + '</small></div>' +
+                        '<span class="rv-delivery-detail-qty">' + escapeHtml(item.quantity) + '</span>' +
+                        '</div>'
+                    );
+                }).join('') || '<span class="text-muted">Sin detalle de bultos</span>';
+                $('#delivery-details').html(detailsHtml);
+
+                if (data.observation) {
+                    $('#delivery-observation')
+                        .removeClass('d-none')
+                        .html('<i class="fas fa-comment-alt"></i> ' + escapeHtml(data.observation));
+                } else {
+                    $('#delivery-observation').addClass('d-none').empty();
+                }
+
+                setDeliveryDocLink(
+                    $('#btn-delivery-order-service'),
+                    data.order_service_url,
+                    true,
+                    'Ticket / guía operativa'
+                );
+                setDeliveryDocLink(
+                    $('#btn-delivery-bill-pdf'),
+                    data.bill_pdf_url,
+                    !!data.bill_pdf_available,
+                    data.bill_pdf_available ? (data.bill_label || 'Comprobante electrónico') : 'No disponible'
+                );
+                setDeliveryDocLink(
+                    $('#btn-delivery-constancy'),
+                    data.delivery_url,
+                    true,
+                    'Descargar para firma en recepción'
+                );
+
+                renderTypeCommodityOptions(
+                    $('#delivery-type-commodity-options'),
+                    $('#delivery-type-commodity'),
+                    data.type_commodity_choices,
+                    'S'
+                );
+                bindTypeCommodityClicks(
+                    $('#delivery-type-commodity-options'),
+                    $('#delivery-type-commodity')
+                );
+
+                $('#delivery-loading').addClass('d-none');
+                $('#delivery-content').removeClass('d-none');
+            })
+            .fail(function (xhr) {
+                var message = xhr.responseJSON && xhr.responseJSON.error
+                    ? xhr.responseJSON.error : 'No se pudo cargar la encomienda.';
+                $('#delivery-loading').html(
+                    '<div class="rv-collection-load-error"><i class="fas fa-exclamation-circle"></i> ' +
+                    escapeHtml(message) + '</div>'
+                );
+                toastr.error(message);
+            });
+    });
+
+    $(document).on('click', '#btn-delivery-bill-pdf.is-disabled, #btn-delivery-order-service.is-disabled, #btn-delivery-constancy.is-disabled', function (e) {
+        e.preventDefault();
+    });
+
+    $('#btn-delivery-constancy').on('click', function (event) {
+        if ($(this).hasClass('is-disabled')) {
+            event.preventDefault();
+            return;
+        }
+        var url = $(this).attr('href');
+        if (!url || url === '#') {
+            event.preventDefault();
+            toastr.warning('La constancia no está disponible.');
+            return;
+        }
+        event.preventDefault();
+        downloadConstancy(url);
+    });
+
+    $('#btn-delivery-apply-status').on('click', function () {
+        if (!deliveryData) return;
+        var $btn = $(this);
+        var selected = $('#delivery-type-commodity').val() || 'S';
+        $btn.prop('disabled', true);
+        updateTypeCommodity(deliveryData.order_id, selected)
+            .done(function (response) {
+                toastr.success(response.message);
+                $('#cash-delivery-modal').modal('hide');
+                searchReception();
+            })
+            .fail(function (xhr) {
+                var message = xhr.responseJSON && xhr.responseJSON.error
+                    ? xhr.responseJSON.error : 'No se pudo actualizar el estado.';
+                toastr.error(message);
+            })
+            .always(function () {
+                $btn.prop('disabled', false);
+            });
+    });
+
+    $('#btn-delivery-validate').on('click', function () {
+        if (!deliveryData) return;
+        var $btn = $(this);
+        var selected = $('#delivery-type-commodity').val() || 'S';
+        if (selected === 'S') {
+            selected = 'E';
+            $('#delivery-type-commodity').val('E');
+            $('#delivery-type-commodity-options .rv-commodity-status-btn')
+                .removeClass('is-active')
+                .attr('aria-pressed', 'false');
+            $('#delivery-type-commodity-options .rv-commodity-status-btn[data-code="E"]')
+                .addClass('is-active')
+                .attr('aria-pressed', 'true');
+        }
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Validando…');
+        updateTypeCommodity(deliveryData.order_id, selected)
+            .done(function (response) {
+                toastr.success(response.message);
+                $('#cash-delivery-modal').modal('hide');
+                searchReception();
+            })
+            .fail(function (xhr) {
+                var message = xhr.responseJSON && xhr.responseJSON.error
+                    ? xhr.responseJSON.error : 'No se pudo validar la entrega.';
+                toastr.error(message);
+            })
+            .always(function () {
+                $btn.prop('disabled', false)
+                    .html('<i class="fas fa-check-double"></i> Validar encomienda y entregar');
             });
     });
 
