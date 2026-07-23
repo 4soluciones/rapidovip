@@ -79,7 +79,7 @@
                             {% endif %}
                         {% else %}—{% endif %}
                     </td>
-                    <td>{{ o.destiny_label|default:o.item_route_destiny.0.subsidiary|default:"—" }}</td>
+                    <td>{{ o.destiny_label|default:"—" }}</td>
                     <td>{{ o.user|upper }}</td>
                     <td>
                         {% if o.status == 'A' %}
