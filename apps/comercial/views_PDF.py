@@ -341,7 +341,9 @@ def _print_destination_delivery_ticket(request, order_obj, pk):
 
     _destination_office = encomienda.office_destination if encomienda else None
     subsidiary_address = '-'
-    if _destination_office:
+    if encomienda and encomienda.is_reparto:
+        subsidiary_address = (encomienda.address_delivery or '').strip().upper() or '-'
+    elif _destination_office:
         subsidiary_address = (
             (_destination_office.address or _destination_office.short_name or '-').strip().upper()
         )
@@ -449,10 +451,10 @@ def _print_destination_delivery_ticket(request, order_obj, pk):
         and encomienda.type_guide == 'R'
         and (encomienda.address_delivery or '').strip()
     )
-    delivery_address = (
-        (encomienda.address_delivery or '').strip().upper()
-        if is_reparto else 'ENTREGAR EN AGENCIA'
-    )
+    if is_reparto:
+        delivery_address = (encomienda.address_delivery or '').strip().upper()
+    else:
+        delivery_address = 'ENTREGAR EN AGENCIA'
     ana_entrega = Table([
         (Paragraph('<b>DIRECCIÓN:</b> ' + delivery_address, h_entrega),),
         (Paragraph('<b>DESTINATARIO:</b> ' + first_recipient_name, h_entrega),),
@@ -976,10 +978,6 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
     ana_c4.setStyle(TableStyle(my_style_table + _name_row_spans))
 
     encomienda = getattr(order_obj, 'encomienda', None)
-    address_delivery = '-'
-
-    if encomienda and encomienda.address_delivery:
-        address_delivery = Paragraph(str(encomienda.address_delivery.upper()), h_justify)
 
     _origin_office = encomienda.office_origin if encomienda else None
     _destination_office = encomienda.office_destination if encomienda else None
@@ -987,22 +985,19 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         (_origin_office.address or _origin_office.short_name or '-').strip().upper()
         if _origin_office else '-'
     )
-    destination_address = (
-        (_destination_office.address or _destination_office.short_name or '-').strip().upper()
-        if _destination_office else '-'
-    )
+    if encomienda and encomienda.is_reparto:
+        destination_address = (encomienda.address_delivery or '').strip().upper() or '-'
+    else:
+        destination_address = (
+            (_destination_office.address or _destination_office.short_name or '-').strip().upper()
+            if _destination_office else '-'
+        )
 
     td_way_to_pay = ('FORMA DE PAGO', ': ' + str(order_obj.get_way_to_pay_display()))
     td_service = ('SERVICIO', ': ' + str(encomienda.get_type_guide_display() if encomienda else 'ENCOMIENDA'))
-    td_address_delivery = ('DIR. REP.', address_delivery)
 
-    if encomienda and encomienda.address_delivery:
-        ana_c5 = Table(
-            [td_way_to_pay] + [td_service] + [td_address_delivery],
-            colWidths=[_wt * 28 / 100, _wt * 72 / 100])
-    else:
-        ana_c5 = Table([td_way_to_pay] + [td_service],
-                       colWidths=[_wt * 28 / 100, _wt * 72 / 100])
+    ana_c5 = Table([td_way_to_pay] + [td_service],
+                   colWidths=[_wt * 28 / 100, _wt * 72 / 100])
     ana_c5.setStyle(TableStyle(my_style_table2))
 
     col_detail = [

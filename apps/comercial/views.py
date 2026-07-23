@@ -710,7 +710,22 @@ def create_order(request):
         arrival_time = str(data_orders["Arrival_Time"])
         user = int(data_orders["User"])
         type_guide = str(data_orders["Type_Guide"])
-        address_delivery = str(data_orders["Address_Delivery"])
+        address_delivery = str(data_orders.get("Address_Delivery") or '').strip()
+        ubigeo_delivery = str(data_orders.get("Ubigeo_Delivery") or '').strip()
+        if type_guide == 'R':
+            if not address_delivery:
+                return JsonResponse(
+                    {'message': 'En reparto debe indicar la dirección de entrega.'},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            if not ubigeo_delivery.isdigit() or len(ubigeo_delivery) != 6:
+                return JsonResponse(
+                    {'message': 'El ubigeo de reparto debe tener exactamente 6 dígitos.'},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+        else:
+            address_delivery = ''
+            ubigeo_delivery = ''
 
         user_selected_obj = User.objects.get(pk=int(user))
 
@@ -910,6 +925,7 @@ def create_order(request):
                 type_guide=type_guide,
                 arrival_time=arrival_time,
                 address_delivery=address_delivery,
+                ubigeo_delivery=ubigeo_delivery,
                 code=code,
             )
 
@@ -2702,18 +2718,19 @@ def validate_order_for_carrier_guide(order_obj, programming_obj):
             origin_full = origin_address
             if not origin_ubigeo:
                 origin_ubigeo = (origin_sub.ubigeo or '').strip()
-        if not destiny_address and encomienda.office_destination_id:
+        if encomienda.is_reparto:
+            destiny_address = encomienda.effective_destination_address()
+            destiny_full = destiny_address
+            arrival_ubigeo = encomienda.effective_arrival_ubigeo()
+        elif not destiny_address and encomienda.office_destination_id:
             destiny_sub = encomienda.office_destination
             destiny_address = (destiny_sub.address or '').strip()
             destiny_full = destiny_address
             if not arrival_ubigeo:
                 arrival_ubigeo = (destiny_sub.ubigeo or '').strip()
-        if encomienda.type_guide == 'R' and (encomienda.address_delivery or '').strip():
-            destiny_address = (encomienda.address_delivery or '').strip()
-            destiny_full = destiny_address
     if not origin_ubigeo:
         _, origin_ubigeo = _client_address_info(client_obj)
-    if not arrival_ubigeo:
+    if not arrival_ubigeo and not (encomienda and encomienda.is_reparto):
         _, arrival_ubigeo = _client_address_info(receiver_obj)
 
     if not (origin_full or origin_address):
@@ -2723,7 +2740,10 @@ def validate_order_for_carrier_guide(order_obj, programming_obj):
     if not origin_ubigeo:
         errors.append('Falta el ubigeo del punto de partida (configúrelo en la sede de origen).')
     if not arrival_ubigeo:
-        errors.append('Falta el ubigeo del punto de llegada (configúrelo en la sede de destino).')
+        if encomienda and encomienda.type_guide == 'R':
+            errors.append('Falta el ubigeo del punto de reparto (6 dígitos).')
+        else:
+            errors.append('Falta el ubigeo del punto de llegada (configúrelo en la sede de destino).')
 
     # Detalle: ítems, peso y bultos
     details = list(order_obj.orderdetail_set.all())

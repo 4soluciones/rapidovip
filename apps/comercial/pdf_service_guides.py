@@ -388,8 +388,12 @@ def _route_block_encomienda(order_obj, width=None):
     encomienda = _get_encomienda(order_obj)
     origin = encomienda.office_origin.short_name \
         if encomienda and encomienda.office_origin_id else '-'
-    dest = encomienda.office_destination.short_name \
-        if encomienda and encomienda.office_destination_id else '-'
+    if encomienda and encomienda.is_reparto:
+        # En OS: DESTINO = solo la dirección de reparto (sin ubigeo ni etiqueta DIR. REP.)
+        dest = (encomienda.address_delivery or '').strip() or '-'
+    else:
+        dest = encomienda.office_destination.short_name \
+            if encomienda and encomienda.office_destination_id else '-'
     payment = order_obj.get_way_to_pay_display()
     service = encomienda.get_type_guide_display() if encomienda else 'ENCOMIENDA'
 
@@ -408,13 +412,6 @@ def _route_block_encomienda(order_obj, width=None):
         ),
         _mix('SERVICIO:', service),
     ]
-    # Ocultos por el momento; reactivar cuando se retome el flujo con estos datos
-    # if encomienda and encomienda.code:
-    #     lines.append(_mix('CÓD. SEGURIDAD:', encomienda.code))
-    # if encomienda and encomienda.arrival_time:
-    #     lines.append(_mix('HORA LLEGADA:', encomienda.arrival_time.strftime('%I:%M %p')))
-    if encomienda and encomienda.address_delivery:
-        lines.append(_mix('DIR. REPARTO:', encomienda.address_delivery))
 
     data = [[line] for line in lines]
     tbl = Table(data, colWidths=[wt])

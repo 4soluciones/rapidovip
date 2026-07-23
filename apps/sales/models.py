@@ -170,6 +170,7 @@ class OrderCommodity(models.Model):
     type_guide = models.CharField('Tipo de encomienda', max_length=1, choices=GUIDE_TYPE_CHOICES, default='O')
     arrival_time = models.TimeField('Hora de llegada', null=True, blank=True)
     address_delivery = models.CharField('Direccion de Reparto', max_length=250, blank=True, default='')
+    ubigeo_delivery = models.CharField('Ubigeo de Reparto', max_length=6, blank=True, default='')
     code = models.CharField(max_length=4, blank=True, default='0000')
     type_commodity = models.CharField(
         'Tipo de envio de encomienda', max_length=1, choices=TYPE_COMMODITY_CHOICES, default='S',
@@ -184,6 +185,37 @@ class OrderCommodity(models.Model):
             characters = string.ascii_uppercase + string.digits
             self.code_track = ''.join(random.choices(characters, k=4))
         super().save(*args, **kwargs)
+
+    @property
+    def is_reparto(self):
+        return self.type_guide == 'R' and bool((self.address_delivery or '').strip())
+
+    def effective_destination_label(self):
+        """Etiqueta corta de destino documental (reparto o sede de llegada)."""
+        if self.is_reparto:
+            address = (self.address_delivery or '').strip()
+            if len(address) > 40:
+                return f'REPARTO · {address[:37]}...'
+            return f'REPARTO · {address}' if address else 'REPARTO'
+        if self.office_destination_id:
+            return self.office_destination.short_name or self.office_destination.name or '—'
+        return '—'
+
+    def effective_destination_address(self):
+        """Dirección de llegada documental."""
+        if self.is_reparto:
+            return (self.address_delivery or '').strip()
+        if self.office_destination_id:
+            return (self.office_destination.address or '').strip()
+        return ''
+
+    def effective_arrival_ubigeo(self):
+        """Ubigeo de llegada documental (reparto o sede de llegada)."""
+        if self.is_reparto:
+            return (self.ubigeo_delivery or '').strip()
+        if self.office_destination_id:
+            return (self.office_destination.ubigeo or '').strip()
+        return ''
 
     def receiver_actions(self):
         return self.order.orderaction_set.filter(type='D').select_related('client', 'order_addressee')

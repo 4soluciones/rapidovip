@@ -229,8 +229,14 @@
                                     {% endwith %}
                                 </td>
                                 <td>
-                                    {% if order.encomienda and order.encomienda.office_destination %}
-                                        {{ order.encomienda.office_destination.short_name }}
+                                    {% if order.encomienda %}
+                                        {% if order.encomienda.type_guide == 'R' and order.encomienda.address_delivery %}
+                                            <span title="Ubigeo {{ order.encomienda.ubigeo_delivery }}">
+                                                REPARTO · {{ order.encomienda.address_delivery|truncatechars:35 }}
+                                            </span>
+                                        {% elif order.encomienda.office_destination %}
+                                            {{ order.encomienda.office_destination.short_name }}
+                                        {% else %}—{% endif %}
                                     {% else %}—{% endif %}
                                 </td>
                                 <td>S/ {{ order.total }}</td>

@@ -121,9 +121,18 @@
                         </select>
                     </div>
                 </div>
-                <div class="rv-form-group">
+                <div class="rv-form-group rv-guide-e-reparto-address">
                     <label for="e_address_delivery">Dirección de reparto</label>
-                    <input type="text" id="e_address_delivery" class="rv-form-control text-uppercase" placeholder="Dirección de reparto (opcional)" readonly>
+                    <input type="text" id="e_address_delivery" class="rv-form-control text-uppercase" placeholder="Dirección de entrega en ruta" readonly>
+                </div>
+                <div class="rv-form-group rv-guide-e-reparto-ubigeo">
+                    <label for="e_ubigeo_delivery">Ubigeo de reparto</label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-map rv-e-input-icon"></i>
+                        <input type="text" id="e_ubigeo_delivery" class="rv-form-control rv-e-input-pad text-center"
+                               maxlength="6" inputmode="numeric" placeholder="000000" readonly
+                               title="Código ubigeo SUNAT de 6 dígitos">
+                    </div>
                 </div>
             </div>
         </div>

@@ -14,7 +14,7 @@ GRAPHQL_URL = "https://ng.tuf4ctur4.net.pe/graphql"
 # Pruebas locales  -> FACT_DRY_RUN = True
 # Producción       -> FACT_DRY_RUN = False
 # ---------------------------------------------------------------------------
-FACT_DRY_RUN = False
+FACT_DRY_RUN = True
 
 
 tokens = {
@@ -540,6 +540,11 @@ def _route_point(order_obj, route_type):
         encomienda = order_obj.encomienda
     except ObjectDoesNotExist:
         return "", "", ""
+    # Reparto: destino documental = dirección + ubigeo de entrega (no la sede de llegada)
+    if route_type == "D" and getattr(encomienda, "is_reparto", False):
+        address = encomienda.effective_destination_address()
+        ubigeo = encomienda.effective_arrival_ubigeo()
+        return address, address, ubigeo
     sub = encomienda.office_origin if route_type == "O" else encomienda.office_destination
     if not sub:
         return "", "", ""
@@ -670,23 +675,24 @@ def send_guide_fact(guide_id):
             origin_full = f"{origin_label} - {origin_address}".strip(" -")
             if not origin_ubigeo:
                 origin_ubigeo = (origin_sub.ubigeo or "").strip()
-        if not destiny_address and encomienda.office_destination_id:
+        if encomienda.is_reparto:
+            destiny_address = encomienda.effective_destination_address()
+            destiny_full = destiny_address
+            arrival_ubigeo = encomienda.effective_arrival_ubigeo()
+        elif not destiny_address and encomienda.office_destination_id:
             destiny_sub = encomienda.office_destination
             destiny_address = (destiny_sub.address or "").strip()
             destiny_label = (destiny_sub.short_name or destiny_sub.name or "").strip()
             destiny_full = f"{destiny_label} - {destiny_address}".strip(" -")
             if not arrival_ubigeo:
                 arrival_ubigeo = (destiny_sub.ubigeo or "").strip()
-        if encomienda.type_guide == "R" and (encomienda.address_delivery or "").strip():
-            destiny_full = (encomienda.address_delivery or "").strip()
-            destiny_address = destiny_full
 
     # Fallback: ubigeo desde dirección de clientes si la sede aún no lo tiene
     if not origin_ubigeo:
         remitter_action = order_obj.orderaction_set.filter(type="R").select_related("client").last()
         if remitter_action and remitter_action.client_id:
             _, origin_ubigeo = _client_address_info(remitter_action.client)
-    if not arrival_ubigeo:
+    if not arrival_ubigeo and not (encomienda and encomienda.is_reparto):
         arrival_ubigeo = client_ubigeo
 
     if not origin_full and not origin_address:
@@ -699,10 +705,13 @@ def send_guide_fact(guide_id):
             "(configurar ubigeo en la sede de origen)."
         )
     if not arrival_ubigeo:
-        errors.append(
-            "Falta el ubigeo del punto de llegada "
-            "(configurar ubigeo en la sede de destino)."
-        )
+        if encomienda and encomienda.type_guide == "R":
+            errors.append("Falta el ubigeo del punto de reparto (6 dígitos).")
+        else:
+            errors.append(
+                "Falta el ubigeo del punto de llegada "
+                "(configurar ubigeo en la sede de destino)."
+            )
 
     # Modalidad privada / motivo venta (alineado al PDF de GRE remitente)
     guide_mode = "02"
@@ -1050,21 +1059,22 @@ def send_guide_transportation_fact(guide_id):
             origin_full = f"{origin_label} - {origin_address}".strip(" -")
             if not origin_ubigeo:
                 origin_ubigeo = (origin_sub.ubigeo or "").strip()
-        if not destiny_address and encomienda.office_destination_id:
+        if encomienda.is_reparto:
+            destiny_address = encomienda.effective_destination_address()
+            destiny_full = destiny_address
+            arrival_ubigeo = encomienda.effective_arrival_ubigeo()
+        elif not destiny_address and encomienda.office_destination_id:
             destiny_sub = encomienda.office_destination
             destiny_address = (destiny_sub.address or "").strip()
             destiny_label = (destiny_sub.short_name or destiny_sub.name or "").strip()
             destiny_full = f"{destiny_label} - {destiny_address}".strip(" -")
             if not arrival_ubigeo:
                 arrival_ubigeo = (destiny_sub.ubigeo or "").strip()
-        if encomienda.type_guide == "R" and (encomienda.address_delivery or "").strip():
-            destiny_full = (encomienda.address_delivery or "").strip()
-            destiny_address = destiny_full
 
     # Fallback: ubigeo desde direcciones de clientes si la sede no lo tiene
     if not origin_ubigeo:
         origin_ubigeo = client_ubigeo
-    if not arrival_ubigeo:
+    if not arrival_ubigeo and not (encomienda and encomienda.is_reparto):
         _, arrival_ubigeo = _client_address_info(receiver_obj)
 
     if not origin_full and not origin_address:
@@ -1077,10 +1087,13 @@ def send_guide_transportation_fact(guide_id):
             "(configurar ubigeo en la sede de origen)."
         )
     if not arrival_ubigeo:
-        errors.append(
-            "Falta el ubigeo del punto de llegada "
-            "(configurar ubigeo en la sede de destino)."
-        )
+        if encomienda and encomienda.type_guide == "R":
+            errors.append("Falta el ubigeo del punto de reparto (6 dígitos).")
+        else:
+            errors.append(
+                "Falta el ubigeo del punto de llegada "
+                "(configurar ubigeo en la sede de destino)."
+            )
 
     # Vehículo y conductor
     programming = guide_obj.programming

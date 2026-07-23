@@ -196,9 +196,19 @@ var GuideServices = (function ($) {
             });
         });
         $('#e_type_guide').on('change', function () {
-            var ro = $(this).val() === 'O';
-            $('#e_address_delivery').prop('readonly', ro);
-            if (ro) $('#e_address_delivery').val('');
+            var isOficina = $(this).val() === 'O';
+            var $repartoFields = $('#e_address_delivery, #e_ubigeo_delivery');
+            $repartoFields.prop('readonly', isOficina);
+            if (isOficina) {
+                $repartoFields.val('');
+            } else {
+                // Asegura edición tras cambiar a REPARTO (también si el HTML traía readonly)
+                $repartoFields.removeAttr('readonly');
+                $('#e_address_delivery').trigger('focus');
+            }
+        });
+        $('#e_ubigeo_delivery').on('input', function () {
+            this.value = String(this.value || '').replace(/\D/g, '').slice(0, 6);
         });
         $('#e_transfer_date').on('change', function () {
             $('#id_transfer_date').val($(this).val() || '');
@@ -382,7 +392,7 @@ var GuideServices = (function ($) {
             $('#e_subsidiary_origin').val(String(originDefault));
         }
         $('#e_subsidiary_destiny').val('0');
-        $('#e_address_subsidiary, #e_address_destiny, #e_address_delivery, #e_address_sender').val('');
+        $('#e_address_subsidiary, #e_address_destiny, #e_address_delivery, #e_ubigeo_delivery, #e_address_sender').val('');
         $('#e_address_destiny').css('background-color', '');
         $('#e_type_guide').val($('#e_type_guide option:first').val()).trigger('change');
         $('#e_document_type_sender').val('01');
@@ -867,6 +877,16 @@ var GuideServices = (function ($) {
                 toastr.warning('Seleccione origen y destino'); return false;
             }
             if ($('#e_details_body .rv-guide-e-detail-row').length === 0) { toastr.warning('Agregue detalle de encomienda'); return false; }
+            if ($('#e_type_guide').val() === 'R') {
+                var addrDelivery = ($('#e_address_delivery').val() || '').trim();
+                var ubigeoDelivery = ($('#e_ubigeo_delivery').val() || '').trim();
+                if (!addrDelivery) {
+                    toastr.warning('Ingrese la dirección de reparto'); return false;
+                }
+                if (!/^\d{6}$/.test(ubigeoDelivery)) {
+                    toastr.warning('El ubigeo de reparto debe tener 6 dígitos'); return false;
+                }
+            }
             if ($('#e_nro_document_sender').val() &&
                 !validateDocNumber($('#e_nro_document_sender').val(), $('#e_document_type_sender').val(), 'remitente')) {
                 return false;
@@ -930,6 +950,7 @@ var GuideServices = (function ($) {
             payload.Way_to_pay = $('#e_way_to_pay').val();
             payload.Type_Guide = $('#e_type_guide').val();
             payload.Address_Delivery = $('#e_address_delivery').val();
+            payload.Ubigeo_Delivery = ($('#e_ubigeo_delivery').val() || '').trim();
             payload.Arrival_Time = '';
             payload.Code = ($('#e_code').val() || '').trim() || '0000';
             payload.Client_Sender_nro_document = $('#e_nro_document_sender').val();
@@ -972,6 +993,7 @@ var GuideServices = (function ($) {
             payload.Client_Sender_type = '01';
             payload.Client_Sender_phone = '';
             payload.Address_Delivery = '';
+            payload.Ubigeo_Delivery = '';
             payload.Subsidiary_origin = '0';
             payload.Subsidiary_destiny = '0';
 

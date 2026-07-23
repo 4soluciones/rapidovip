@@ -95,10 +95,11 @@ def _destination_label_for_guides(carrier_guides):
         if not order:
             continue
         encomienda = getattr(order, 'encomienda', None)
-        if encomienda and encomienda.office_destination_id:
-            labels.append(
-                encomienda.office_destination.short_name or encomienda.office_destination.name
-            )
+        if not encomienda:
+            continue
+        label = encomienda.effective_destination_label()
+        if label and label != '—':
+            labels.append(label)
     unique = []
     for label in labels:
         if label and label not in unique:

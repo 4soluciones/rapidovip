@@ -38,7 +38,8 @@ def _parse_date(value):
 def save_service_for_order(order_obj, service_type, *,
                            subsidiary_origin=None, subsidiary_destiny=None,
                            type_guide='O',
-                           arrival_time=None, address_delivery='', code='0000'):
+                           arrival_time=None, address_delivery='',
+                           ubigeo_delivery='', code='0000'):
     """Persiste el detalle de encomienda."""
     return OrderCommodity.objects.create(
         order=order_obj,
@@ -47,6 +48,7 @@ def save_service_for_order(order_obj, service_type, *,
         type_guide=type_guide or 'O',
         arrival_time=_parse_time(arrival_time),
         address_delivery=address_delivery or '',
+        ubigeo_delivery=(ubigeo_delivery or '').strip(),
         code=(code or '0000').strip() or '0000',
     )
 
@@ -54,8 +56,8 @@ def save_service_for_order(order_obj, service_type, *,
 def get_service_destiny_label(order_obj):
     """Etiqueta de destino para el reporte de encomiendas."""
     encomienda = getattr(order_obj, 'encomienda', None)
-    if encomienda and encomienda.office_destination_id:
-        return encomienda.office_destination.short_name or encomienda.office_destination.name
+    if encomienda:
+        return encomienda.effective_destination_label()
     return '—'
 
 

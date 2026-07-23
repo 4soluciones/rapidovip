@@ -181,8 +181,15 @@ def print_guide_format_tk(request, pk=None):  # Guia de Remision Remitente Elect
     _dest_office = _encomienda.office_destination if _encomienda else None
     origin_label = (_origin_office.short_name or _origin_office.name) if _origin_office else ''
     origin_address = (_origin_office.address or '') if _origin_office else ''
-    dest_label = (_dest_office.short_name or _dest_office.name) if _dest_office else ''
-    dest_address = (_dest_office.address or '') if _dest_office else ''
+    if _encomienda and _encomienda.is_reparto:
+        dest_label = 'REPARTO'
+        dest_address = _encomienda.effective_destination_address()
+        ubigeo_rep = _encomienda.effective_arrival_ubigeo()
+        if ubigeo_rep:
+            dest_address = f'{dest_address} (UBI {ubigeo_rep})'
+    else:
+        dest_label = (_dest_office.short_name or _dest_office.name) if _dest_office else ''
+        dest_address = (_dest_office.address or '') if _dest_office else ''
 
     carrier_guide_obj = sender_guide_obj.carrier_guide
     transport_company_obj = (carrier_guide_obj.company if carrier_guide_obj else None) or company_obj
@@ -536,13 +543,19 @@ def print_guide_format_a4(request, pk=None):  # Guia de Remision Transportista (
                 sub.short_name or sub.name or '',
                 sub.address or '',
             ).strip(' —')
-        if route_type == 'D' and encomienda and encomienda.office_destination_id:
-            sub = encomienda.office_destination
-            address = encomienda.address_delivery or sub.address or ''
-            return '{} — {}'.format(
-                sub.short_name or sub.name or '',
-                address,
-            ).strip(' —')
+        if route_type == 'D' and encomienda:
+            if encomienda.is_reparto:
+                address = encomienda.effective_destination_address()
+                ubigeo = encomienda.effective_arrival_ubigeo()
+                if ubigeo:
+                    return 'REPARTO · {} (UBI {})'.format(address, ubigeo)
+                return 'REPARTO · {}'.format(address or '-')
+            if encomienda.office_destination_id:
+                sub = encomienda.office_destination
+                return '{} — {}'.format(
+                    sub.short_name or sub.name or '',
+                    sub.address or '',
+                ).strip(' —')
         return '-'
 
     origin_label = _route_label('O')
@@ -1058,17 +1071,16 @@ def _order_detail_quantity(order_obj, fallback_quantity):
 
 
 def _guide_destination_label(order_obj, encomienda_obj):
-    if encomienda_obj and encomienda_obj.office_destination_id:
-        office = encomienda_obj.office_destination
-        return office.short_name or office.name or '-'
+    if encomienda_obj:
+        return encomienda_obj.effective_destination_label() or '-'
     return '-'
 
 
 def _guide_destination_address(order_obj, encomienda_obj):
-    if encomienda_obj and encomienda_obj.type_guide == 'R':
-        return encomienda_obj.address_delivery or '-'
-    if encomienda_obj and encomienda_obj.office_destination_id and encomienda_obj.office_destination.address:
-        return encomienda_obj.office_destination.address
+    if encomienda_obj:
+        address = encomienda_obj.effective_destination_address()
+        if address:
+            return address
     return '-'
 
 
