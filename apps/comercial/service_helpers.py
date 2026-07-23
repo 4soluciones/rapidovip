@@ -39,12 +39,14 @@ def save_service_for_order(order_obj, service_type, *,
                            subsidiary_origin=None, subsidiary_destiny=None,
                            type_guide='O',
                            arrival_time=None, address_delivery='',
-                           ubigeo_delivery='', code='0000'):
+                           ubigeo_delivery='', code='0000',
+                           delivery_destination=None):
     """Persiste el detalle de encomienda."""
     return OrderCommodity.objects.create(
         order=order_obj,
         office_origin=subsidiary_origin,
         office_destination=subsidiary_destiny,
+        delivery_destination=delivery_destination,
         type_guide=type_guide or 'O',
         arrival_time=_parse_time(arrival_time),
         address_delivery=address_delivery or '',
@@ -73,6 +75,8 @@ def prefetch_orders_for_report(order_set):
         ),
         'encomienda__office_destination',
         'encomienda__office_origin',
+        'encomienda__delivery_destination',
+        'encomienda__delivery_destination__district',
     ).select_related('user', 'company', 'truck', 'encomienda', 'orderbill')
 
 

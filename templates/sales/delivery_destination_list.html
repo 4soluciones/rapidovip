@@ -1,0 +1,155 @@
+{% extends 'home.html' %}
+{% block title %}RapidoVip — Destinos de reparto{% endblock %}
+
+{% block body %}
+<div class="rv-page">
+    <div class="rv-page-header">
+        <div>
+            <h1><i class="fas fa-map-marked-alt"></i> Destinos de reparto</h1>
+            <p class="rv-page-subtitle">Catálogo de destinos para encomiendas tipo reparto (vinculados a distrito ubigeo)</p>
+        </div>
+        <button type="button" class="rv-btn rv-btn-success" id="btn-new-destination">
+            <i class="fas fa-plus"></i> Nuevo destino
+        </button>
+    </div>
+
+    <div class="rv-form-section">
+        <div class="rv-table-wrap">
+            <table class="rv-table" id="delivery-destination-table">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Distrito</th>
+                        <th>Ubigeo</th>
+                        <th>Estado</th>
+                        <th class="text-right">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in destinations %}
+                    <tr>
+                        <td class="font-weight-bold">{{ d.name }}</td>
+                        <td class="text-muted">{{ d.district.description|default:"—" }}</td>
+                        <td><span class="rv-badge rv-badge-route">{{ d.district_id }}</span></td>
+                        <td>
+                            {% if d.is_enabled %}
+                                <span class="rv-badge rv-badge-success">Activo</span>
+                            {% else %}
+                                <span class="rv-badge rv-badge-muted">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <button type="button"
+                                    class="rv-btn rv-btn-outline rv-btn-sm btn-edit-destination"
+                                    data-destination-id="{{ d.id }}">
+                                <i class="fas fa-pen"></i> Editar
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">
+                            No hay destinos de reparto registrados.
+                            <button type="button" class="btn btn-link p-0" id="btn-new-destination-empty">Crear el primero</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalDeliveryDestination" tabindex="-1"></div>
+{% endblock %}
+
+{% block extrajs %}
+<script>
+    var districtSearchUrl = '{% url "sales:search_districts" %}';
+
+    function initDistrictSelect2($select, selected) {
+        if (!$select.length || typeof $.fn.select2 !== 'function') return;
+        if ($select.hasClass('select2-hidden-accessible')) {
+            $select.select2('destroy');
+        }
+        $select.select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            dropdownParent: $('#modalDeliveryDestination'),
+            placeholder: 'Buscar distrito por nombre o ubigeo...',
+            allowClear: true,
+            minimumInputLength: 2,
+            ajax: {
+                url: districtSearchUrl,
+                dataType: 'json',
+                delay: 250,
+                data: function (params) {
+                    return { q: params.term || '' };
+                },
+                processResults: function (data) {
+                    return { results: data.results || [] };
+                },
+                cache: true
+            }
+        });
+        if (selected && selected.id) {
+            var option = new Option(selected.text, selected.id, true, true);
+            $select.append(option).trigger('change');
+        }
+    }
+
+    function openDestinationModal() {
+        $.get('{% url "sales:get_delivery_destination_form" %}', function (r) {
+            if (r.success) {
+                $('#modalDeliveryDestination').html(r.grid);
+                $('#modalDeliveryDestination').modal('show');
+                initDistrictSelect2($('#id_delivery_district'));
+            }
+        });
+    }
+
+    function openDestinationEditModal(destinationId) {
+        const urlTmpl = '{% url "sales:get_delivery_destination_edit_form" destination_id=0 %}';
+        const url = urlTmpl.replace('/0/', `/${destinationId}/`);
+        $.get(url, function (r) {
+            if (r.success) {
+                $('#modalDeliveryDestination').html(r.grid);
+                $('#modalDeliveryDestination').modal('show');
+                var $select = $('#id_delivery_district');
+                var selectedId = $select.val();
+                var selectedText = $('#modalDeliveryDestination').find('[data-district-label]').data('district-label') || '';
+                initDistrictSelect2($select, selectedId ? { id: selectedId, text: selectedText || selectedId } : null);
+            }
+        });
+    }
+
+    $('#btn-new-destination, #btn-new-destination-empty').on('click', openDestinationModal);
+
+    $(document).on('click', '.btn-edit-destination', function () {
+        openDestinationEditModal($(this).data('destination-id'));
+    });
+
+    $(document).on('submit', '#delivery-destination-modal-form', function (e) {
+        e.preventDefault();
+        $.post('{% url "sales:save_delivery_destination" %}', $(this).serialize(), function (r) {
+            toastr.success(r.message);
+            $('#modalDeliveryDestination').modal('hide');
+            setTimeout(() => location.reload(), 600);
+        }).fail(function (jq) {
+            toastr.error(jq.responseJSON?.message || 'Error al guardar');
+        });
+    });
+
+    $(document).on('submit', '#delivery-destination-edit-modal-form', function (e) {
+        e.preventDefault();
+        const action = $(this).data('action');
+        $.post(action, $(this).serialize(), function (r) {
+            toastr.success(r.message);
+            $('#modalDeliveryDestination').modal('hide');
+            setTimeout(() => location.reload(), 600);
+        }).fail(function (jq) {
+            toastr.error(jq.responseJSON?.message || 'Error al guardar');
+        });
+    });
+</script>
+{% endblock %}

@@ -48,8 +48,57 @@ var GuideServices = (function ($) {
             cashDate: $form.data('url-cash-date'),
             address: $form.data('url-address'),
             business: $form.data('url-business'),
+            deliveryDestinations: $form.data('url-delivery-destinations'),
             csrf: $form.data('csrf')
         };
+    }
+
+    function initDeliveryDestinationSelect() {
+        var $select = $('#e_delivery_destination');
+        if (!$select.length || typeof $.fn.select2 !== 'function') return;
+        if ($select.hasClass('select2-hidden-accessible')) {
+            $select.select2('destroy');
+        }
+        $select.select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            placeholder: $select.data('placeholder') || 'Buscar destino de reparto...',
+            allowClear: true,
+            minimumResultsForSearch: 0
+        });
+    }
+
+    function syncDeliveryUbigeo() {
+        var $opt = $('#e_delivery_destination option:selected');
+        var ubigeo = ($opt.data('ubigeo') || '').toString();
+        // Select2 AJAX options may not have data-ubigeo on the DOM option
+        if (!ubigeo && $opt.length) {
+            ubigeo = ($('#e_delivery_destination').select2('data')[0] || {}).ubigeo || '';
+        }
+        $('#e_ubigeo_delivery').val(String(ubigeo || '').replace(/\D/g, '').slice(0, 6));
+    }
+
+    function toggleRouteByGuideType() {
+        var isOficina = $('#e_type_guide').val() === 'O';
+        var $office = $('.rv-guide-e-office-destiny');
+        var $reparto = $('.rv-guide-e-reparto-destiny, .rv-guide-e-reparto-address');
+        if (isOficina) {
+            $office.prop('hidden', false);
+            $reparto.prop('hidden', true);
+            $('#e_delivery_destination').val(null).trigger('change');
+            $('#e_address_delivery, #e_ubigeo_delivery').val('');
+            $('#e_address_delivery').prop('readonly', true);
+        } else {
+            $office.prop('hidden', true);
+            $reparto.prop('hidden', false);
+            $('#e_subsidiary_destiny').val('0');
+            $('#e_address_destiny').val('').css('background-color', '');
+            $('#e_address_delivery').prop('readonly', false).removeAttr('readonly');
+            if (!$('#e_delivery_destination').hasClass('select2-hidden-accessible')) {
+                initDeliveryDestinationSelect();
+            }
+            $('#e_address_delivery').trigger('focus');
+        }
     }
 
     function activeService() {
@@ -195,21 +244,8 @@ var GuideServices = (function ($) {
                 $('#e_address_destiny').val(r.address_subsidiary).css('background-color', r.color);
             });
         });
-        $('#e_type_guide').on('change', function () {
-            var isOficina = $(this).val() === 'O';
-            var $repartoFields = $('#e_address_delivery, #e_ubigeo_delivery');
-            $repartoFields.prop('readonly', isOficina);
-            if (isOficina) {
-                $repartoFields.val('');
-            } else {
-                // Asegura edición tras cambiar a REPARTO (también si el HTML traía readonly)
-                $repartoFields.removeAttr('readonly');
-                $('#e_address_delivery').trigger('focus');
-            }
-        });
-        $('#e_ubigeo_delivery').on('input', function () {
-            this.value = String(this.value || '').replace(/\D/g, '').slice(0, 6);
-        });
+        $('#e_type_guide').on('change', toggleRouteByGuideType);
+        $('#e_delivery_destination').on('change', syncDeliveryUbigeo);
         $('#e_transfer_date').on('change', function () {
             $('#id_transfer_date').val($(this).val() || '');
         });
@@ -394,6 +430,11 @@ var GuideServices = (function ($) {
         $('#e_subsidiary_destiny').val('0');
         $('#e_address_subsidiary, #e_address_destiny, #e_address_delivery, #e_ubigeo_delivery, #e_address_sender').val('');
         $('#e_address_destiny').css('background-color', '');
+        if ($('#e_delivery_destination').hasClass('select2-hidden-accessible')) {
+            $('#e_delivery_destination').val(null).trigger('change');
+        } else {
+            $('#e_delivery_destination').val('');
+        }
         $('#e_type_guide').val($('#e_type_guide option:first').val()).trigger('change');
         $('#e_document_type_sender').val('01');
         $('#e_nro_document_sender, #e_sender, #e_phone_sender').val('');
@@ -618,7 +659,16 @@ var GuideServices = (function ($) {
 
     function capturePrintContext() {
         var origin = ($('#e_subsidiary_origin option:selected').text() || '').trim();
-        var destiny = ($('#e_subsidiary_destiny option:selected').text() || '').trim();
+        var destiny = '';
+        if ($('#e_type_guide').val() === 'R') {
+            destiny = ($('#e_delivery_destination option:selected').text() || '').trim();
+            if (!destiny || destiny.toLowerCase().indexOf('seleccione') !== -1) {
+                var sel = ($('#e_delivery_destination').select2('data') || [])[0];
+                destiny = sel ? (sel.text || sel.name || '') : '';
+            }
+        } else {
+            destiny = ($('#e_subsidiary_destiny option:selected').text() || '').trim();
+        }
         var routeText = '';
         if (origin && destiny && destiny.toLowerCase().indexOf('seleccione') === -1) {
             routeText = origin + ' → ' + destiny;
@@ -873,19 +923,25 @@ var GuideServices = (function ($) {
             if (!$('#e_transfer_date').val()) {
                 toastr.warning('Ingrese la fecha de traslado'); return false;
             }
-            if ($('#e_subsidiary_origin').val() === '0' || $('#e_subsidiary_destiny').val() === '0') {
-                toastr.warning('Seleccione origen y destino'); return false;
+            if ($('#e_subsidiary_origin').val() === '0') {
+                toastr.warning('Seleccione el punto de partida'); return false;
             }
             if ($('#e_details_body .rv-guide-e-detail-row').length === 0) { toastr.warning('Agregue detalle de encomienda'); return false; }
             if ($('#e_type_guide').val() === 'R') {
+                if (!$('#e_delivery_destination').val()) {
+                    toastr.warning('Seleccione el destino de reparto'); return false;
+                }
                 var addrDelivery = ($('#e_address_delivery').val() || '').trim();
-                var ubigeoDelivery = ($('#e_ubigeo_delivery').val() || '').trim();
                 if (!addrDelivery) {
                     toastr.warning('Ingrese la dirección de reparto'); return false;
                 }
+                syncDeliveryUbigeo();
+                var ubigeoDelivery = ($('#e_ubigeo_delivery').val() || '').trim();
                 if (!/^\d{6}$/.test(ubigeoDelivery)) {
-                    toastr.warning('El ubigeo de reparto debe tener 6 dígitos'); return false;
+                    toastr.warning('El destino de reparto no tiene ubigeo válido'); return false;
                 }
+            } else if ($('#e_subsidiary_destiny').val() === '0') {
+                toastr.warning('Seleccione el punto de llegada'); return false;
             }
             if ($('#e_nro_document_sender').val() &&
                 !validateDocNumber($('#e_nro_document_sender').val(), $('#e_document_type_sender').val(), 'remitente')) {
@@ -945,14 +1001,23 @@ var GuideServices = (function ($) {
 
         if (svc === 'E') {
             payload.Subsidiary_origin = $('#e_subsidiary_origin').val();
-            payload.Subsidiary_destiny = $('#e_subsidiary_destiny').val();
             payload.Type = $('#e_type_bill').val();
             payload.Way_to_pay = $('#e_way_to_pay').val();
             payload.Type_Guide = $('#e_type_guide').val();
-            payload.Address_Delivery = $('#e_address_delivery').val();
-            payload.Ubigeo_Delivery = ($('#e_ubigeo_delivery').val() || '').trim();
             payload.Arrival_Time = '';
             payload.Code = ($('#e_code').val() || '').trim() || '0000';
+            if (payload.Type_Guide === 'R') {
+                syncDeliveryUbigeo();
+                payload.Subsidiary_destiny = '0';
+                payload.Delivery_Destination = $('#e_delivery_destination').val() || '';
+                payload.Address_Delivery = ($('#e_address_delivery').val() || '').trim().toUpperCase();
+                payload.Ubigeo_Delivery = ($('#e_ubigeo_delivery').val() || '').trim();
+            } else {
+                payload.Subsidiary_destiny = $('#e_subsidiary_destiny').val();
+                payload.Delivery_Destination = '';
+                payload.Address_Delivery = '';
+                payload.Ubigeo_Delivery = '';
+            }
             payload.Client_Sender_nro_document = $('#e_nro_document_sender').val();
             payload.Client_Sender = $('#e_sender').val();
             payload.Client_Address_Sender = $('#e_address_sender').val();
@@ -994,6 +1059,7 @@ var GuideServices = (function ($) {
             payload.Client_Sender_phone = '';
             payload.Address_Delivery = '';
             payload.Ubigeo_Delivery = '';
+            payload.Delivery_Destination = '';
             payload.Subsidiary_origin = '0';
             payload.Subsidiary_destiny = '0';
 
@@ -1130,6 +1196,7 @@ var GuideServices = (function ($) {
             $('#m_service_time').data('default-time', $('#m_service_time').val());
         }
         $('#e_subsidiary_origin').trigger('change');
+        initDeliveryDestinationSelect();
         $('#e_type_guide').trigger('change');
         if ($('#e_type_bill').length) {
             loadDocumentNumbers('E', $('#e_type_bill').val() || 'T');

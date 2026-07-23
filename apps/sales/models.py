@@ -27,6 +27,39 @@ class Unit(models.Model):
         verbose_name_plural = 'Unidades de medida'
 
 
+class DeliveryDestination(models.Model):
+    """Destino de reparto (no sede): ligado a un distrito ubigeo."""
+    id = models.AutoField(primary_key=True)
+    name = models.CharField('Nombre', max_length=150)
+    district = models.ForeignKey(
+        District, on_delete=models.PROTECT, related_name='delivery_destinations',
+        verbose_name='Distrito',
+    )
+    is_enabled = models.BooleanField('Activo', default=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def ubigeo(self):
+        return self.district_id or ''
+
+    def label_with_ubigeo(self):
+        district_name = ''
+        if self.district_id:
+            district_name = (self.district.description or '').strip()
+        if district_name and district_name.upper() != (self.name or '').strip().upper():
+            return f'{self.name} · {district_name} ({self.ubigeo})'
+        return f'{self.name} ({self.ubigeo})' if self.ubigeo else self.name
+
+    class Meta:
+        verbose_name = 'Destino de reparto'
+        verbose_name_plural = 'Destinos de reparto'
+        ordering = ['name']
+
+
 class Client(models.Model):
     id = models.AutoField(primary_key=True)
     names = models.CharField(max_length=100, null=True, blank=True, )
@@ -167,6 +200,10 @@ class OrderCommodity(models.Model):
     office_destination = models.ForeignKey(
         Subsidiary, related_name='destination_orders', on_delete=models.PROTECT, null=True, blank=True,
     )
+    delivery_destination = models.ForeignKey(
+        'DeliveryDestination', related_name='encomiendas', on_delete=models.PROTECT,
+        null=True, blank=True, verbose_name='Destino de reparto',
+    )
     type_guide = models.CharField('Tipo de encomienda', max_length=1, choices=GUIDE_TYPE_CHOICES, default='O')
     arrival_time = models.TimeField('Hora de llegada', null=True, blank=True)
     address_delivery = models.CharField('Direccion de Reparto', max_length=250, blank=True, default='')
@@ -193,10 +230,21 @@ class OrderCommodity(models.Model):
     def effective_destination_label(self):
         """Etiqueta corta de destino documental (reparto o sede de llegada)."""
         if self.is_reparto:
+            dest_name = ''
+            if self.delivery_destination_id:
+                dest_name = (self.delivery_destination.name or '').strip()
             address = (self.address_delivery or '').strip()
-            if len(address) > 40:
-                return f'REPARTO · {address[:37]}...'
-            return f'REPARTO · {address}' if address else 'REPARTO'
+            if dest_name and address:
+                label = f'REPARTO · {dest_name} · {address}'
+            elif dest_name:
+                label = f'REPARTO · {dest_name}'
+            elif address:
+                label = f'REPARTO · {address}'
+            else:
+                return 'REPARTO'
+            if len(label) > 48:
+                return f'{label[:45]}...'
+            return label
         if self.office_destination_id:
             return self.office_destination.short_name or self.office_destination.name or '—'
         return '—'

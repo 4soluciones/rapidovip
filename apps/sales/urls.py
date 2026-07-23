@@ -13,6 +13,26 @@ urlpatterns = [
     path('units/<int:unit_id>/form/', login_required(get_unit_edit_form), name='get_unit_edit_form'),
     path('units/<int:unit_id>/save/', login_required(save_unit_edit), name='save_unit_edit'),
 
+    path('delivery-destinations/', login_required(DeliveryDestinationListView.as_view()), name='delivery_destination_list'),
+    path('delivery-destinations/form/', login_required(get_delivery_destination_form), name='get_delivery_destination_form'),
+    path('delivery-destinations/save/', login_required(save_delivery_destination), name='save_delivery_destination'),
+    path(
+        'delivery-destinations/search/',
+        login_required(search_delivery_destinations),
+        name='search_delivery_destinations',
+    ),
+    path(
+        'delivery-destinations/<int:destination_id>/form/',
+        login_required(get_delivery_destination_edit_form),
+        name='get_delivery_destination_edit_form',
+    ),
+    path(
+        'delivery-destinations/<int:destination_id>/save/',
+        login_required(save_delivery_destination_edit),
+        name='save_delivery_destination_edit',
+    ),
+    path('districts/search/', login_required(search_districts), name='search_districts'),
+
     path('new_client/', new_client, name='new_client'),
     path('get_client/', get_client, name='get_client'),
 

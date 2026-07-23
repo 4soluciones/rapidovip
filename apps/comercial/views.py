@@ -52,6 +52,7 @@ from apps.sales.api_FACT import (
     send_receipt_commodity_fact,
 )
 from apps.sales.models import (
+    DeliveryDestination,
     Order,
     OrderAction,
     OrderAddressee,
@@ -648,6 +649,9 @@ def new_guide(request):
         'service_docs': service_docs,
         'service_docs_json': json.dumps(service_docs),
         'units': Unit.objects.filter(is_enabled=True).order_by('id'),
+        'delivery_destinations': DeliveryDestination.objects.filter(
+            is_enabled=True,
+        ).select_related('district').order_by('name'),
     })
 
 
@@ -684,7 +688,7 @@ def create_order(request):
         client_sender_name = str(data_orders["Client_Sender"])
         client_sender_phone = str(data_orders["Client_Sender_phone"])
         subsidiary_origin = str(data_orders["Subsidiary_origin"])
-        subsidiary_destiny = str(data_orders["Subsidiary_destiny"])
+        subsidiary_destiny = str(data_orders.get("Subsidiary_destiny") or '0')
         service_type = 'E'
         way_to_pay = str(data_orders.get('Way_to_pay') or data_orders.get('Way_to_Pay') or 'C')
         type_document = str(data_orders.get('Type') or 'T')
@@ -697,35 +701,62 @@ def create_order(request):
                 'message': 'Pago destino solo permite ticket de encomienda.',
             }, status=HTTPStatus.BAD_REQUEST)
 
-        if subsidiary_origin in ('0', '', 'None') or subsidiary_destiny in ('0', '', 'None'):
+        type_guide = str(data_orders["Type_Guide"])
+        address_delivery = str(data_orders.get("Address_Delivery") or '').strip().upper()
+        ubigeo_delivery = str(data_orders.get("Ubigeo_Delivery") or '').strip()
+        delivery_destination_id = str(data_orders.get("Delivery_Destination") or '').strip()
+        delivery_destination_obj = None
+        subsidiary_destiny_obj = None
+
+        if subsidiary_origin in ('0', '', 'None'):
             subsidiary_origin_obj = subsidiary_obj
-            subsidiary_destiny_obj = subsidiary_obj
         else:
             subsidiary_origin_obj = Subsidiary.objects.get(id=subsidiary_origin)
+
+        if type_guide == 'R':
+            if not delivery_destination_id or delivery_destination_id in ('0', 'None'):
+                return JsonResponse(
+                    {'message': 'En reparto debe seleccionar un destino de reparto.'},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            if not address_delivery:
+                return JsonResponse(
+                    {'message': 'En reparto debe indicar la dirección de entrega.'},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            try:
+                delivery_destination_obj = DeliveryDestination.objects.select_related(
+                    'district',
+                ).get(pk=int(delivery_destination_id), is_enabled=True)
+            except (DeliveryDestination.DoesNotExist, ValueError, TypeError):
+                return JsonResponse(
+                    {'message': 'El destino de reparto seleccionado no es válido.'},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            ubigeo_delivery = delivery_destination_obj.ubigeo
+            if not ubigeo_delivery or not ubigeo_delivery.isdigit() or len(ubigeo_delivery) != 6:
+                return JsonResponse(
+                    {'message': 'El destino de reparto no tiene un ubigeo de distrito válido.'},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+        else:
+            address_delivery = ''
+            ubigeo_delivery = ''
+            delivery_destination_obj = None
+            if subsidiary_destiny in ('0', '', 'None'):
+                return JsonResponse(
+                    {'message': 'Seleccione el punto de llegada.'},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
             subsidiary_destiny_obj = Subsidiary.objects.get(id=subsidiary_destiny)
+
         client_sender_nro_document = str(data_orders["Client_Sender_nro_document"])
         code = str(data_orders.get("Code") or "").strip() or "0000"
         type_document = str(data_orders["Type"])
 
         arrival_time = str(data_orders["Arrival_Time"])
         user = int(data_orders["User"])
-        type_guide = str(data_orders["Type_Guide"])
-        address_delivery = str(data_orders.get("Address_Delivery") or '').strip()
-        ubigeo_delivery = str(data_orders.get("Ubigeo_Delivery") or '').strip()
-        if type_guide == 'R':
-            if not address_delivery:
-                return JsonResponse(
-                    {'message': 'En reparto debe indicar la dirección de entrega.'},
-                    status=HTTPStatus.BAD_REQUEST,
-                )
-            if not ubigeo_delivery.isdigit() or len(ubigeo_delivery) != 6:
-                return JsonResponse(
-                    {'message': 'El ubigeo de reparto debe tener exactamente 6 dígitos.'},
-                    status=HTTPStatus.BAD_REQUEST,
-                )
-        else:
-            address_delivery = ''
-            ubigeo_delivery = ''
+        # type_guide / address_delivery / ubigeo_delivery ya validados arriba
 
         user_selected_obj = User.objects.get(pk=int(user))
 
@@ -927,6 +958,7 @@ def create_order(request):
                 address_delivery=address_delivery,
                 ubigeo_delivery=ubigeo_delivery,
                 code=code,
+                delivery_destination=delivery_destination_obj,
             )
 
         # Guardando el orden action

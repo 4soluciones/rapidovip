@@ -99,29 +99,39 @@ class Nationality(models.Model):
 
 
 class Department(models.Model):
-    code = models.CharField(max_length=2, unique=True)
-    name = models.CharField(max_length=100)
+    id = models.CharField(primary_key=True, max_length=2)
+    description = models.CharField(max_length=200, null=True, blank=True)
 
     def __str__(self):
-        return self.name
+        return self.description
+
+    class Meta:
+        verbose_name = 'Departamento'
+        verbose_name_plural = 'Departamentos'
 
 
 class Province(models.Model):
-    department = models.ForeignKey(Department, on_delete=models.CASCADE)
-    code = models.CharField(max_length=4, unique=True)
-    name = models.CharField(max_length=100)
+    id = models.CharField(primary_key=True, max_length=4)
+    description = models.CharField(max_length=200, null=True, blank=True)
 
     def __str__(self):
-        return self.name
+        return self.description
+
+    class Meta:
+        verbose_name = 'Provincia'
+        verbose_name_plural = 'Provincias'
 
 
 class District(models.Model):
-    province = models.ForeignKey(Province, on_delete=models.CASCADE)
-    code = models.CharField(max_length=6, unique=True)
-    name = models.CharField(max_length=100)
+    id = models.CharField(primary_key=True, max_length=6)
+    description = models.CharField(max_length=200, null=True, blank=True)
 
     def __str__(self):
-        return self.name
+        return self.description
+
+    class Meta:
+        verbose_name = 'Distrito'
+        verbose_name_plural = 'Distritos'
 
 
 class Employee(models.Model):

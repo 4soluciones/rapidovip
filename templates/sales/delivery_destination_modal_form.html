@@ -1,0 +1,50 @@
+<div class="modal-dialog modal-md modal-dialog-scrollable">
+    <div class="modal-content rv-modal">
+        <div class="modal-header">
+            <div>
+                <h5 class="modal-title"><i class="fas fa-map-marked-alt"></i> Nuevo destino de reparto</h5>
+                <p class="rv-modal-subtitle mb-0">Asocie el destino a un distrito del ubigeo SUNAT</p>
+            </div>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <form id="delivery-destination-modal-form">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="rv-modal-hint">
+                    <i class="fas fa-info-circle"></i>
+                    Estos destinos se usan en la emisión cuando el tipo de encomienda es <strong>REPARTO</strong>.
+                </div>
+
+                <h6 class="rv-section-label">Datos del destino</h6>
+                <div class="rv-form-grid">
+                    <div class="rv-form-group rv-form-group-full rv-form-group-required">
+                        <label for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+                        {{ form.name }}
+                    </div>
+                    <div class="rv-form-group rv-form-group-full rv-form-group-required">
+                        <label for="{{ form.district.id_for_label }}">{{ form.district.label }}</label>
+                        {{ form.district }}
+                        <small class="rv-field-hint">Escriba al menos 2 caracteres para buscar</small>
+                    </div>
+                    <div class="rv-form-group d-flex flex-column justify-content-end">
+                        <label class="d-flex align-items-center justify-content-between mb-0">
+                            <span>Estado</span>
+                            <span class="d-flex align-items-center gap-2">
+                                {{ form.is_enabled }}
+                                <span class="text-muted small">Activo</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
+                <button type="submit" class="rv-btn rv-btn-success">
+                    <i class="fas fa-save"></i> Guardar destino
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

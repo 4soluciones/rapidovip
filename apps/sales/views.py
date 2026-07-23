@@ -28,7 +28,7 @@ from apps.sales.views_SUNAT import send_bill_nubefact, send_receipt_nubefact, se
     send_receipt_passenger
 from apps.sales.models import OrderBill
 from apps.sales.number_to_letters import numero_a_moneda
-from django.db.models import Min, Prefetch
+from django.db.models import Min, Prefetch, Q
 
 
 PAYMENT_TYPE_CHOICES = (
@@ -319,4 +319,130 @@ def save_unit_edit(request, unit_id: int):
         label = form.fields[field].label if field in form.fields else field
         errors.append(f'{label}: {", ".join(msgs)}')
     return JsonResponse({'error': True, 'message': '; '.join(errors) or 'Datos inválidos'}, status=400)
+
+
+# -------------------- Destinos de reparto --------------------
+
+class DeliveryDestinationListView(TemplateView):
+    template_name = 'sales/delivery_destination_list.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        if not user_is_administrator(request.user):
+            return redirect('dashboard')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['destinations'] = (
+            DeliveryDestination.objects
+            .select_related('district')
+            .order_by('name')
+        )
+        return ctx
+
+
+@login_required
+@user_passes_test(user_is_administrator)
+def get_delivery_destination_form(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': True}, status=405)
+    tpl = loader.get_template('sales/delivery_destination_modal_form.html')
+    return JsonResponse({
+        'success': True,
+        'grid': tpl.render({'form': DeliveryDestinationForm()}, request),
+    })
+
+
+@login_required
+@user_passes_test(user_is_administrator)
+def get_delivery_destination_edit_form(request, destination_id: int):
+    if request.method != 'GET':
+        return JsonResponse({'error': True}, status=405)
+    destination = DeliveryDestination.objects.select_related('district').get(pk=destination_id)
+    tpl = loader.get_template('sales/delivery_destination_modal_edit_form.html')
+    return JsonResponse({
+        'success': True,
+        'grid': tpl.render({
+            'destination': destination,
+            'form': DeliveryDestinationForm(instance=destination),
+            'district_label': district_autocomplete_label(destination.district) if destination.district_id else '',
+        }, request),
+    })
+
+
+@login_required
+@user_passes_test(user_is_administrator)
+def save_delivery_destination(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': True}, status=405)
+    form = DeliveryDestinationForm(request.POST)
+    if form.is_valid():
+        form.save()
+        return JsonResponse({'success': True, 'message': 'Destino de reparto registrado correctamente.'})
+    errors = []
+    for field, msgs in form.errors.items():
+        label = form.fields[field].label if field in form.fields else field
+        errors.append(f'{label}: {", ".join(msgs)}')
+    return JsonResponse({'error': True, 'message': '; '.join(errors) or 'Datos inválidos'}, status=400)
+
+
+@login_required
+@user_passes_test(user_is_administrator)
+def save_delivery_destination_edit(request, destination_id: int):
+    if request.method != 'POST':
+        return JsonResponse({'error': True}, status=405)
+    destination = DeliveryDestination.objects.get(pk=destination_id)
+    form = DeliveryDestinationForm(request.POST, instance=destination)
+    if form.is_valid():
+        form.save()
+        return JsonResponse({'success': True, 'message': 'Destino de reparto actualizado correctamente.'})
+    errors = []
+    for field, msgs in form.errors.items():
+        label = form.fields[field].label if field in form.fields else field
+        errors.append(f'{label}: {", ".join(msgs)}')
+    return JsonResponse({'error': True, 'message': '; '.join(errors) or 'Datos inválidos'}, status=400)
+
+
+@login_required
+def search_districts(request):
+    """Autocomplete Select2 de distritos (ubigeo)."""
+    if request.method != 'GET':
+        return JsonResponse({'error': True}, status=405)
+    term = (request.GET.get('q') or request.GET.get('term') or '').strip()
+    qs = District.objects.all()
+    if term:
+        qs = qs.filter(
+            Q(description__icontains=term) | Q(id__icontains=term)
+        )
+    qs = qs.order_by('description')[:30]
+    results = [
+        {'id': d.id, 'text': district_autocomplete_label(d)}
+        for d in qs
+    ]
+    return JsonResponse({'results': results})
+
+
+@login_required
+def search_delivery_destinations(request):
+    """Autocomplete Select2 de destinos de reparto activos."""
+    if request.method != 'GET':
+        return JsonResponse({'error': True}, status=405)
+    term = (request.GET.get('q') or request.GET.get('term') or '').strip()
+    qs = DeliveryDestination.objects.filter(is_enabled=True).select_related('district')
+    if term:
+        qs = qs.filter(
+            Q(name__icontains=term)
+            | Q(district__description__icontains=term)
+            | Q(district__id__icontains=term)
+        )
+    qs = qs.order_by('name')[:30]
+    results = []
+    for d in qs:
+        results.append({
+            'id': d.id,
+            'text': d.label_with_ubigeo(),
+            'ubigeo': d.ubigeo,
+            'name': d.name,
+        })
+    return JsonResponse({'results': results})
 

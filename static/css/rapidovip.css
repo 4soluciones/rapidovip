@@ -2768,10 +2768,42 @@ button.rv-btn-search {
 }
 .rv-guide-service-e .rv-guide-e-route-grid {
     display: grid;
-    /* Punto / tipo −40 % adicional (0.7 → 0.42) · Direcciones absorben el resto */
-    grid-template-columns: 0.42fr 1.58fr;
+    /* Tipo / puntos · Direcciones — minmax(0,…) evita que un Select2 largo estire la grilla */
+    grid-template-columns: minmax(0, 0.42fr) minmax(0, 1.58fr);
     gap: 0.55rem 0.75rem;
     align-items: end;
+}
+.rv-guide-service-e .rv-guide-e-route-grid > .rv-form-group {
+    min-width: 0;
+    max-width: 100%;
+}
+.rv-guide-service-e .rv-guide-e-route-spacer {
+    visibility: hidden;
+    pointer-events: none;
+}
+.rv-guide-service-e .rv-guide-e-route-grid .select2-container {
+    width: 100% !important;
+    max-width: 100%;
+}
+.rv-guide-service-e .rv-guide-e-route-grid .select2-selection--single {
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+}
+.rv-guide-service-e .rv-guide-e-route-grid .select2-selection__rendered {
+    display: block !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    max-width: 100%;
+    padding-right: 1.5rem !important;
+}
+.rv-guide-service-e .rv-guide-e-route-grid select.rv-form-control {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .rv-guide-service-e .rv-e-input-wrap {
     position: relative;

@@ -23,6 +23,8 @@
 
           data-url-phone="{% url 'comercial:get_phone_number_by_name_addressee' %}"
 
+          data-url-delivery-destinations="{% url 'sales:search_delivery_destinations' %}"
+
           data-csrf="{{ csrf_token }}">
 
 
@@ -150,7 +152,7 @@
 
 {% block extrajs %}
 
-<script src="{% static 'js/guide_services.js' %}?v=reparto-ubigeo-1"></script>
+<script src="{% static 'js/guide_services.js' %}?v=reparto-destinos-1"></script>
 
 <script type="text/javascript">
 

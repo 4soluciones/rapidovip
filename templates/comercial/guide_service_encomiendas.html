@@ -80,6 +80,19 @@
             <div class="rv-guide-card-head"><i class="fas fa-route"></i><span>Ruta de encomienda</span></div>
             <div class="rv-guide-e-route-grid">
                 <div class="rv-form-group">
+                    <label for="e_type_guide">Tipo de encomienda</label>
+                    <div class="rv-e-input-wrap">
+                        <i class="fas fa-box rv-e-input-icon"></i>
+                        <select id="e_type_guide" class="rv-form-control rv-e-input-pad">
+                            {% for item in choices_type_guide %}
+                                <option value="{{ item.0 }}">{{ item.1 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="rv-form-group rv-guide-e-route-spacer" aria-hidden="true"></div>
+
+                <div class="rv-form-group">
                     <label for="e_subsidiary_origin">Punto de partida</label>
                     <div class="rv-e-input-wrap">
                         <i class="fas fa-map-marker-alt rv-e-input-icon"></i>
@@ -94,7 +107,8 @@
                     <label for="e_address_subsidiary">Dirección de partida</label>
                     <input type="text" id="e_address_subsidiary" class="rv-form-control text-uppercase">
                 </div>
-                <div class="rv-form-group rv-form-group-required">
+
+                <div class="rv-form-group rv-form-group-required rv-guide-e-office-destiny">
                     <label for="e_subsidiary_destiny">Punto de llegada</label>
                     <div class="rv-e-input-wrap">
                         <i class="fas fa-map-marker-alt rv-e-input-icon"></i>
@@ -106,34 +120,30 @@
                         </select>
                     </div>
                 </div>
-                <div class="rv-form-group">
+                <div class="rv-form-group rv-guide-e-office-destiny">
                     <label for="e_address_destiny">Dirección de llegada</label>
                     <input type="text" id="e_address_destiny" class="rv-form-control text-uppercase" placeholder="Destino">
                 </div>
-                <div class="rv-form-group">
-                    <label for="e_type_guide">Tipo de encomienda</label>
+
+                <div class="rv-form-group rv-form-group-required rv-guide-e-reparto-destiny" hidden>
+                    <label for="e_delivery_destination">Destino de reparto</label>
                     <div class="rv-e-input-wrap">
-                        <i class="fas fa-box rv-e-input-icon"></i>
-                        <select id="e_type_guide" class="rv-form-control rv-e-input-pad">
-                            {% for item in choices_type_guide %}
-                                <option value="{{ item.0 }}">{{ item.1 }}</option>
+                        <i class="fas fa-truck-loading rv-e-input-icon"></i>
+                        <select id="e_delivery_destination" class="rv-form-control rv-e-input-pad"
+                                data-placeholder="Buscar destino de reparto...">
+                            <option value="">Seleccione...</option>
+                            {% for d in delivery_destinations %}
+                                <option value="{{ d.id }}" data-ubigeo="{{ d.district_id }}">{{ d.name }} · {{ d.district.description }} ({{ d.district_id }})</option>
                             {% endfor %}
                         </select>
                     </div>
                 </div>
-                <div class="rv-form-group rv-guide-e-reparto-address">
+                <div class="rv-form-group rv-form-group-required rv-guide-e-reparto-address" hidden>
                     <label for="e_address_delivery">Dirección de reparto</label>
-                    <input type="text" id="e_address_delivery" class="rv-form-control text-uppercase" placeholder="Dirección de entrega en ruta" readonly>
+                    <input type="text" id="e_address_delivery" class="rv-form-control text-uppercase"
+                           placeholder="Dirección de entrega" readonly>
                 </div>
-                <div class="rv-form-group rv-guide-e-reparto-ubigeo">
-                    <label for="e_ubigeo_delivery">Ubigeo de reparto</label>
-                    <div class="rv-e-input-wrap">
-                        <i class="fas fa-map rv-e-input-icon"></i>
-                        <input type="text" id="e_ubigeo_delivery" class="rv-form-control rv-e-input-pad text-center"
-                               maxlength="6" inputmode="numeric" placeholder="000000" readonly
-                               title="Código ubigeo SUNAT de 6 dígitos">
-                    </div>
-                </div>
+                <input type="hidden" id="e_ubigeo_delivery" value="">
             </div>
         </div>
     </div>

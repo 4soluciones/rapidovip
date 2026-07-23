@@ -14,7 +14,7 @@ GRAPHQL_URL = "https://ng.tuf4ctur4.net.pe/graphql"
 # Pruebas locales  -> FACT_DRY_RUN = True
 # Producción       -> FACT_DRY_RUN = False
 # ---------------------------------------------------------------------------
-FACT_DRY_RUN = False
+FACT_DRY_RUN = True
 
 
 tokens = {

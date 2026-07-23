@@ -230,9 +230,9 @@
                                 </td>
                                 <td>
                                     {% if order.encomienda %}
-                                        {% if order.encomienda.type_guide == 'R' and order.encomienda.address_delivery %}
+                                        {% if order.encomienda.type_guide == 'R' %}
                                             <span title="Ubigeo {{ order.encomienda.ubigeo_delivery }}">
-                                                REPARTO · {{ order.encomienda.address_delivery|truncatechars:35 }}
+                                                {{ order.encomienda.effective_destination_label }}
                                             </span>
                                         {% elif order.encomienda.office_destination %}
                                             {{ order.encomienda.office_destination.short_name }}
