@@ -1772,9 +1772,17 @@ def _get_destination_side_order(order_id, company_obj, subsidiary_obj, *, for_up
         'company', 'encomienda__office_destination', 'encomienda__office_origin',
         'encomienda__delivery_destination',
     )
-    qs = Order.objects.select_related(*related)
     if for_update:
-        qs = qs.select_for_update()
+        # PostgreSQL rechaza FOR UPDATE sobre el lado anulable de un OUTER JOIN
+        # (office_origin / office_destination / delivery_destination son null=True).
+        # Bloquear solo Order; encomienda basta para validar acceso y actualizar estado.
+        qs = (
+            Order.objects
+            .select_related('encomienda')
+            .select_for_update(of=('self',))
+        )
+    else:
+        qs = Order.objects.select_related(*related)
     order_obj = qs.get(
         pk=int(order_id),
         type_order='E',
