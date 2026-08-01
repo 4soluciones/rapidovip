@@ -219,7 +219,30 @@ def _print_destination_delivery_ticket(request, order_obj, pk):
         company_name = (company_obj.business_name or company_obj.short_name or 'RAPIDOVIP').upper()
 
     carrier_guide = getattr(order_obj, 'carrier_guide', None)
-    grt_number = carrier_guide.document_number() if carrier_guide else '—'
+    grt_number = carrier_guide.document_number() if carrier_guide else ''
+    if grt_number == '—':
+        grt_number = ''
+    # Número visible: GRT prioriza; si no hay GRT, OS. Si hay ambos: GRT grande + OS subtítulo.
+    serie = (order_obj.order_serial or order_obj.serial or '').strip()
+    correlative = (order_obj.order_correlative or order_obj.correlative_sale or '').strip()
+    if serie and correlative:
+        os_number = f'{serie}-{correlative}'
+    elif serie or correlative:
+        os_number = serie or correlative
+    else:
+        os_number = ''
+    if grt_number and os_number:
+        header_number = grt_number
+        header_subtitle = f'OS {os_number}'
+    elif grt_number:
+        header_number = grt_number
+        header_subtitle = 'GUÍA DE REMISIÓN'
+    elif os_number:
+        header_number = os_number
+        header_subtitle = 'ORDEN DE SERVICIO'
+    else:
+        header_number = '—'
+        header_subtitle = 'CONSTANCIA DE ENTREGA'
 
     _date_convert_zone = utc_to_local(order_obj.create_at)
     _formatdate = _date_convert_zone.strftime('%d/%m/%Y')
@@ -254,6 +277,8 @@ def _print_destination_delivery_ticket(request, order_obj, pk):
         name='DeliveryHelvPersonRight', fontName='Helvetica', fontSize=7, leading=9, alignment=TA_RIGHT)
     h_grt = ParagraphStyle(
         name='DeliveryHelvGRT', fontName='Helvetica-Bold', fontSize=14, leading=16, alignment=TA_CENTER)
+    h_os_sub = ParagraphStyle(
+        name='DeliveryHelvOSSub', fontName='Helvetica', fontSize=7, leading=9, alignment=TA_CENTER)
     h_sign = ParagraphStyle(
         name='DeliveryHelvSign', fontName='Helvetica', fontSize=7, leading=9, alignment=TA_CENTER)
 
@@ -515,11 +540,12 @@ def _print_destination_delivery_ticket(request, order_obj, pk):
         (order_obj.transfer_date.strftime('%d/%m/%Y') if order_obj.transfer_date else _formatdate)
         + ' ' + str(_formattime)
     )
-    correlative = order_obj.order_correlative or order_obj.correlative_sale or ''
-    serie = order_obj.order_serial or order_obj.serial or ''
     _origin_office = encomienda.office_origin if encomienda else None
     origin = str(_origin_office.short_name if _origin_office else '-')
-    destiny = str(_destination_office.short_name if _destination_office else '-')
+    if is_reparto:
+        destiny = (encomienda.effective_destination_label() if encomienda else '-') or '-'
+    else:
+        destiny = str(_destination_office.short_name if _destination_office else '-')
     _user_qr = str(order_obj.user.username.upper()) if order_obj.user_id else ''
     datatable = (
         str(_format_current_time) + ',' + str(serie) + ',' + str(correlative) + ',' +
@@ -589,7 +615,9 @@ def _print_destination_delivery_ticket(request, order_obj, pk):
         Spacer(1, 10),
         Paragraph(company_name, h_company),
         Spacer(4, 4),
-        Paragraph(str(grt_number), h_grt),
+        Paragraph(str(header_number), h_grt),
+        Spacer(2, 2),
+        Paragraph(str(header_subtitle), h_os_sub),
         Spacer(6, 6),
         ana_c1,
         Spacer(6, 6),
@@ -649,8 +677,9 @@ def _print_destination_delivery_ticket(request, order_obj, pk):
 
     response = HttpResponse(content_type='application/pdf')
     _disposition = 'attachment' if request.GET.get('download') else 'inline'
+    _filename_ref = header_number if header_number != '—' else (os_number or pk)
     response['Content-Disposition'] = '{}; filename="CONSTANCIA ENTREGA {}.pdf"'.format(
-        _disposition, grt_number)
+        _disposition, _filename_ref)
     tomorrow = datetime.now() + timedelta(days=1)
     tomorrow = tomorrow.replace(hour=0, minute=0, second=0)
     expires = datetime.strftime(tomorrow, '%a, %d-%b-%Y %H:%M:%S GMT')

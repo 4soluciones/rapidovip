@@ -1408,13 +1408,13 @@ def report_comodity_grid(request):
         destiny = (request.POST.get('destiny') or '').strip()
         subsidiary_obj = get_subsidiary_by_user(request.user)
 
-        # Base: encomiendas emitidas en la sede del usuario, en el rango de fechas.
+        # Base: encomiendas OFICINA emitidas en la sede (REPARTO va a su propio reporte).
         # "Todos" llega vacío / T / ALL → NO se agrega ese filtro.
         order_set = Order.objects.filter(
             subsidiary=subsidiary_obj,
             type_order='E',
             transfer_date__range=[start_date, end_date],
-        )
+        ).exclude(encomienda__type_guide='R')
         if service_type and service_type.upper() not in ('T', 'ALL'):
             order_set = order_set.filter(service_type=service_type)
         if user_selected.isdigit():
@@ -1522,11 +1522,12 @@ def _apply_reception_type_commodity(encomienda, type_commodity):
 def _reception_orders(
     subsidiary_obj, company_obj, start_date=None, end_date=None, dni='', delivery_filter='pending',
 ):
+    # Solo OFICINA: REPARTO no tiene office_destination y usa el reporte de reparto.
     orders = Order.objects.filter(
         type_order='E',
         company=company_obj,
         encomienda__office_destination=subsidiary_obj,
-    )
+    ).exclude(encomienda__type_guide='R')
     if dni:
         orders = orders.filter(
             orderaction__type='D',
@@ -1641,6 +1642,149 @@ def reception_report(request):
     return JsonResponse({'grid': grid, 'count': len(rows)}, status=HTTPStatus.OK)
 
 
+def _reparto_orders(
+    subsidiary_obj, company_obj, start_date=None, end_date=None, dni='', delivery_filter='pending',
+):
+    """
+    Encomiendas REPARTO de la empresa cuyo origen NO es la sede activa.
+    Así la sede de origen no ve en este reporte lo que ya emitió.
+    """
+    orders = Order.objects.filter(
+        type_order='E',
+        company=company_obj,
+        encomienda__type_guide='R',
+    ).exclude(
+        encomienda__office_origin=subsidiary_obj,
+    )
+    if dni:
+        orders = orders.filter(
+            orderaction__type='D',
+            orderaction__client__clienttype__document_number=dni,
+        )
+    elif start_date and end_date:
+        orders = orders.filter(transfer_date__range=[start_date, end_date])
+
+    delivery_filter = _normalize_delivery_filter(delivery_filter)
+    if delivery_filter == 'delivered':
+        orders = orders.filter(encomienda__type_commodity='E')
+    elif delivery_filter == 'pending':
+        orders = orders.filter(encomienda__type_commodity='S')
+
+    return prefetch_orders_for_report(
+        orders.select_related('orderbill').distinct()
+    ).order_by('-transfer_date', '-id')
+
+
+def _reparto_order_values(order_set):
+    rows = _reception_order_values(order_set)
+    orders_by_id = {order.id: order for order in order_set}
+    for row in rows:
+        order_obj = orders_by_id[row['id']]
+        encomienda = order_obj.encomienda
+        delivery = encomienda.delivery_destination
+        row.update({
+            'destiny_label': encomienda.effective_destination_label(),
+            'address_delivery': (encomienda.address_delivery or '').strip(),
+            'delivery_destination_name': (delivery.name if delivery else '') or '',
+        })
+    return rows
+
+
+def reparto_report(request):
+    """Reporte de encomiendas REPARTO (excluye las emitidas en la sede activa)."""
+    user_obj = request.user
+    subsidiary_obj = get_subsidiary_by_user(user_obj)
+    company_obj = user_obj.companyuser.company_rotation
+    date_now = timezone.localdate()
+
+    if request.method == 'GET':
+        return render(request, 'comercial/reparto_report.html', {
+            'date_now': date_now.strftime('%Y-%m-%d'),
+            'month_start': date_now.replace(day=1).strftime('%Y-%m-%d'),
+            'subsidiary': subsidiary_obj,
+            'type_commodity_choices': TYPE_COMMODITY_CHOICES,
+        })
+
+    start_date_raw = (request.POST.get('start-date') or '').strip()
+    end_date_raw = (request.POST.get('end-date') or '').strip()
+    dni = ''.join(ch for ch in (request.POST.get('dni') or '').strip() if ch.isdigit())
+    delivery_filter = _normalize_delivery_filter(request.POST.get('delivery-status'))
+
+    if dni and len(dni) != 8:
+        return JsonResponse(
+            {'error': 'El DNI del destinatario debe contener exactamente 8 dígitos.'},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+
+    start_date = end_date = None
+    if not dni:
+        try:
+            start_date = date.fromisoformat(start_date_raw)
+            end_date = date.fromisoformat(end_date_raw)
+        except ValueError:
+            return JsonResponse(
+                {'error': 'Seleccione un rango de fechas válido o ingrese el DNI del destinatario.'},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+        if start_date > end_date:
+            return JsonResponse(
+                {'error': 'La fecha inicial no puede ser posterior a la fecha final.'},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+
+    order_set = list(_reparto_orders(
+        subsidiary_obj, company_obj, start_date, end_date, dni, delivery_filter,
+    ))
+    rows = _reparto_order_values(order_set)
+    grid = loader.get_template('comercial/reparto_report_grid.html').render({
+        'order_set': rows,
+        'count': len(rows),
+        'subsidiary': subsidiary_obj,
+        'dni': dni,
+        'f1': start_date,
+        'f2': end_date,
+        'delivery_filter': delivery_filter,
+    }, request)
+    return JsonResponse({'grid': grid, 'count': len(rows)}, status=HTTPStatus.OK)
+
+
+def _order_is_accessible_for_destination_actions(order_obj, subsidiary_obj):
+    """
+    True si la sede puede cobrar/entregar la orden:
+    - OFICINA: office_destination = sede activa
+    - REPARTO: type_guide R y origen distinto de la sede activa
+    """
+    try:
+        encomienda = order_obj.encomienda
+    except ObjectDoesNotExist:
+        return False
+    if encomienda.type_guide == 'R':
+        origin_id = encomienda.office_origin_id
+        if origin_id is None:
+            origin_id = order_obj.subsidiary_id
+        return origin_id != subsidiary_obj.id
+    return encomienda.office_destination_id == subsidiary_obj.id
+
+
+def _get_destination_side_order(order_id, company_obj, subsidiary_obj, *, for_update=False, select_related=None):
+    """Obtiene una orden accesible desde recepción (OFICINA) o reporte REPARTO."""
+    related = select_related or (
+        'company', 'encomienda__office_destination', 'encomienda__office_origin',
+        'encomienda__delivery_destination',
+    )
+    qs = Order.objects.select_related(*related)
+    if for_update:
+        qs = qs.select_for_update()
+    order_obj = qs.get(
+        pk=int(order_id),
+        type_order='E',
+        company=company_obj,
+    )
+    if not _order_is_accessible_for_destination_actions(order_obj, subsidiary_obj):
+        raise Order.DoesNotExist
+    return order_obj
+
+
 def _order_collect_amount(order_obj):
     """Importe a cobrar: total de detalles o total de la orden, siempre a 2 decimales."""
     amount = order_obj.sum_total_details()
@@ -1718,17 +1862,18 @@ def reception_billing_data(request):
     subsidiary_obj = get_subsidiary_by_user(request.user)
     company_obj = request.user.companyuser.company_rotation
     try:
-        order_obj = Order.objects.select_related(
-            'company', 'encomienda__office_destination', 'encomienda__office_origin',
-        ).get(
-            pk=int(request.GET.get('order_id', 0)),
-            type_order='E',
-            company=company_obj,
-            encomienda__office_destination=subsidiary_obj,
+        order_obj = _get_destination_side_order(
+            request.GET.get('order_id', 0),
+            company_obj,
+            subsidiary_obj,
+            select_related=(
+                'company', 'encomienda__office_destination', 'encomienda__office_origin',
+                'encomienda__delivery_destination',
+            ),
         )
     except (Order.DoesNotExist, TypeError, ValueError):
         return JsonResponse(
-            {'error': 'La encomienda no existe o no pertenece a la sede de destino del usuario.'},
+            {'error': 'La encomienda no existe o no está disponible para su sede.'},
             status=HTTPStatus.NOT_FOUND,
         )
 
@@ -1813,9 +1958,11 @@ def reception_delivery_data(request):
     subsidiary_obj = get_subsidiary_by_user(request.user)
     company_obj = request.user.companyuser.company_rotation
     try:
+        order_id = int(request.GET.get('order_id', 0))
         order_obj = Order.objects.select_related(
             'company', 'orderbill',
             'encomienda__office_destination', 'encomienda__office_origin',
+            'encomienda__delivery_destination',
         ).prefetch_related(
             'orderdetail_set__unit',
             Prefetch(
@@ -1825,14 +1972,15 @@ def reception_delivery_data(request):
                 ),
             ),
         ).get(
-            pk=int(request.GET.get('order_id', 0)),
+            pk=order_id,
             type_order='E',
             company=company_obj,
-            encomienda__office_destination=subsidiary_obj,
         )
+        if not _order_is_accessible_for_destination_actions(order_obj, subsidiary_obj):
+            raise Order.DoesNotExist
     except (Order.DoesNotExist, TypeError, ValueError):
         return JsonResponse(
-            {'error': 'La encomienda no existe o no pertenece a la sede de destino del usuario.'},
+            {'error': 'La encomienda no existe o no está disponible para su sede.'},
             status=HTTPStatus.NOT_FOUND,
         )
 
@@ -1864,15 +2012,20 @@ def reception_delivery_data(request):
             'unit': unit_label.upper(),
         })
 
+    if encomienda.type_guide == 'R':
+        destination_office = encomienda.effective_destination_label()
+    else:
+        destination_office = (
+            (destination.short_name or destination.name) if destination else '—'
+        )
+
     return JsonResponse({
         'order_id': order_obj.id,
         'order_number': _order_service_label(order_obj),
         'amount': f'{_order_collect_amount(order_obj):.2f}',
         'way_to_pay_label': (order_obj.get_way_to_pay_display() or '').title(),
         'origin_office': (origin.short_name or origin.name) if origin else '—',
-        'destination_office': (
-            (destination.short_name or destination.name) if destination else '—'
-        ),
+        'destination_office': destination_office,
         'transfer_date': order_obj.transfer_date.strftime('%d/%m/%Y') if order_obj.transfer_date else '—',
         'create_date': (
             timezone.localtime(order_obj.create_at).strftime('%d/%m/%Y %I:%M %p')
@@ -1918,11 +2071,12 @@ def update_reception_type_commodity(request):
 
     try:
         with transaction.atomic():
-            order_obj = Order.objects.select_for_update().select_related('encomienda').get(
-                pk=int(request.POST.get('order_id', 0)),
-                type_order='E',
-                company=company_obj,
-                encomienda__office_destination=subsidiary_obj,
+            order_obj = _get_destination_side_order(
+                request.POST.get('order_id', 0),
+                company_obj,
+                subsidiary_obj,
+                for_update=True,
+                select_related=('encomienda', 'encomienda__office_origin', 'encomienda__office_destination'),
             )
             if order_obj.status == 'A':
                 raise ValueError('No se puede actualizar una encomienda anulada.')
@@ -1967,11 +2121,12 @@ def collect_destination_payment(request):
 
     try:
         with transaction.atomic():
-            order_obj = Order.objects.select_for_update().select_related('encomienda').get(
-                pk=int(request.POST.get('order_id', 0)),
-                type_order='E',
-                company=company_obj,
-                encomienda__office_destination=subsidiary_obj,
+            order_obj = _get_destination_side_order(
+                request.POST.get('order_id', 0),
+                company_obj,
+                subsidiary_obj,
+                for_update=True,
+                select_related=('encomienda', 'encomienda__office_origin', 'encomienda__office_destination'),
             )
 
             if order_obj.status == 'A':

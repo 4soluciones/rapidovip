@@ -36,17 +36,23 @@
             </div>
         </div>
         <div class="rv-cash-actions">
+            {% if first.return_status %}
             <button type="button"
-                    class="rv-btn {% if first.return_status %}rv-btn-outline{% else %}rv-btn-success{% endif %} rv-btn-sm cash-update"
-                    status="{% if first.return_status %}A{% else %}C{% endif %}"
+                    class="rv-btn rv-btn-cash-reopen cash-update"
+                    status="A"
                     date="{{ first.transaction_date|date:'Y-m-d' }}"
                     pk="{{ first.pk }}">
-                {% if first.return_status %}
-                    <i class="fas fa-door-closed"></i> Caja cerrada — Reabrir
-                {% else %}
-                    <i class="fas fa-door-open"></i> Cerrar caja
-                {% endif %}
+                <i class="fas fa-lock-open"></i> Reabrir caja
             </button>
+            {% else %}
+            <button type="button"
+                    class="rv-btn rv-btn-cash-close cash-update"
+                    status="C"
+                    date="{{ first.transaction_date|date:'Y-m-d' }}"
+                    pk="{{ first.pk }}">
+                <i class="fas fa-lock"></i> Cerrar caja
+            </button>
+            {% endif %}
         </div>
     </div>
     {% endwith %}

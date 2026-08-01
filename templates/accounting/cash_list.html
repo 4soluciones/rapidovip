@@ -1,22 +1,22 @@
 {% extends 'home.html' %}
-{% block title %}Caja y gastos{% endblock %}
+{% block title %}Caja y movimientos{% endblock %}
 
 {% block body %}
 <div class="rv-page">
     <div class="rv-page-header">
         <div>
-            <h1><i class="fas fa-cash-register"></i> Caja y gastos</h1>
+            <h1><i class="fas fa-cash-register"></i> Caja y movimientos</h1>
             <p class="rv-page-subtitle">Aperturas, ingresos, gastos y cierres en un solo registro</p>
         </div>
-        <div class="rv-page-actions">
-            <button type="button" class="rv-btn rv-btn-outline btn-new-cash">
+        <div class="rv-page-actions rv-cash-page-actions">
+            <button type="button" class="rv-btn rv-btn-cash-secondary btn-new-cash">
                 <i class="fas fa-plus"></i> Nueva caja
             </button>
-            <button type="button" class="rv-btn rv-btn-outline btn-open-cash">
+            <button type="button" class="rv-btn rv-btn-cash-secondary btn-open-cash">
                 <i class="fas fa-door-open"></i> Aperturar
             </button>
             <button type="button" class="rv-btn rv-btn-success" id="btn_expense">
-                <i class="fas fa-receipt"></i> Registrar gasto
+                <i class="fas fa-exchange-alt"></i> Registrar movimiento
             </button>
         </div>
     </div>

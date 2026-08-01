@@ -1,45 +1,45 @@
 {% extends 'home.html' %}
-{% block title %}Recepción de encomiendas — RapidoVip{% endblock %}
+{% block title %}Reparto de encomiendas — RapidoVip{% endblock %}
 
 {% block body %}
-<div class="rv-page rv-report-page rv-reception-page">
-    <div class="rv-report-hero rv-reception-hero">
+<div class="rv-page rv-report-page rv-reception-page rv-reparto-page">
+    <div class="rv-report-hero rv-reception-hero rv-reparto-hero">
         <div class="rv-report-hero-text">
-            <h1><i class="fas fa-box-open"></i> Recepción de encomiendas</h1>
-            <p>Consulte los envíos destinados a su sede y gestione de forma segura los cobros pendientes.</p>
+            <h1><i class="fas fa-truck"></i> Reparto de encomiendas</h1>
+            <p>Consulte las encomiendas tipo REPARTO emitidas desde otras sedes y gestione cobros y entregas.</p>
         </div>
         <div class="rv-report-hero-meta">
-            <span class="rv-report-sede"><i class="fas fa-map-marker-alt"></i> Destino: {{ subsidiary.name }}</span>
+            <span class="rv-report-sede"><i class="fas fa-map-marker-alt"></i> Sede: {{ subsidiary.name }} · excluye origen propio</span>
         </div>
     </div>
 
     <div class="rv-form-section rv-report-filters">
-        <form class="rv-filter-bar" id="reception-search-form" method="POST">
+        <form class="rv-filter-bar" id="reparto-search-form" method="POST">
             {% csrf_token %}
             <div class="rv-reception-filter-grid">
                 <div class="rv-form-group">
-                    <label for="reception-start-date">Desde</label>
-                    <input type="date" class="rv-form-control" id="reception-start-date"
+                    <label for="reparto-start-date">Desde</label>
+                    <input type="date" class="rv-form-control" id="reparto-start-date"
                            name="start-date" value="{{ month_start }}">
                 </div>
                 <div class="rv-form-group">
-                    <label for="reception-end-date">Hasta</label>
-                    <input type="date" class="rv-form-control" id="reception-end-date"
+                    <label for="reparto-end-date">Hasta</label>
+                    <input type="date" class="rv-form-control" id="reparto-end-date"
                            name="end-date" value="{{ date_now }}">
                 </div>
                 <div class="rv-form-group">
-                    <label for="reception-delivery-status">Estado de entrega</label>
-                    <select class="rv-form-control" id="reception-delivery-status" name="delivery-status">
+                    <label for="reparto-delivery-status">Estado de entrega</label>
+                    <select class="rv-form-control" id="reparto-delivery-status" name="delivery-status">
                         <option value="pending" selected>Pendientes de entrega</option>
                         <option value="delivered">Entregadas</option>
                         <option value="all">Todas</option>
                     </select>
                 </div>
                 <div class="rv-form-group rv-reception-dni-group">
-                    <label for="reception-dni">DNI del destinatario</label>
+                    <label for="reparto-dni">DNI del destinatario</label>
                     <div class="rv-input-icon-wrap">
                         <i class="fas fa-id-card"></i>
-                        <input type="text" class="rv-form-control" id="reception-dni" name="dni"
+                        <input type="text" class="rv-form-control" id="reparto-dni" name="dni"
                                maxlength="8" inputmode="numeric" autocomplete="off"
                                placeholder="8 dígitos exactos"
                                title="Al ingresar un DNI se buscará sin limitar por fechas">
@@ -48,8 +48,8 @@
                 </div>
                 <div class="rv-form-group rv-form-group-action">
                     <label>&nbsp;</label>
-                    <button type="submit" class="rv-btn rv-btn-search" id="btn-reception-search">
-                        <i class="fas fa-search"></i> Buscar encomiendas
+                    <button type="submit" class="rv-btn rv-btn-search" id="btn-reparto-search">
+                        <i class="fas fa-search"></i> Buscar repartos
                     </button>
                 </div>
             </div>
@@ -57,10 +57,10 @@
     </div>
 
     <div class="rv-form-section rv-report-results-wrap">
-        <div id="reception-results" class="rv-report-results">
+        <div id="reparto-results" class="rv-report-results">
             <div class="rv-report-empty">
                 <i class="fas fa-inbox"></i>
-                <p>Use el rango de fechas o ingrese el DNI del destinatario para consultar las encomiendas.</p>
+                <p>Use el rango de fechas o el DNI del destinatario para consultar las encomiendas de reparto.</p>
             </div>
         </div>
     </div>
@@ -245,7 +245,7 @@
         <div class="modal-content">
             <div class="modal-header rv-delivery-modal-header">
                 <div class="rv-delivery-header-copy">
-                    <span class="rv-delivery-header-eyebrow">Recepción · Al contado</span>
+                    <span class="rv-delivery-header-eyebrow">Reparto · Al contado</span>
                     <h5 class="modal-title" id="cash-delivery-title">Entrega de encomienda</h5>
                     <div class="rv-modal-subtitle" id="delivery-order-label">Preparando información…</div>
                 </div>
@@ -411,7 +411,7 @@
 (function () {
     var collectionData = null;
     var deliveryData = null;
-    var csrfToken = $('#reception-search-form [name=csrfmiddlewaretoken]').val();
+    var csrfToken = $('#reparto-search-form [name=csrfmiddlewaretoken]').val();
     var DOC_LENGTHS = { '01': 8, '06': 11 };
     var DOC_NAMES = { '01': 'DNI', '06': 'RUC' };
     var STATUS_ICONS = {
@@ -422,23 +422,23 @@
     };
 
     function searchReception() {
-        var $btn = $('#btn-reception-search');
+        var $btn = $('#btn-reparto-search');
         $btn.prop('disabled', true);
-        $('#reception-results').html(
-            '<div class="rv-report-loading"><i class="fas fa-spinner fa-spin"></i> Consultando encomiendas de la sede…</div>'
+        $('#reparto-results').html(
+            '<div class="rv-report-loading"><i class="fas fa-spinner fa-spin"></i> Consultando encomiendas de reparto…</div>'
         );
         $.ajax({
-            url: '{% url "comercial:reception_report" %}',
+            url: '{% url "comercial:reparto_report" %}',
             type: 'POST',
-            data: $('#reception-search-form').serialize(),
+            data: $('#reparto-search-form').serialize(),
             success: function (response) {
-                $('#reception-results').html(response.grid);
+                $('#reparto-results').html(response.grid);
             },
             error: function (xhr) {
                 var message = xhr.responseJSON && xhr.responseJSON.error
                     ? xhr.responseJSON.error : 'No fue posible consultar las encomiendas.';
                 toastr.warning(message);
-                $('#reception-results').html(
+                $('#reparto-results').html(
                     '<div class="rv-report-empty"><i class="fas fa-exclamation-circle"></i><p>' +
                     $('<div>').text(message).html() + '</p></div>'
                 );
@@ -663,10 +663,10 @@
         $('#btn-confirm-collection').prop('disabled', !canSubmit);
     }
 
-    $('#reception-search-form').on('submit', function (event) {
+    $('#reparto-search-form').on('submit', function (event) {
         event.preventDefault();
-        var dni = $('#reception-dni').val().replace(/\D/g, '');
-        $('#reception-dni').val(dni);
+        var dni = $('#reparto-dni').val().replace(/\D/g, '');
+        $('#reparto-dni').val(dni);
         if (dni && dni.length !== 8) {
             toastr.warning('Ingrese los 8 dígitos del DNI.');
             return;
@@ -674,10 +674,10 @@
         searchReception();
     });
 
-    $('#reception-dni').on('input', function () {
+    $('#reparto-dni').on('input', function () {
         this.value = this.value.replace(/\D/g, '').slice(0, 8);
         var searchingByDni = this.value.length > 0;
-        $('#reception-start-date, #reception-end-date').prop('disabled', searchingByDni);
+        $('#reparto-start-date, #reparto-end-date').prop('disabled', searchingByDni);
     });
 
     $(document).on('click', '.btn-collect-destination', function () {

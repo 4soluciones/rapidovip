@@ -1,28 +1,50 @@
-<div class="modal-dialog modal-dialog-scrollable" role="document">
+<div class="modal-dialog modal-dialog-centered rv-expense-modal-dialog" role="document">
     <div class="modal-content rv-modal rv-finance-modal rv-expense-modal">
-        <div class="modal-header">
-            <div class="rv-prog-modal-header-content">
-                <div class="rv-prog-modal-icon rv-expense-modal-icon" aria-hidden="true">
-                    <i class="fas fa-receipt"></i>
-                </div>
-                <div>
-                    <h5 class="modal-title">Registrar gasto</h5>
-                    <p class="rv-modal-subtitle mb-0">
-                        {% if cash_obj %}{{ cash_obj.name }} · {{ subsidiary_obj.name|default:"Sede" }}{% else %}Gasto operativo de sede{% endif %}
-                    </p>
-                </div>
-            </div>
-            <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
-                <span aria-hidden="true">&times;</span>
-            </button>
-        </div>
-
-        <form id="new-expense-form" method="POST">
+        <form id="new-expense-form" method="POST" class="rv-expense-modal-form">
             {% csrf_token %}
+            <div class="modal-header">
+                <div class="rv-prog-modal-header-content">
+                    <div class="rv-prog-modal-icon rv-expense-modal-icon" id="movement-modal-icon" aria-hidden="true">
+                        <i class="fas fa-exchange-alt"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title" id="movement-modal-title">Registrar movimiento</h5>
+                        <p class="rv-modal-subtitle mb-0">
+                            {% if cash_obj %}{{ cash_obj.name }} · {{ subsidiary_obj.name|default:"Sede" }}{% else %}Movimiento de caja{% endif %}
+                        </p>
+                    </div>
+                </div>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+
             <div class="modal-body">
                 <div class="rv-expense-modal-layout">
                     <section class="rv-expense-modal-section">
-                        <h6 class="rv-expense-modal-section-title">Datos del gasto</h6>
+                        <h6 class="rv-expense-modal-section-title">Tipo de movimiento</h6>
+                        <div class="rv-movement-type-toggle" role="group" aria-label="Tipo de movimiento">
+                            <label class="rv-movement-type-option">
+                                <input type="radio" name="movement_type" value="S" checked>
+                                <span class="rv-movement-type-card rv-movement-type-out">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <strong>Salida / Gasto</strong>
+                                    <small>Resta del saldo de caja</small>
+                                </span>
+                            </label>
+                            <label class="rv-movement-type-option">
+                                <input type="radio" name="movement_type" value="E">
+                                <span class="rv-movement-type-card rv-movement-type-in">
+                                    <i class="fas fa-arrow-down"></i>
+                                    <strong>Entrada / Ingreso</strong>
+                                    <small>Suma al saldo de caja</small>
+                                </span>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="rv-expense-modal-section">
+                        <h6 class="rv-expense-modal-section-title">Datos del movimiento</h6>
                         <div class="rv-form-grid">
                             <div class="rv-form-group rv-form-group-required">
                                 <label for="id_expense_cash">Caja</label>
@@ -48,19 +70,22 @@
                             <div class="rv-form-group rv-form-group-required rv-form-group-full">
                                 <label for="id-description">Concepto</label>
                                 <input type="text" class="rv-form-control text-uppercase" id="id-description"
-                                       name="description" maxlength="100" placeholder="Ej. Combustible, peaje, útiles..." required>
+                                       name="description" maxlength="100"
+                                       placeholder="Ej. Comisión, combustible, peaje..." required>
                             </div>
                         </div>
                     </section>
 
-                    <section class="rv-expense-modal-amount-panel">
-                        <label for="id-total" class="rv-expense-amount-label">Monto del gasto</label>
+                    <section class="rv-expense-modal-amount-panel" id="movement-amount-panel">
+                        <label for="id-total" class="rv-expense-amount-label" id="movement-amount-label">Monto del movimiento</label>
                         <div class="rv-expense-amount-field">
                             <span class="rv-expense-currency">S/</span>
                             <input type="number" step="0.01" min="0.01" class="rv-expense-total-input" id="id-total"
                                    name="total" placeholder="0.00" required autofocus>
                         </div>
-                        <p class="rv-expense-amount-hint mb-0">Se registrará como salida en la caja del día seleccionado.</p>
+                        <p class="rv-expense-amount-hint mb-0" id="movement-amount-hint">
+                            Se registrará como salida y restará del saldo de caja.
+                        </p>
                     </section>
                 </div>
             </div>
@@ -68,7 +93,7 @@
             <div class="modal-footer">
                 <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
                 <button type="submit" class="rv-btn rv-btn-success" id="btn-expense-save">
-                    <i class="fas fa-save"></i> Registrar gasto
+                    <i class="fas fa-save"></i> <span id="movement-save-label">Registrar movimiento</span>
                 </button>
             </div>
         </form>
@@ -77,9 +102,38 @@
 
 <script type="text/javascript">
     (function () {
+        function syncMovementTypeUI() {
+            var type = $('input[name="movement_type"]:checked').val() || 'S';
+            var isIncome = type === 'E';
+            var $panel = $('#movement-amount-panel');
+            var $icon = $('#movement-modal-icon');
+
+            $panel.toggleClass('is-income', isIncome).toggleClass('is-expense', !isIncome);
+            $icon.toggleClass('is-income', isIncome).toggleClass('is-expense', !isIncome);
+
+            $('#movement-modal-title').text(isIncome ? 'Registrar entrada' : 'Registrar salida');
+            $('#movement-amount-label').text(isIncome ? 'Monto del ingreso' : 'Monto del gasto');
+            $('#movement-amount-hint').text(
+                isIncome
+                    ? 'Se registrará como entrada y sumará al saldo de caja.'
+                    : 'Se registrará como salida y restará del saldo de caja.'
+            );
+            $('#movement-save-label').text(isIncome ? 'Registrar entrada' : 'Registrar salida');
+            $('#id-description').attr(
+                'placeholder',
+                isIncome ? 'Ej. Comisión, reembolso, ingreso varios...' : 'Ej. Combustible, peaje, útiles...'
+            );
+            $icon.find('i').attr('class', isIncome ? 'fas fa-arrow-down' : 'fas fa-arrow-up');
+        }
+
+        $(document).off('change.movementType', 'input[name="movement_type"]')
+            .on('change.movementType', 'input[name="movement_type"]', syncMovementTypeUI);
+        syncMovementTypeUI();
+
         $('#new-expense-form').off('submit').on('submit', function (e) {
             e.preventDefault();
             var data = new FormData(this);
+            var type = $('input[name="movement_type"]:checked').val() || 'S';
             $('#btn-expense-save').prop('disabled', true);
             $.ajax({
                 url: '{% url "accounting:new_expense" %}',
@@ -103,7 +157,9 @@
                 },
                 error: function (jqXhr) {
                     $('#btn-expense-save').prop('disabled', false);
-                    toastr.error(jqXhr.responseJSON?.error || 'Error al registrar el gasto');
+                    toastr.error(jqXhr.responseJSON?.error || (type === 'E'
+                        ? 'Error al registrar la entrada'
+                        : 'Error al registrar la salida'));
                 }
             });
         });

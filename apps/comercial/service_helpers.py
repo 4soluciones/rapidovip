@@ -115,7 +115,7 @@ def filter_report_orders(subsidiary_obj, start_date, end_date,
         subsidiary=subsidiary_obj,
         type_order='E',
         transfer_date__range=[start_date, end_date],
-    )
+    ).exclude(encomienda__type_guide='R')
     if service_type and service_type.upper() not in ('T', 'ALL'):
         order_set = order_set.filter(service_type=service_type)
     if user_selected.isdigit():

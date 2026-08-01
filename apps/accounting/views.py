@@ -762,6 +762,42 @@ def new_expense(request):
 
         _total = request.POST.get('total', '')
 
+        _movement_type = (request.POST.get('movement_type') or 'S').upper()
+
+        if _movement_type not in ('E', 'S'):
+
+            data = {'error': 'Tipo de movimiento no válido. Use Entrada o Salida.'}
+
+            response = JsonResponse(data)
+
+            response.status_code = HTTPStatus.BAD_REQUEST
+
+            return response
+
+        try:
+
+            amount = decimal.Decimal(str(_total or '0').strip().replace(',', ''))
+
+        except decimal.InvalidOperation:
+
+            data = {'error': 'El monto ingresado no es válido.'}
+
+            response = JsonResponse(data)
+
+            response.status_code = HTTPStatus.BAD_REQUEST
+
+            return response
+
+        if amount <= 0:
+
+            data = {'error': 'El monto debe ser mayor a cero.'}
+
+            response = JsonResponse(data)
+
+            response.status_code = HTTPStatus.BAD_REQUEST
+
+            return response
+
         cash_obj = Cash.objects.get(id=int(_cash))
 
         user_obj = User.objects.get(id=_user)
@@ -772,9 +808,9 @@ def new_expense(request):
 
             cash=cash_obj,
 
-            description=_description.upper(),
+            description=(_description or '').upper(),
 
-            total=decimal.Decimal(_total or 0),
+            total=amount,
 
             subtotal=decimal.Decimal('0'),
 
@@ -786,7 +822,7 @@ def new_expense(request):
 
             user=user_obj,
 
-            type='S',
+            type=_movement_type,
 
         )
 
@@ -794,9 +830,11 @@ def new_expense(request):
 
         cash_grid = _render_cash_grid(request, _cash, _operation_date, '1', None)
 
+        label = 'Entrada' if _movement_type == 'E' else 'Salida'
+
         return JsonResponse({
 
-            'message': 'Operación registrada con exito.',
+            'message': f'{label} registrada con éxito.',
 
             'grid': cash_grid,
 
