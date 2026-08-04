@@ -89,23 +89,37 @@
                         {% endif %}
                     </td>
                     <td class="rv-report-actions noExl">
-                        {% if o.type_document == 'F' or o.type_document == 'B' %}
-                            <a class="rv-report-action-btn" href="{% url 'comercial:print_bill_order_commodity' o.id %}" target="_blank" title="Imprimir comprobante">
-                                <i class="fas fa-print"></i>
+                        <div class="rv-report-action-group" role="group" aria-label="Acciones">
+                            {% if o.type_document == 'F' or o.type_document == 'B' %}
+                                <a class="rv-report-action-btn"
+                                   href="{% url 'comercial:print_bill_order_commodity' o.id %}"
+                                   target="_blank" title="Imprimir comprobante">
+                                    <i class="fas fa-file-invoice"></i>
+                                </a>
+                            {% endif %}
+                            <a class="rv-report-action-btn"
+                               href="{% url 'comercial:print_ticket_order_commodity' o.id %}"
+                               target="_blank" title="Imprimir orden de servicio">
+                                <i class="fas fa-file-alt"></i>
                             </a>
-                        {% else %}
-                            <a class="rv-report-action-btn" href="{% url 'comercial:print_ticket_order_commodity' o.id %}" target="_blank" title="Imprimir">
-                                <i class="fas fa-print"></i>
+                            <a class="rv-report-action-btn"
+                               href="{% url 'comercial:print_ticket_order_commodity' o.id %}?download=1"
+                               download title="Descargar orden de servicio">
+                                <i class="fas fa-download"></i>
                             </a>
-                        {% endif %}
-                        <a class="rv-report-action-btn" href="{% url 'comercial:print_ticket_order_commodity' o.id %}?download=1" download title="Descargar orden de servicio">
-                            <i class="fas fa-download"></i>
-                        </a>
-                        {% if o.status != 'A' %}
-                            <button type="button" class="rv-report-action-btn rv-report-action-danger btn-cancel-service" data-id="{{ o.id }}" title="Anular">
-                                <i class="fas fa-ban"></i>
-                            </button>
-                        {% endif %}
+                            <a class="rv-report-action-btn rv-report-action-label"
+                               href="{% url 'comercial:print_label_order_commodity' o.id %}"
+                               target="_blank" title="Reimprimir etiqueta">
+                                <i class="fas fa-tags"></i>
+                            </a>
+                            {% if o.status != 'A' %}
+                                <button type="button"
+                                        class="rv-report-action-btn rv-report-action-danger btn-cancel-service"
+                                        data-id="{{ o.id }}" title="Anular">
+                                    <i class="fas fa-ban"></i>
+                                </button>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
