@@ -141,8 +141,10 @@ SERVICE_TYPE_CHOICES = (
 TYPE_ORDER_CHOICES = (('E', 'ENCOMIENDA'), ('P', 'PASSENGER'),)
 DTG_CHOICES = (('GE', 'GUIA DE ENCOMIENDA'), ('DE', 'DOCUMENTO ELECTRONICO'),)
 PAYMENT_METHOD_CHOICES = (
-    ('E', 'Efectivo'),
-    ('T', 'Tarjeta'),
+    ('E', 'EFECTIVO'),
+    ('T', 'TARJETA'),
+    ('Y', 'YAPE'),
+    ('R', 'TRANSFERENCIA'),
 )
 
 
@@ -165,6 +167,13 @@ class Order(models.Model):
     order_serial = models.CharField('Serie Orden de Servicio', max_length=10, null=True, blank=True)
     order_correlative = models.CharField('Correlativo Orden de Servicio', max_length=45, null=True, blank=True)
     way_to_pay = models.CharField('Forma de pago', max_length=1, choices=WAY_TO_PAY_CHOICES, default='C')
+    payment_method = models.CharField(
+        'Tipo de pago',
+        max_length=1,
+        choices=PAYMENT_METHOD_CHOICES,
+        null=True,
+        blank=True,
+    )
     company = models.ForeignKey('users.Company', on_delete=models.SET_NULL, null=True, blank=True)
     service_type = models.CharField('Tipo de servicio', max_length=1, choices=SERVICE_TYPE_CHOICES, default='E')
     observation = models.TextField('Observación', blank=True, default='')

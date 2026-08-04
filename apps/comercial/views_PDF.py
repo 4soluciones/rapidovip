@@ -19,7 +19,7 @@ from reportlab.graphics.shapes import Drawing
 from reportlab.graphics.barcode import qr
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY, TA_RIGHT
 from reportlab.lib import colors
-from reportlab.lib.units import cm, inch
+from reportlab.lib.units import cm, inch, mm
 from reportlab.rl_settings import defaultPageSize
 from rapidovip import settings
 from apps.sales.format_to_dates import utc_to_local
@@ -2992,6 +2992,338 @@ def print_report_commodity(request, start_date=None, end_date=None, user_selecte
     response['Content-Disposition'] = 'attachment; filename="ReporteDeEncomiendas_[{}].pdf"'.format(_formatdate)
     # doc.build(elements)
     # doc.build(Story)
+    response.write(buff.getvalue())
+    buff.close()
+    return response
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Etiqueta de encomienda NIIMBOT K3 (80mm x 60mm) — tamaño personalizado NIIMBOT del usuario
+# ---------------------------------------------------------------------------------------------------------------
+
+def _ubigeo_location_names(ubigeo_code):
+    """Resuelve departamento / provincia / distrito desde un ubigeo de 6 dígitos."""
+    from apps.users.models import Department, Province, District
+
+    code = (ubigeo_code or '').strip()
+    if not code or not code.isdigit() or len(code) != 6:
+        return '', '', ''
+    district = District.objects.filter(pk=code).first()
+    province = Province.objects.filter(pk=code[:4]).first()
+    department = Department.objects.filter(pk=code[:2]).first()
+    return (
+        (department.description or '').strip().upper() if department else '',
+        (province.description or '').strip().upper() if province else '',
+        (district.description or '').strip().upper() if district else '',
+    )
+
+
+def _fit_label_text(canvas_obj, text, font_name, font_size, max_width):
+    """Ajusta tamaño o recorta texto para que quepa en el ancho disponible."""
+    text = (text or '').strip()
+    if not text:
+        return '', font_size
+    size = float(font_size)
+    while size > 4.0 and canvas_obj.stringWidth(text, font_name, size) > max_width:
+        size -= 0.25
+    if canvas_obj.stringWidth(text, font_name, size) <= max_width:
+        return text, size
+    ellipsis = '…'
+    clipped = text
+    while clipped and canvas_obj.stringWidth(clipped + ellipsis, font_name, size) > max_width:
+        clipped = clipped[:-1]
+    return (clipped + ellipsis) if clipped else ellipsis, size
+
+
+def _label_recipient_name(order_obj):
+    recipient = (
+        OrderAction.objects.filter(order=order_obj, type='D')
+        .select_related('client', 'order_addressee')
+        .first()
+    )
+    if not recipient:
+        return '—'
+    if recipient.client_id:
+        return (recipient.client.names or '—').strip().upper()
+    if recipient.order_addressee_id:
+        return (recipient.order_addressee.names or '—').strip().upper()
+    return '—'
+
+
+def _label_packages(order_obj):
+    """Una etiqueta por unidad física (cantidad del detalle)."""
+    packages = []
+    details = order_obj.orderdetail_set.select_related('unit').all()
+    for detail in details:
+        unit_name = _order_detail_unit_label(detail)
+        try:
+            qty = int(round(float(detail.quantity or 0)))
+        except (TypeError, ValueError):
+            qty = 1
+        if qty < 1:
+            qty = 1
+        for index in range(1, qty + 1):
+            packages.append({
+                'unit': unit_name,
+                'index': index,
+                'total': qty,
+                'description': (detail.description or '').strip().upper(),
+            })
+    if not packages:
+        packages.append({'unit': 'UND', 'index': 1, 'total': 1, 'description': ''})
+    return packages
+
+
+def _draw_encomienda_label(c, order_obj, package, page_w, page_h):
+    """Dibuja etiqueta horizontal 80×60 mm en negro."""
+    from reportlab.graphics import renderPDF
+
+    black = colors.black
+    # Márgenes internos: más generosos arriba, derecha e inferior
+    margin_left = 2.0 * mm
+    margin_top = 3.5 * mm
+    margin_right = 3.5 * mm
+    margin_bottom = 3.5 * mm
+
+    content_left = margin_left
+    content_right = page_w - margin_right
+    content_bottom = margin_bottom
+    content_top = page_h - margin_top
+    content_w = content_right - content_left
+
+    # QR abajo a la derecha, más grande
+    qr_size = 28 * mm
+    gap = 2.2 * mm
+    left_w = content_w - qr_size - gap
+    left_x = content_left
+    qr_x = content_right - qr_size
+    qr_y = content_bottom
+
+    company_obj = order_obj.company
+    company_name = 'RAPIDOVIP'
+    if company_obj:
+        company_name = (company_obj.short_name or company_obj.business_name or 'RAPIDOVIP').strip().upper()
+
+    encomienda = getattr(order_obj, 'encomienda', None)
+    origin_office = encomienda.office_origin if encomienda else None
+    origin_address = '—'
+    if origin_office:
+        origin_address = (
+            origin_office.address or origin_office.short_name or origin_office.name or '—'
+        ).strip().upper()
+
+    recipient = _label_recipient_name(order_obj)
+    delivery_mode = 'ENTREGAR EN AGENCIA'
+    if encomienda and encomienda.is_reparto:
+        delivery_mode = 'REPARTO'
+
+    ubigeo = encomienda.effective_arrival_ubigeo() if encomienda else ''
+    dept, prov, dist = _ubigeo_location_names(ubigeo)
+    if not (dept or prov or dist) and encomienda and not encomienda.is_reparto and encomienda.office_destination_id:
+        dest_office = encomienda.office_destination
+        dest_label = (dest_office.short_name or dest_office.name or '').strip().upper()
+        dept = dest_label
+        dist = dest_label
+
+    location_line = ' - '.join([p for p in (dept, prov, dist) if p]) or '—'
+    district_line = dist or prov or dept or '—'
+
+    create_at = order_obj.create_at
+    if create_at:
+        date_txt = utc_to_local(create_at).strftime('%d/%m/%Y')
+    else:
+        date_txt = datetime.now().strftime('%d/%m/%Y')
+
+    unit = package['unit']
+    pack_token = '{}/{}/{}'.format(unit, package['index'], package['total'])
+    qr_payload = '{},{},{}/{}'.format(order_obj.id, unit, package['index'], package['total'])
+
+    c.setFillColor(black)
+    c.setStrokeColor(black)
+
+    # Cabecera: empresa (grande) + bulto (mismo tamaño que fecha) + fecha
+    y = content_top - 4.5 * mm
+    date_size = 8.0
+    date_w = c.stringWidth(date_txt, 'Helvetica', date_size)
+    header_max = content_w - date_w - 2 * mm
+
+    company_txt, company_size = _fit_label_text(
+        c, company_name, 'Helvetica-Bold', 13.0, header_max * 0.55)
+    company_w = c.stringWidth(company_txt, 'Helvetica-Bold', company_size)
+    pack_txt, _ = _fit_label_text(
+        c, pack_token, 'Helvetica', date_size,
+        max(header_max - company_w - 2 * mm, 8 * mm))
+
+    c.setFont('Helvetica-Bold', company_size)
+    c.drawString(content_left, y, company_txt)
+    c.setFont('Helvetica', date_size)
+    c.drawString(content_left + company_w + 2.0 * mm, y, pack_txt)
+    c.drawRightString(content_right, y, date_txt)
+
+    y -= 1.6 * mm
+    c.setLineWidth(1.0)
+    c.line(content_left, y, content_right, y)
+
+    # Origen y destinatario: misma fuente y tamaño
+    body_font = 'Helvetica'
+    body_size = 8.0
+
+    y -= 4.6 * mm
+    origin_txt, body_size = _fit_label_text(
+        c, origin_address, body_font, body_size, left_w)
+    c.setFont(body_font, body_size)
+    c.drawString(left_x, y, origin_txt)
+
+    y -= 4.2 * mm
+    recipient_upper = (recipient or '—').strip().upper()
+    # Misma fuente/tamaño que origen; solo recorta si no cabe
+    dest_txt = recipient_upper
+    if c.stringWidth(dest_txt, body_font, body_size) > left_w:
+        dest_txt, _ = _fit_label_text(c, dest_txt, body_font, body_size, left_w)
+    c.setFont(body_font, body_size)
+    c.drawString(left_x, y, dest_txt)
+
+    # Modalidad sin negrita
+    y -= 3.8 * mm
+    mode_txt, mode_size = _fit_label_text(
+        c, delivery_mode, 'Helvetica', 8.5, left_w)
+    c.setFont('Helvetica', mode_size)
+    c.drawString(left_x, y, mode_txt)
+
+    # Destino (un poco más arriba para dejar espacio al código de barras)
+    dest_block_y = content_bottom + 22.5 * mm
+
+    loc_txt, loc_size = _fit_label_text(
+        c, location_line, 'Helvetica-Bold', 10.5, left_w)
+    c.setFont('Helvetica-Bold', loc_size)
+    c.drawString(left_x, dest_block_y + 2.2 * mm, loc_txt)
+
+    dist_txt, dist_size = _fit_label_text(
+        c, district_line, 'Helvetica-Bold', 13.0, left_w)
+    c.setFont('Helvetica-Bold', dist_size)
+    c.drawString(left_x, dest_block_y - 3.2 * mm, dist_txt)
+
+    # Cantidad y tipo de unidad
+    qty_y = content_bottom + 10.5 * mm
+    qty_unit = '{}  {}'.format(package['index'], unit).strip().upper()
+    qty_txt, qty_size = _fit_label_text(
+        c, qty_unit, 'Helvetica-Bold', 8.5, left_w)
+    c.setFont('Helvetica-Bold', qty_size)
+    c.drawString(left_x, qty_y, qty_txt)
+
+    # Código de barras: mismos datos del QR, estirado, inicia a la izquierda
+    from reportlab.graphics.barcode.code128 import Code128
+
+    barcode_value = qr_payload  # id,unidad,n/total
+    bar_h = 5.0 * mm
+    bar_w = 0.85
+    barcode = Code128(
+        barcode_value,
+        barHeight=bar_h,
+        barWidth=bar_w,
+        humanReadable=False,
+        quiet=False,
+        lquiet=0,
+        rquiet=0,
+    )
+    # Estirar hasta casi todo el ancho de la columna izquierda
+    max_barcode_w = left_w * 0.98
+    if barcode.width < max_barcode_w and barcode.width > 0:
+        bar_w = bar_w * (max_barcode_w / barcode.width)
+        barcode = Code128(
+            barcode_value,
+            barHeight=bar_h,
+            barWidth=bar_w,
+            humanReadable=False,
+            quiet=False,
+            lquiet=0,
+            rquiet=0,
+        )
+    while barcode.width > max_barcode_w and bar_w > 0.35:
+        bar_w -= 0.04
+        barcode = Code128(
+            barcode_value,
+            barHeight=bar_h,
+            barWidth=bar_w,
+            humanReadable=False,
+            quiet=False,
+            lquiet=0,
+            rquiet=0,
+        )
+    barcode_y = content_bottom + 2.0 * mm
+    barcode.drawOn(c, left_x, barcode_y)
+
+    # QR abajo a la derecha (ligeramente más arriba)
+    qr_y = content_bottom + 1.0 * mm
+    qr_widget = qr.QrCodeWidget(qr_payload)
+    bounds = qr_widget.getBounds()
+    qw = bounds[2] - bounds[0]
+    qh = bounds[3] - bounds[1]
+    drawing = Drawing(
+        qr_size, qr_size,
+        transform=[qr_size / qw, 0, 0, qr_size / qh, 0, 0],
+    )
+    drawing.add(qr_widget)
+    renderPDF.draw(drawing, c, qr_x, qr_y)
+
+    # Recuadro con margen superior, derecho e inferior
+    frame_inset_left = 0.8 * mm
+    frame_inset_top = 2.8 * mm
+    frame_inset_right = 2.8 * mm
+    frame_inset_bottom = 2.8 * mm
+    c.setLineWidth(0.9)
+    c.rect(
+        frame_inset_left,
+        frame_inset_bottom,
+        page_w - frame_inset_left - frame_inset_right,
+        page_h - frame_inset_top - frame_inset_bottom,
+    )
+
+
+def print_label_order_commodity(request, pk=None):
+    """Etiqueta adhesiva 80×60 mm — coincide con el tamaño de papel NIIMBOT personalizado."""
+    from reportlab.pdfgen import canvas as rl_canvas
+
+    order_obj = Order.objects.select_related(
+        'encomienda',
+        'encomienda__office_origin',
+        'encomienda__office_destination',
+        'encomienda__delivery_destination',
+        'encomienda__delivery_destination__district',
+        'company',
+    ).get(pk=pk)
+
+    packages = _label_packages(order_obj)
+    page_w, page_h = 80 * mm, 60 * mm
+
+    os_ref = ''
+    if order_obj.order_serial and order_obj.order_correlative:
+        os_ref = '{}-{}'.format(order_obj.order_serial, order_obj.order_correlative)
+    else:
+        os_ref = str(order_obj.order_correlative or order_obj.correlative_sale or pk)
+    doc_title = 'Etiqueta de Envío {}'.format(os_ref)
+
+    buff = io.BytesIO()
+    c = rl_canvas.Canvas(buff, pagesize=(page_w, page_h))
+    c.setTitle(doc_title)
+    c.setAuthor('RapidoVip')
+    c.setSubject('Etiqueta adhesiva de encomienda')
+
+    for index, package in enumerate(packages):
+        if index:
+            c.showPage()
+        _draw_encomienda_label(c, order_obj, package, page_w, page_h)
+
+    c.save()
+
+    response = HttpResponse(content_type='application/pdf')
+    disposition = 'attachment' if request.GET.get('download') else 'inline'
+    response['Content-Disposition'] = '{}; filename="{}.pdf"'.format(
+        disposition, doc_title)
+    tomorrow = datetime.now() + timedelta(days=1)
+    tomorrow = tomorrow.replace(hour=0, minute=0, second=0)
+    expires = datetime.strftime(tomorrow, '%a, %d-%b-%Y %H:%M:%S GMT')
+    response.set_cookie('ware', value=pk, expires=expires)
     response.write(buff.getvalue())
     buff.close()
     return response

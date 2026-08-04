@@ -59,6 +59,7 @@ from apps.sales.models import (
     OrderBill,
     OrderCommodity,
     OrderDetail,
+    PAYMENT_METHOD_CHOICES,
     SERVICE_TYPE_CHOICES,
     TYPE_COMMODITY_CHOICES,
     Unit,
@@ -639,6 +640,7 @@ def new_guide(request):
         'subsidiaries': Subsidiary.objects.all().order_by('id'),
         'subsidiary_origin': subsidiary_obj,
         'choices_type_payments': Order._meta.get_field('way_to_pay').choices,
+        'choices_payment_methods': PAYMENT_METHOD_CHOICES,
         'choices_type_guide': OrderCommodity._meta.get_field('type_guide').choices,
         'cash_set': cash_set,
         'open_cash_id': open_cash.id if open_cash else None,
@@ -692,6 +694,8 @@ def create_order(request):
         service_type = 'E'
         way_to_pay = str(data_orders.get('Way_to_pay') or data_orders.get('Way_to_Pay') or 'C')
         type_document = str(data_orders.get('Type') or 'T')
+        payment_method_codes = {code for code, _ in PAYMENT_METHOD_CHOICES}
+        payment_method = str(data_orders.get('Payment_Method') or data_orders.get('payment_method') or '').strip().upper()
         if way_to_pay == 'C' and type_document == 'T':
             return JsonResponse({
                 'message': 'Al contado solo se permite boleta o factura.',
@@ -700,6 +704,13 @@ def create_order(request):
             return JsonResponse({
                 'message': 'Pago destino solo permite ticket de encomienda.',
             }, status=HTTPStatus.BAD_REQUEST)
+        if way_to_pay == 'C':
+            if payment_method not in payment_method_codes:
+                return JsonResponse({
+                    'message': 'Seleccione el tipo de pago (efectivo, tarjeta, yape o transferencia).',
+                }, status=HTTPStatus.BAD_REQUEST)
+        else:
+            payment_method = None
 
         type_guide = str(data_orders["Type_Guide"])
         address_delivery = str(data_orders.get("Address_Delivery") or '').strip().upper()
@@ -873,6 +884,7 @@ def create_order(request):
         order_obj = Order(
             transfer_date=transfer_date,
             way_to_pay=way_to_pay,
+            payment_method=payment_method,
             correlative_sale=new_correlative,
             serial=serial,
             order_serial=order_serial,
@@ -1089,6 +1101,7 @@ def create_order(request):
             'msg_sunat': msg_sunat,
             'document_type': order_obj.type_document or _document_type,
             'way_to_pay': way_to_pay,
+            'payment_method': order_obj.payment_method or '',
             'sunat_pdf': sunat_pdf,
             'order_id': order_obj.id,
             'serial': order_obj.serial,
@@ -2122,6 +2135,14 @@ def collect_destination_payment(request):
             status=HTTPStatus.BAD_REQUEST,
         )
 
+    payment_method = (request.POST.get('payment_method') or '').strip().upper()
+    payment_method_codes = {code for code, _ in PAYMENT_METHOD_CHOICES}
+    if payment_method not in payment_method_codes:
+        return JsonResponse(
+            {'error': 'Seleccione el tipo de pago (efectivo, tarjeta, yape o transferencia).'},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+
     type_commodity = (request.POST.get('type_commodity') or 'S').strip().upper()
     subsidiary_obj = get_subsidiary_by_user(request.user)
     company_obj = request.user.companyuser.company_rotation
@@ -2201,8 +2222,9 @@ def collect_destination_payment(request):
             order_obj.serial = serial_record.serial
             order_obj.correlative_sale = correlative
             order_obj.client = billing_client
+            order_obj.payment_method = payment_method
             order_obj.save(update_fields=[
-                'type_document', 'serial', 'correlative_sale', 'client', 'update_at',
+                'type_document', 'serial', 'correlative_sale', 'client', 'payment_method', 'update_at',
             ])
 
             serial_record.correlative = int(correlative)

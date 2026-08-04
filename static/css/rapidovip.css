@@ -1894,11 +1894,69 @@ button.rv-btn-search {
     color: #15803d;
 }
 .rv-expense-modal-icon {
-    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    background: linear-gradient(135deg, #0d3b66 0%, #1a5a96 100%);
+}
+.rv-expense-modal-icon.is-expense {
+    background: linear-gradient(135deg, #c2410c 0%, #ea580c 100%);
+}
+.rv-expense-modal-icon.is-income {
+    background: linear-gradient(135deg, #15803d 0%, #22c55e 100%);
 }
 .rv-expense-modal .modal-body {
     background: #f8fafc;
     padding: 1.25rem 1.5rem 1.5rem;
+}
+#modal-expense {
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 0 !important;
+}
+#modal-expense .modal-dialog.rv-expense-modal-dialog,
+.rv-expense-modal-dialog {
+    width: calc(100% - 1rem);
+    max-width: 520px;
+    margin: 0.5rem auto;
+    max-height: calc(100vh - 1rem);
+    display: flex;
+    align-items: center;
+}
+.rv-expense-modal.modal-content,
+#modal-expense .rv-expense-modal {
+    width: 100%;
+    max-height: calc(100vh - 1rem);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.rv-expense-modal-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: inherit;
+    overflow: hidden;
+}
+.rv-expense-modal .modal-header,
+.rv-expense-modal .modal-footer {
+    flex-shrink: 0;
+}
+.rv-expense-modal .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+.rv-expense-modal .modal-footer {
+    border-top: 1px solid var(--rv-border);
+    background: #fff;
+    padding: 0.85rem 1.15rem;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.rv-expense-modal .modal-footer .rv-btn {
+    min-width: 0;
 }
 .rv-expense-modal-banner {
     display: flex;
@@ -1930,9 +1988,6 @@ button.rv-btn-search {
     color: var(--rv-primary);
     background: #f0f7ff !important;
 }
-.rv-expense-modal .modal-dialog {
-    max-width: 520px;
-}
 .rv-expense-modal-layout {
     display: flex;
     flex-direction: column;
@@ -1959,6 +2014,136 @@ button.rv-btn-search {
     padding: 1.25rem 1.35rem;
     color: #fff;
     text-align: center;
+    transition: background 0.2s ease;
+}
+.rv-expense-modal-amount-panel.is-expense {
+    background: linear-gradient(135deg, #9a3412 0%, #ea580c 100%);
+}
+.rv-expense-modal-amount-panel.is-income {
+    background: linear-gradient(135deg, #166534 0%, #22c55e 100%);
+}
+.rv-movement-type-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+.rv-movement-type-option {
+    margin: 0;
+    cursor: pointer;
+}
+.rv-movement-type-option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+.rv-movement-type-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+    min-height: 100%;
+    padding: 0.9rem 1rem;
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    background: #f8fafc;
+    color: #334155;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.rv-movement-type-card i {
+    font-size: 1rem;
+    margin-bottom: 0.15rem;
+}
+.rv-movement-type-card strong {
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+.rv-movement-type-card small {
+    font-size: 0.75rem;
+    color: #64748b;
+    line-height: 1.35;
+}
+.rv-movement-type-option input:checked + .rv-movement-type-out {
+    border-color: #ea580c;
+    background: #fff7ed;
+    box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
+}
+.rv-movement-type-option input:checked + .rv-movement-type-in {
+    border-color: #22c55e;
+    background: #f0fdf4;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+}
+.rv-movement-type-out i { color: #ea580c; }
+.rv-movement-type-in i { color: #16a34a; }
+.rv-movement-type-card:hover {
+    transform: translateY(-1px);
+}
+@media (max-width: 575.98px) {
+    #modal-expense .modal-dialog.rv-expense-modal-dialog,
+    .rv-expense-modal-dialog {
+        width: calc(100% - 0.75rem);
+        margin: 0.35rem auto;
+        max-height: calc(100vh - 0.7rem);
+        align-items: stretch;
+    }
+    .rv-expense-modal.modal-content,
+    #modal-expense .rv-expense-modal {
+        max-height: calc(100vh - 0.7rem);
+        border-radius: 12px;
+    }
+    .rv-finance-modal.rv-expense-modal .modal-header {
+        padding: 0.9rem 1rem;
+    }
+    .rv-expense-modal .modal-body {
+        padding: 0.85rem 0.9rem 1rem;
+    }
+    .rv-expense-modal .modal-footer {
+        padding: 0.75rem 0.9rem;
+    }
+    .rv-expense-modal .modal-footer .rv-btn {
+        flex: 1 1 auto;
+    }
+    .rv-expense-modal-layout {
+        gap: 0.85rem;
+    }
+    .rv-expense-modal-section {
+        padding: 0.85rem 0.9rem;
+    }
+    .rv-expense-modal-amount-panel {
+        padding: 1rem;
+    }
+    .rv-expense-modal-amount-panel .rv-expense-total-input {
+        width: 100%;
+        max-width: 180px;
+        font-size: 1.35rem;
+    }
+    .rv-movement-type-toggle {
+        grid-template-columns: 1fr;
+    }
+    .rv-expense-modal .rv-form-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+}
+@media (max-height: 700px) {
+    .rv-expense-modal-layout {
+        gap: 0.75rem;
+    }
+    .rv-expense-modal-section,
+    .rv-expense-modal-amount-panel {
+        padding: 0.8rem 0.9rem;
+    }
+    .rv-movement-type-card {
+        padding: 0.7rem 0.85rem;
+    }
+    .rv-expense-modal-amount-panel .rv-expense-total-input {
+        font-size: 1.35rem;
+        padding: 0.4rem 0.6rem;
+    }
+}
+@media (max-width: 520px) {
+    .rv-movement-type-toggle {
+        grid-template-columns: 1fr;
+    }
 }
 .rv-expense-amount-label {
     display: block;
@@ -2352,6 +2537,51 @@ button.rv-btn-search {
 .rv-cash-empty p { margin: 0; font-size: 0.95rem; }
 .rv-cash-empty-initial {
     padding: 4rem 1.5rem;
+}
+
+/* ---- ACCIONES DE CAJA ---- */
+.rv-cash-page-actions .rv-btn-cash-secondary {
+    background: #fff;
+    color: var(--rv-primary);
+    border: 1.5px solid #94a3b8;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+.rv-cash-page-actions .rv-btn-cash-secondary:hover {
+    background: #f1f5f9;
+    border-color: var(--rv-primary);
+    color: var(--rv-primary);
+}
+.rv-cash-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.75rem;
+    padding-top: 0.15rem;
+}
+.rv-btn-cash-close,
+.rv-btn-cash-reopen {
+    min-height: 44px !important;
+    padding: 0.65rem 1.35rem !important;
+    font-size: 0.95rem !important;
+    font-weight: 700 !important;
+    border: none !important;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16) !important;
+}
+.rv-btn-cash-close {
+    background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%) !important;
+    color: #fff !important;
+}
+.rv-btn-cash-close:hover {
+    background: linear-gradient(135deg, #991b1b 0%, #dc2626 100%) !important;
+    color: #fff !important;
+}
+.rv-btn-cash-reopen {
+    background: linear-gradient(135deg, #15803d 0%, #22c55e 100%) !important;
+    color: #fff !important;
+}
+.rv-btn-cash-reopen:hover {
+    background: linear-gradient(135deg, #166534 0%, #16a34a 100%) !important;
+    color: #fff !important;
 }
 
 /* ---- EMISIÓN DE SERVICIOS (v2) ---- */
@@ -2759,12 +2989,6 @@ button.rv-btn-search {
 }
 .rv-guide-service-e .rv-guide-e-dates > .rv-form-group {
     min-width: 0;
-}
-.rv-guide-service-e #e_user_display:disabled {
-    background: #f1f5f9;
-    color: #475569;
-    cursor: not-allowed;
-    opacity: 1;
 }
 .rv-guide-service-e .rv-guide-e-route-grid {
     display: grid;
@@ -3338,7 +3562,7 @@ button.rv-btn-search {
 
 /* Modal de impresión post-guardado (encomienda) */
 .rv-guide-print-modal .modal-dialog {
-    max-width: min(480px, calc(100vw - 1.5rem));
+    max-width: min(560px, calc(100vw - 1.5rem));
     margin: 1rem auto;
     width: calc(100% - 1.5rem);
 }
@@ -3412,6 +3636,7 @@ button.rv-btn-search {
 .rv-guide-print-modal .modal-body {
     flex: 1 1 auto;
     padding: 1.25rem 1.35rem 0.35rem;
+    overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
@@ -3512,9 +3737,15 @@ button.rv-btn-search {
 .rv-guide-print-actions {
     display: grid;
     gap: 0.85rem;
+    width: 100%;
+    min-width: 0;
 }
 .rv-guide-print-actions.is-dual {
     grid-template-columns: 1fr 1fr;
+}
+.rv-guide-print-actions.is-triple {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
 }
 .rv-guide-print-actions.is-single {
     grid-template-columns: minmax(0, 220px);
@@ -3528,15 +3759,54 @@ button.rv-btn-search {
     gap: 0.45rem;
     aspect-ratio: 1 / 1;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     margin: 0;
     padding: 1.1rem 0.85rem;
     border: 1.5px solid #d7e0ea;
     border-radius: 16px;
     background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     text-align: center;
+    text-decoration: none;
+    color: inherit;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(36, 80, 110, 0.04);
     transition: border-color 0.18s, background 0.18s, box-shadow 0.18s, transform 0.18s;
+    box-sizing: border-box;
+}
+/* Tres documentos (al contado): tiles más compactos, sin scroll horizontal */
+.rv-guide-print-actions.is-triple .rv-guide-print-tile {
+    gap: 0.28rem;
+    padding: 0.7rem 0.4rem;
+    border-radius: 12px;
+    aspect-ratio: 1 / 1.05;
+}
+.rv-guide-print-actions.is-triple .rv-guide-print-tile-icon {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 0;
+    border-radius: 10px;
+    font-size: 1.05rem;
+}
+.rv-guide-print-actions.is-triple .rv-guide-print-tile-title {
+    font-size: 0.72rem;
+    line-height: 1.2;
+}
+.rv-guide-print-actions.is-triple .rv-guide-print-tile-meta {
+    font-size: 0.62rem;
+    max-width: 100%;
+    padding: 0 0.15rem;
+}
+.rv-guide-print-actions.is-triple .rv-guide-print-tile-cta {
+    margin-top: 0.2rem;
+    padding: 0.28rem 0.45rem;
+    font-size: 0.62rem;
+    gap: 0.25rem;
+}
+.rv-guide-print-tile:hover,
+.rv-guide-print-tile:focus {
+    text-decoration: none;
+    color: inherit;
 }
 .rv-guide-print-tile:hover {
     border-color: #0d3b66;
@@ -3558,6 +3828,11 @@ button.rv-btn-search {
     background: linear-gradient(180deg, #f0fdf8 0%, #e6f7f0 100%);
     box-shadow: 0 10px 24px rgba(4, 120, 87, 0.14);
 }
+.rv-guide-print-tile--label:hover {
+    border-color: #b45309;
+    background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
+    box-shadow: 0 10px 24px rgba(180, 83, 9, 0.14);
+}
 .rv-guide-print-tile-icon {
     display: inline-flex;
     align-items: center;
@@ -3573,6 +3848,10 @@ button.rv-btn-search {
 .rv-guide-print-tile--voucher .rv-guide-print-tile-icon {
     color: #047857;
     background: #d1fae5;
+}
+.rv-guide-print-tile--label .rv-guide-print-tile-icon {
+    color: #b45309;
+    background: #fef3c7;
 }
 .rv-guide-print-tile-title {
     display: block;
@@ -3606,6 +3885,9 @@ button.rv-btn-search {
 }
 .rv-guide-print-tile--voucher .rv-guide-print-tile-cta {
     background: #047857;
+}
+.rv-guide-print-tile--label .rv-guide-print-tile-cta {
+    background: #b45309;
 }
 .rv-guide-print-tile:hover .rv-guide-print-tile-cta {
     filter: brightness(1.08);
@@ -3698,6 +3980,10 @@ button.rv-btn-search {
     .rv-guide-print-actions.is-dual {
         grid-template-columns: 1fr 1fr;
     }
+    .rv-guide-print-actions.is-triple {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.4rem;
+    }
     .rv-guide-print-actions.is-single {
         grid-template-columns: minmax(0, 180px);
     }
@@ -3705,6 +3991,25 @@ button.rv-btn-search {
         padding: 0.75rem 0.45rem;
         border-radius: 14px;
         gap: 0.35rem;
+    }
+    .rv-guide-print-actions.is-triple .rv-guide-print-tile {
+        padding: 0.55rem 0.28rem;
+        gap: 0.22rem;
+    }
+    .rv-guide-print-actions.is-triple .rv-guide-print-tile-icon {
+        width: 34px;
+        height: 34px;
+        font-size: 0.95rem;
+    }
+    .rv-guide-print-actions.is-triple .rv-guide-print-tile-title {
+        font-size: 0.64rem;
+    }
+    .rv-guide-print-actions.is-triple .rv-guide-print-tile-meta {
+        font-size: 0.56rem;
+    }
+    .rv-guide-print-actions.is-triple .rv-guide-print-tile-cta {
+        padding: 0.22rem 0.35rem;
+        font-size: 0.56rem;
     }
     .rv-guide-print-tile-icon {
         width: 42px;
@@ -3729,7 +4034,8 @@ button.rv-btn-search {
 
 /* Pantallas muy angostas */
 @media (max-width: 360px) {
-    .rv-guide-print-actions.is-dual {
+    .rv-guide-print-actions.is-dual,
+    .rv-guide-print-actions.is-triple {
         grid-template-columns: 1fr;
     }
     .rv-guide-print-tile {
@@ -6123,6 +6429,9 @@ a.rv-btn,
 .rv-btn-ghost,
 .rv-btn-danger,
 .rv-btn-outline,
+.rv-btn-cash-secondary,
+.rv-btn-cash-close,
+.rv-btn-cash-reopen,
 .rv-assignment-page .rv-btn,
 .rv-guide-page .rv-btn,
 .rv-report-page .rv-btn {
@@ -6151,8 +6460,10 @@ a.rv-btn,
 .rv-reception-filter-grid .rv-form-group {
     display: flex;
     flex-direction: column;
+    justify-content: flex-end;
     min-width: 0;
     margin: 0;
+    position: relative;
 }
 .rv-reception-filter-grid .rv-form-group > label {
     height: 1.15rem;
@@ -6166,11 +6477,26 @@ a.rv-btn,
     min-height: var(--rv-control-h);
 }
 .rv-reception-filter-grid .rv-btn { width: 100%; }
-.rv-reception-dni-group small {
+.rv-reception-dni-group,
+.rv-reparto-dni-group {
+    /* Reserva espacio del hint sin desalinearlo del resto de controles */
+    margin-bottom: 0;
+}
+.rv-reception-dni-group small,
+.rv-reparto-dni-group small {
     position: absolute;
-    margin-top: calc(var(--rv-control-h) + 1.7rem);
+    left: 0;
+    top: calc(1.15rem + 0.35rem + var(--rv-control-h) + 0.25rem);
+    margin: 0;
     color: var(--rv-text-muted);
     font-size: 0.68rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+}
+.rv-report-filters .rv-reception-filter-grid {
+    /* Espacio inferior para el hint absoluto del DNI */
+    padding-bottom: 1.15rem;
 }
 .rv-input-icon-wrap { position: relative; }
 .rv-input-icon-wrap > i {
@@ -7076,6 +7402,19 @@ a.rv-btn,
     grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
 }
+.rv-collection-payment-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.65rem;
+}
+.rv-collection-payment-options .rv-document-option {
+    padding: 0.7rem 0.75rem;
+}
+.rv-collection-payment-options .rv-document-option-icon {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.9rem;
+}
 .rv-document-option {
     display: flex;
     align-items: center;
@@ -7161,7 +7500,13 @@ a.rv-btn,
 
 @media (max-width: 900px) {
     .rv-reception-filter-grid { grid-template-columns: 1fr 1fr; }
-    .rv-reception-dni-group small { position: static; margin-top: 0.3rem; }
+    .rv-reception-dni-group small,
+    .rv-reparto-dni-group small {
+        position: static;
+        margin-top: 0.3rem;
+        white-space: normal;
+    }
+    .rv-report-filters .rv-reception-filter-grid { padding-bottom: 0; }
     .rv-collection-client-row {
         grid-template-columns: 100px minmax(150px, 1fr) minmax(180px, 1.8fr);
     }
@@ -7187,6 +7532,7 @@ a.rv-btn,
     .rv-collection-summary,
     .rv-collection-client-row,
     .rv-collection-document-options,
+    .rv-collection-payment-options,
     .rv-commodity-status-options,
     .rv-delivery-parties,
     .rv-delivery-doc-actions,

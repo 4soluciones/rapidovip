@@ -295,10 +295,17 @@ var GuideServices = (function ($) {
                 if (current === 'T' || !current) {
                     $bill.val('B');
                 }
+                $('#e_payment_method_wrap').show();
+                $('#e_payment_method').prop('disabled', false);
             } else if (pay === 'D') {
-                // Pago destino: solo ticket
+                // Pago destino: solo ticket; tipo de pago se captura al cobrar en destino
                 $bill.find('option[value="B"], option[value="F"]').prop('disabled', true).hide();
                 $bill.val('T');
+                $('#e_payment_method_wrap').hide();
+                $('#e_payment_method').prop('disabled', true);
+            } else {
+                $('#e_payment_method_wrap').hide();
+                $('#e_payment_method').prop('disabled', true);
             }
             $bill.trigger('change');
         }
@@ -417,6 +424,7 @@ var GuideServices = (function ($) {
 
     function clearEncomiendaForm() {
         $('#e_way_to_pay').val($('#e_way_to_pay option:first').val()).trigger('change');
+        $('#e_payment_method').val('E');
         $('#e_code').val('');
         var defaultIssueDate = $('#e_issue_date').data('default-date') || $('#e_issue_date').attr('value') || '';
         var defaultTransferDate = $('#e_transfer_date').data('default-date') || defaultIssueDate;
@@ -585,6 +593,21 @@ var GuideServices = (function ($) {
         downloadPdf(url, filename);
     }
 
+    function downloadEtiqueta(response) {
+        if (!response || !response.order_id) {
+            toastr.warning('No hay una orden para imprimir la etiqueta');
+            return;
+        }
+        var url = '/comercial/print_label_order_commodity/' + response.order_id + '/';
+        var serial = (response.order_serial || '').toString().trim();
+        var correlative = (response.order_correlative || response.correlative || response.order_id).toString().trim();
+        var docName = 'Etiqueta de Envío ' + (serial ? serial + '-' : '') + correlative + '.pdf';
+        var win = window.open(url, '_blank');
+        if (!win) {
+            downloadPdf(url + '?download=1', docName);
+        }
+    }
+
     function formatMoney(value) {
         var n = parseFloat(value);
         if (isNaN(n)) n = 0;
@@ -606,6 +629,14 @@ var GuideServices = (function ($) {
         return 'Otro';
     }
 
+    function paymentMethodLabel(code) {
+        if (code === 'E') return 'Efectivo';
+        if (code === 'T') return 'Tarjeta';
+        if (code === 'Y') return 'Yape';
+        if (code === 'R') return 'Transferencia';
+        return '';
+    }
+
     function voucherTitle(docType) {
         if (docType === 'F') return 'Factura';
         if (docType === 'B') return 'Boleta';
@@ -619,6 +650,7 @@ var GuideServices = (function ($) {
         if (!pendingPrintResponse || !pendingPrintResponse.order_id) return;
 
         var wayToPay = response.way_to_pay || (context && context.wayToPay) || 'C';
+        var paymentMethod = response.payment_method || (context && context.paymentMethod) || '';
         var docType = response.document_type;
         if (docType !== 'B' && docType !== 'F') {
             docType = (context && context.docType) || docType;
@@ -628,9 +660,14 @@ var GuideServices = (function ($) {
         var voucherNumber = (response.serial || '') + '-' + (response.correlative || '');
         var total = formatMoney(response.total != null ? response.total : (context && context.total));
         var routeText = (context && context.routeText) || '';
+        var payText = paymentLabel(wayToPay);
+        var methodText = paymentMethodLabel(paymentMethod);
+        if (wayToPay === 'C' && methodText) {
+            payText = payText + ' · ' + methodText;
+        }
 
         $('#guide-print-os-number').text(osNumber);
-        $('#guide-print-payment').text(paymentLabel(wayToPay));
+        $('#guide-print-payment').text(payText);
         $('#guide-print-total').text(total);
         $('#guide-print-os-label').text('N° ' + osNumber);
 
@@ -645,15 +682,23 @@ var GuideServices = (function ($) {
             $('#guide-print-voucher-title').text(voucherTitle(docType));
             $('#guide-print-voucher-label').text('N° ' + voucherNumber);
             $('#guide-print-btn-voucher').prop('hidden', false);
-            $('#guide-print-actions').removeClass('is-single').addClass('is-dual');
-            $('#guide-print-subtitle').text('Descargue la orden de servicio y el comprobante');
+            $('#guide-print-actions')
+                .removeClass('is-single is-dual')
+                .addClass('is-triple');
+            $('#guide-print-subtitle').text('Descargue la orden, el comprobante y la etiqueta');
         } else {
             $('#guide-print-btn-voucher').prop('hidden', true);
-            $('#guide-print-actions').removeClass('is-dual').addClass('is-single');
-            $('#guide-print-subtitle').text('Descargue la orden de servicio');
+            $('#guide-print-actions')
+                .removeClass('is-single is-triple')
+                .addClass('is-dual');
+            $('#guide-print-subtitle').text('Descargue la orden de servicio y la etiqueta');
         }
 
-        $('#guide-print-btn-os, #guide-print-btn-voucher').prop('disabled', false);
+        $('#guide-print-btn-label')
+            .attr('href', '/comercial/print_label_order_commodity/' + pendingPrintResponse.order_id + '/')
+            .attr('aria-disabled', 'false');
+
+        $('#guide-print-btn-os, #guide-print-btn-voucher, #guide-print-btn-label').prop('disabled', false);
         $('#guide-print-modal').modal('show');
     }
 
@@ -675,6 +720,7 @@ var GuideServices = (function ($) {
         }
         return {
             wayToPay: $('#e_way_to_pay').val() || 'C',
+            paymentMethod: $('#e_way_to_pay').val() === 'C' ? ($('#e_payment_method').val() || '') : '',
             docType: $('#e_type_bill').val() || 'T',
             total: $('.e-total').first().text() || '0.00',
             routeText: routeText
@@ -694,8 +740,21 @@ var GuideServices = (function ($) {
             downloadVoucher(pendingPrintResponse);
             setTimeout(function () { $btn.prop('disabled', false); }, 1200);
         });
+        // Enlace nativo (href): solo evita navegar si aún no hay orden
+        $('#guide-print-modal').on('click', '#guide-print-btn-label', function (e) {
+            var href = $(this).attr('href') || '';
+            if (!href || href === '#') {
+                e.preventDefault();
+                if (pendingPrintResponse && pendingPrintResponse.order_id) {
+                    downloadEtiqueta(pendingPrintResponse);
+                } else {
+                    toastr.warning('No hay una orden para imprimir la etiqueta');
+                }
+            }
+        });
         $('#guide-print-modal').on('hidden.bs.modal', function () {
             pendingPrintResponse = null;
+            $('#guide-print-btn-label').attr('href', '#');
         });
     }
 
@@ -959,6 +1018,9 @@ var GuideServices = (function ($) {
             var phoneOk = false;
             $('.e-phone-addressee').each(function () { if ($(this).val()) phoneOk = true; });
             if (!phoneOk) { toastr.warning('Ingrese teléfono del destinatario'); return false; }
+            if ($('#e_way_to_pay').val() === 'C' && !$('#e_payment_method').val()) {
+                toastr.warning('Seleccione el tipo de pago'); return false;
+            }
         }
         if (svc === 'M') {
             if (!$('#m_origin_address').val() || !$('#m_dest_address').val()) { toastr.warning('Complete direcciones'); return false; }
@@ -1003,6 +1065,11 @@ var GuideServices = (function ($) {
             payload.Subsidiary_origin = $('#e_subsidiary_origin').val();
             payload.Type = $('#e_type_bill').val();
             payload.Way_to_pay = $('#e_way_to_pay').val();
+            if (payload.Way_to_pay === 'C') {
+                payload.Payment_Method = $('#e_payment_method').val() || 'E';
+            } else {
+                payload.Payment_Method = '';
+            }
             payload.Type_Guide = $('#e_type_guide').val();
             payload.Arrival_Time = '';
             payload.Code = ($('#e_code').val() || '').trim() || '0000';

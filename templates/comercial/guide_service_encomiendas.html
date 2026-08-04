@@ -59,11 +59,15 @@
                         <option value="F">Factura</option>
                     </select>
                 </div>
-                <div class="rv-form-group">
-                    <label for="e_user_display">Usuario</label>
+                <div class="rv-form-group" id="e_payment_method_wrap">
+                    <label for="e_payment_method">Tipo de pago</label>
                     <div class="rv-e-input-wrap">
-                        <i class="fas fa-user-lock rv-e-input-icon"></i>
-                        <input type="text" id="e_user_display" class="rv-form-control rv-e-input-pad text-uppercase" value="{{ user.username }}" disabled readonly>
+                        <i class="fas fa-wallet rv-e-input-icon"></i>
+                        <select id="e_payment_method" class="rv-form-control rv-e-input-pad text-uppercase" name="payment_method">
+                            {% for item in choices_payment_methods %}
+                                <option value="{{ item.0 }}"{% if item.0 == 'E' %} selected{% endif %}>{{ item.1 }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                 </div>
                 <div class="rv-form-group">

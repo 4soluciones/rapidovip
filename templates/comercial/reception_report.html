@@ -208,6 +208,32 @@
                         </div>
 
                         <div class="rv-collection-section">
+                            <h6><i class="fas fa-wallet"></i> Tipo de pago</h6>
+                            <div class="rv-collection-payment-options">
+                                <label class="rv-document-option">
+                                    <input type="radio" name="payment_method" value="E" checked>
+                                    <span class="rv-document-option-icon"><i class="fas fa-money-bill-wave"></i></span>
+                                    <span><strong>Efectivo</strong></span>
+                                </label>
+                                <label class="rv-document-option">
+                                    <input type="radio" name="payment_method" value="T">
+                                    <span class="rv-document-option-icon"><i class="fas fa-credit-card"></i></span>
+                                    <span><strong>Tarjeta</strong></span>
+                                </label>
+                                <label class="rv-document-option">
+                                    <input type="radio" name="payment_method" value="Y">
+                                    <span class="rv-document-option-icon"><i class="fas fa-mobile-alt"></i></span>
+                                    <span><strong>Yape</strong></span>
+                                </label>
+                                <label class="rv-document-option">
+                                    <input type="radio" name="payment_method" value="R">
+                                    <span class="rv-document-option-icon"><i class="fas fa-exchange-alt"></i></span>
+                                    <span><strong>Transferencia</strong></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="rv-collection-section">
                             <h6><i class="fas fa-clipboard-check"></i> Estado de la encomienda</h6>
                             <p class="rv-collection-client-hint">
                                 Elija el estado final. Al confirmar el cobro se aplicará el seleccionado
@@ -658,6 +684,7 @@
         var canSubmit = collectionData && collectionData.cash.is_open &&
             $('#collection-confirm').prop('checked') &&
             $('input[name="document_type"]:checked:not(:disabled)').length > 0 &&
+            $('input[name="payment_method"]:checked').length > 0 &&
             ($('#collection-client-name').val() || '').trim() &&
             ($('#collection-client-doc').val() || '').trim();
         $('#btn-confirm-collection').prop('disabled', !canSubmit);
@@ -686,6 +713,7 @@
         $('#destination-payment-form')[0].reset();
         $('#collection-order-id').val(orderId);
         $('#collection-type-commodity').val('S');
+        $('input[name="payment_method"][value="E"]').prop('checked', true);
         $('#collection-content').addClass('d-none');
         $('#collection-loading').removeClass('d-none').html(
             '<i class="fas fa-spinner fa-spin"></i> Validando encomienda, series y caja…'
@@ -956,6 +984,7 @@
 
     $('#collection-client-name, #collection-client-address').on('input', updateConfirmState);
     $('#collection-confirm').on('change', updateConfirmState);
+    $('input[name="payment_method"]').on('change', updateConfirmState);
 
     $('input[name="document_type"]').on('change', function () {
         if (!$(this).is(':checked')) return;
@@ -986,6 +1015,10 @@
         var address = ($('#collection-client-address').val() || '').trim();
 
         if (!validateDocNumber(docNumber, docType, 'cliente')) return;
+        if (!$('input[name="payment_method"]:checked').val()) {
+            toastr.warning('Seleccione el tipo de pago.');
+            return;
+        }
         if (selected === 'F') {
             if (docType !== '06' || docNumber.length !== 11) {
                 toastr.warning('Para factura el cliente debe tener un RUC válido de 11 dígitos.');

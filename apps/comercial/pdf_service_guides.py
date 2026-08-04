@@ -1446,6 +1446,13 @@ def _bill_payment_label(order_obj):
     return (order_obj.get_way_to_pay_display() or 'CONTADO').upper().replace('AL ', '')
 
 
+def _bill_payment_method_label(order_obj):
+    method_code = getattr(order_obj, 'payment_method', None) or ''
+    if not method_code:
+        return ''
+    return (dict(PAYMENT_METHOD_CHOICES).get(method_code, method_code) or '').upper()
+
+
 def build_bill_encomienda(order_obj, pk, request=None):
     s = _bill_helvetica_styles()
     order_bill = getattr(order_obj, 'orderbill', None)
@@ -1470,7 +1477,8 @@ def build_bill_encomienda(order_obj, pk, request=None):
     total_tbl, total = _bill_totals_table(order_obj, width=BILL_WT)
     _, igv_total, _ = _bill_amounts(order_obj)
     payment = _bill_payment_label(order_obj)
-    elements.extend([
+    payment_method = _bill_payment_method_label(order_obj)
+    payment_lines = [
         Spacer(1, 6),
         _separator(BILL_WT),
         Spacer(1, 6),
@@ -1481,6 +1489,14 @@ def build_bill_encomienda(order_obj, pk, request=None):
         Paragraph(f'<b>IMPORTE EN LETRAS:</b> {numero_a_moneda(total)}', s['left']),
         Spacer(1, 4),
         Paragraph(f'<b>FORMA DE PAGO:</b> [{payment}]', s['left']),
+    ]
+    if payment_method:
+        payment_lines.extend([
+            Spacer(1, 2),
+            Paragraph(f'<b>TIPO DE PAGO:</b> [{payment_method}]', s['left']),
+        ])
+    elements.extend(payment_lines)
+    elements.extend([
         Spacer(1, 7),
         Paragraph(
             'Representación impresa del comprobante electrónico. Consulte en https://www.tuf4ct.com/cpe/',
