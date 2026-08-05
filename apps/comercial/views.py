@@ -827,13 +827,8 @@ def create_order(request):
 
             else:
                 client_sender_type = str(data_orders["Client_Sender_type"])
-                nationality_obj = None
-                if client_sender_type == '01':
-                    nationality = '9589'
-                    nationality_obj = Nationality.objects.get(id=nationality)
                 client_obj_sender = Client(
                     names=client_sender_name.upper(),
-                    nationality=nationality_obj,
                     phone=client_sender_phone
                 )
                 client_obj_sender.save()
@@ -921,13 +916,8 @@ def create_order(request):
                     client_obj_addressee_obj.phone = phone_addressee
                     client_obj_addressee_obj.save()
                 else:
-                    nationality_obj = None
-                    if document_type_addressee == '01':
-                        nationality = '9589'
-                        nationality_obj = Nationality.objects.get(id=nationality)
                     client_obj_addressee_obj = Client(
                         names=name_addressee.upper(),
-                        nationality=nationality_obj,
                         phone=phone_addressee
                     )
                     client_obj_addressee_obj.save()
