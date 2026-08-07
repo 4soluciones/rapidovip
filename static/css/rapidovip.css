@@ -2077,6 +2077,112 @@ button.rv-btn-search {
 .rv-movement-type-card:hover {
     transform: translateY(-1px);
 }
+.rv-expense-payment-options {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.65rem;
+}
+.rv-expense-payment-option {
+    margin: 0;
+    cursor: pointer;
+}
+.rv-expense-payment-option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+.rv-expense-payment-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 4.25rem;
+    padding: 0.7rem 0.5rem;
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    background: #f8fafc;
+    color: #334155;
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.rv-expense-payment-card i {
+    font-size: 1.05rem;
+}
+.rv-expense-payment-card strong {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+}
+.rv-expense-payment-option:hover .rv-expense-payment-card {
+    transform: translateY(-1px);
+    border-color: #cbd5e1;
+}
+.rv-expense-payment-option input:checked + .rv-payment-e {
+    border-color: #16a34a;
+    background: #f0fdf4;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.14);
+}
+.rv-expense-payment-option input:checked + .rv-payment-t {
+    border-color: #2563eb;
+    background: #eff6ff;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+.rv-expense-payment-option input:checked + .rv-payment-y {
+    border-color: #0f766e;
+    background: #f0fdfa;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+.rv-expense-payment-option input:checked + .rv-payment-r {
+    border-color: #0d3b66;
+    background: #eff6ff;
+    box-shadow: 0 0 0 3px rgba(13, 59, 102, 0.12);
+}
+.rv-payment-e i { color: #16a34a; }
+.rv-payment-t i { color: #2563eb; }
+.rv-payment-y i { color: #0f766e; }
+.rv-payment-r i { color: #0d3b66; }
+.rv-payment-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+.rv-payment-badge i { font-size: 0.68rem; }
+.rv-payment-badge-e {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+.rv-payment-badge-t {
+    background: #dbeafe;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+}
+.rv-payment-badge-y {
+    background: #ccfbf1;
+    color: #115e59;
+    border: 1px solid #99f6e4;
+}
+.rv-payment-badge-r {
+    background: #e2e8f0;
+    color: #0d3b66;
+    border: 1px solid #cbd5e1;
+}
+.rv-payment-badge-none {
+    background: transparent;
+    color: #94a3b8;
+    border: none;
+    padding-left: 0;
+    font-weight: 500;
+}
 @media (max-width: 575.98px) {
     #modal-expense .modal-dialog.rv-expense-modal-dialog,
     .rv-expense-modal-dialog {
@@ -2118,6 +2224,9 @@ button.rv-btn-search {
     }
     .rv-movement-type-toggle {
         grid-template-columns: 1fr;
+    }
+    .rv-expense-payment-options {
+        grid-template-columns: 1fr 1fr;
     }
     .rv-expense-modal .rv-form-grid {
         grid-template-columns: 1fr;
@@ -7683,7 +7792,6 @@ a.rv-btn,
     width: 64px;
     height: auto;
     margin-bottom: 1.1rem;
-    filter: brightness(0) invert(1);
 }
 .rv-auth-brand {
     font-family: 'Barlow', sans-serif;
