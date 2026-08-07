@@ -45,152 +45,88 @@ from ..comercial.models import Programming
 def _render_cash_grid(request, id_cash, start_date, user_type, user_obj=None):
 
     start_date = parse_date(start_date)
-
     cash_flow_set = get_cash_movements_for_day(
-
         id_cash,
-
         start_date,
-
         user_obj=user_obj,
-
         all_users=(str(user_type) == '1'),
-
     )
-
     opening_flow = CashFlow.objects.filter(
-
         transaction_date=start_date, cash__id=id_cash, type='A'
-
     ).first()
-
     cash_obj = Cash.objects.get(id=id_cash)
-
     tpl = loader.get_template('accounting/cash_grid_list.html')
-
     return tpl.render({
-
         'cash_flow_set': cash_flow_set,
-
         'has_rows': cash_flow_set.exists(),
-
         'opening_amount': opening_flow.total if opening_flow else decimal.Decimal('0'),
-
         'cash_name': cash_obj.name,
-
         'report_date_display': start_date.strftime('%d/%m/%Y'),
-
         'movement_count': cash_flow_set.count(),
-
     }, request)
 
 
 def _render_expense_grid(request, id_cash, start_date, user_type, user_obj=None):
 
     start_date = parse_date(start_date)
-
     if str(user_type) == '2' and user_obj:
-
         cash_flow_set = CashFlow.objects.filter(
-
             transaction_date=start_date, cash__id=id_cash, user=user_obj, type='S'
-
         ).select_related('cash', 'order', 'user', 'programming', 'company')
-
     else:
-
         cash_flow_set = CashFlow.objects.filter(
-
             transaction_date=start_date, cash__id=id_cash, type='S'
-
         ).select_related('cash', 'order', 'user', 'programming', 'company')
-
     sum_total = cash_flow_set.aggregate(totals=Sum('total')).get('totals') or 0
-
     cash_obj = Cash.objects.get(id=id_cash)
-
     report_date_display = start_date.strftime('%d/%m/%Y')
-
     tpl = loader.get_template('accounting/expense_module_grid.html')
 
     return tpl.render({
-
         'cash_flow_set': cash_flow_set,
-
         'sum_total': sum_total,
-
         'has_rows': cash_flow_set.exists(),
-
         'report_date': start_date,
-
         'report_date_display': report_date_display,
-
         'cash_name': cash_obj.name,
-
     }, request)
 
 
 class Home(TemplateView):
-
     template_name = 'home.html'
 
 
 def get_cash_control_list(request):
-
     if request.method == 'GET':
-
         my_date = datetime.now()
-
         formatdate = my_date.strftime("%Y-%m-%d")
-
         user_id = request.user.id
-
         user_obj = User.objects.get(id=user_id)
-
         subsidiary_obj = get_subsidiary_by_user(user_obj)
-
         cash_set = Cash.objects.filter(subsidiary=subsidiary_obj, is_bank=False)
-
         only_cash_set = cash_set
-
         cash_all_set = Cash.objects.filter(is_bank=False).exclude(subsidiary=subsidiary_obj)
-
         accounts_banks_set = Cash.objects.filter(is_bank=True)
 
         return render(request, 'accounting/cash_list.html', {
 
             'formatdate': formatdate,
-
             'only_cash_set': only_cash_set,
-
             'cash_all_set': cash_all_set,
-
             'accounts_banks_set': accounts_banks_set,
-
             'choices_operation_types': CashFlow._meta.get_field('operation_type').choices,
-
             'user_subsidiary_set': UserSubsidiary.objects.filter(
-
                 subsidiary=subsidiary_obj, rol__in=['A', 'O'], user__is_active=True
-
             ),
-
         })
 
     elif request.method == 'POST':
-
         id_cash = int(request.POST.get('cash'))
-
         start_date = parse_date(request.POST.get('start-date'))
-
         user_type = int(request.POST.get('user'))
-
         user_id = request.user.id
-
         user_obj = User.objects.get(id=user_id)
-
         grid = _render_cash_grid(request, id_cash, start_date, user_type, user_obj)
-
         return JsonResponse({'grid': grid}, status=HTTPStatus.OK)
 
 
@@ -637,9 +573,14 @@ def save_cash_flow(
 
         cash_flow_total=0,
 
-        document_type_attached=''
+        document_type_attached='',
+
+        payment_method=None,
 
 ):
+
+    if payment_method is None and order_obj is not None:
+        payment_method = getattr(order_obj, 'payment_method', None) or None
 
     cash_flow_obj = CashFlow(
 
@@ -661,11 +602,14 @@ def save_cash_flow(
 
         cash=cash_obj,
 
-        user=user_obj
+        user=user_obj,
+
+        payment_method=payment_method,
 
     )
 
     cash_flow_obj.save()
+    return cash_flow_obj
 
 
 def expense_module(request):
@@ -696,148 +640,86 @@ def expense_module(request):
 
 
 def modal_expense(request):
-
     if request.method == 'GET':
-
         cash_id = request.GET.get('cash_id', '')
-
         my_date = datetime.now()
-
         formatdate = my_date.strftime("%Y-%m-%d")
-
         user_id = request.user.id
-
         user_obj = User.objects.get(id=user_id)
-
         subsidiary_obj = get_subsidiary_by_user(user_obj)
-
         user_subsidiary_set = UserSubsidiary.objects.filter(subsidiary=subsidiary_obj, rol__in=['A', 'O'],
-
                                                             user__is_active=True)
-
         cash_obj = Cash.objects.get(id=int(cash_id))
-
         tpl = loader.get_template('accounting/expense_modal_form.html')
-
         context = ({
-
             'cash_obj': cash_obj,
-
             'formatdate': formatdate,
-
             'subsidiary_obj': subsidiary_obj,
-
             'user_subsidiary_set': user_subsidiary_set,
-
             'cash_set': Cash.objects.filter(
-
                 subsidiary=subsidiary_obj,
-
                 is_bank=False,
-
             ),
-
+            'choices_payment_methods': CashFlow.PAYMENT_METHOD_CHOICES,
         })
-
         return JsonResponse({
-
             'success': True,
-
             'grid': tpl.render(context, request),
-
         }, status=HTTPStatus.OK)
 
 
 def new_expense(request):
-
     if request.method == 'POST':
-
         _cash = request.POST.get('cash')
-
         _user = request.POST.get('user')
-
         _operation_date = request.POST.get('operation_date')
-
         _description = request.POST.get('description')
-
         _total = request.POST.get('total', '')
-
         _movement_type = (request.POST.get('movement_type') or 'S').upper()
-
+        _payment_method = (request.POST.get('payment_method') or '').strip().upper()
         if _movement_type not in ('E', 'S'):
-
             data = {'error': 'Tipo de movimiento no válido. Use Entrada o Salida.'}
-
             response = JsonResponse(data)
-
             response.status_code = HTTPStatus.BAD_REQUEST
-
             return response
-
+        payment_method_codes = {code for code, _ in CashFlow.PAYMENT_METHOD_CHOICES}
+        if _payment_method not in payment_method_codes:
+            data = {'error': 'Seleccione un tipo de pago válido.'}
+            response = JsonResponse(data)
+            response.status_code = HTTPStatus.BAD_REQUEST
+            return response
         try:
-
             amount = decimal.Decimal(str(_total or '0').strip().replace(',', ''))
-
         except decimal.InvalidOperation:
-
             data = {'error': 'El monto ingresado no es válido.'}
-
             response = JsonResponse(data)
-
             response.status_code = HTTPStatus.BAD_REQUEST
-
             return response
-
         if amount <= 0:
-
             data = {'error': 'El monto debe ser mayor a cero.'}
-
             response = JsonResponse(data)
-
             response.status_code = HTTPStatus.BAD_REQUEST
-
             return response
-
         cash_obj = Cash.objects.get(id=int(_cash))
-
         user_obj = User.objects.get(id=_user)
-
         cash_flow_obj = CashFlow(
-
             transaction_date=_operation_date,
-
             cash=cash_obj,
-
             description=(_description or '').upper(),
-
             total=amount,
-
             subtotal=decimal.Decimal('0'),
-
             igv=decimal.Decimal('0'),
-
             operation_type='0',
-
             document_type_attached='O',
-
             user=user_obj,
-
             type=_movement_type,
-
+            payment_method=_payment_method,
         )
-
         cash_flow_obj.save()
-
         cash_grid = _render_cash_grid(request, _cash, _operation_date, '1', None)
-
         label = 'Entrada' if _movement_type == 'E' else 'Salida'
-
         return JsonResponse({
-
             'message': f'{label} registrada con éxito.',
-
             'grid': cash_grid,
-
         }, status=HTTPStatus.OK)
-
     return JsonResponse({'message': 'Error de peticion.'}, status=HTTPStatus.BAD_REQUEST)

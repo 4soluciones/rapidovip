@@ -76,6 +76,40 @@
                         </div>
                     </section>
 
+                    <section class="rv-expense-modal-section">
+                        <h6 class="rv-expense-modal-section-title">Tipo de pago</h6>
+                        <div class="rv-expense-payment-options" role="group" aria-label="Tipo de pago">
+                            <label class="rv-expense-payment-option">
+                                <input type="radio" name="payment_method" value="E" checked required>
+                                <span class="rv-expense-payment-card rv-payment-e">
+                                    <i class="fas fa-money-bill-wave"></i>
+                                    <strong>Efectivo</strong>
+                                </span>
+                            </label>
+                            <label class="rv-expense-payment-option">
+                                <input type="radio" name="payment_method" value="T">
+                                <span class="rv-expense-payment-card rv-payment-t">
+                                    <i class="fas fa-credit-card"></i>
+                                    <strong>Tarjeta</strong>
+                                </span>
+                            </label>
+                            <label class="rv-expense-payment-option">
+                                <input type="radio" name="payment_method" value="Y">
+                                <span class="rv-expense-payment-card rv-payment-y">
+                                    <i class="fas fa-mobile-alt"></i>
+                                    <strong>Yape</strong>
+                                </span>
+                            </label>
+                            <label class="rv-expense-payment-option">
+                                <input type="radio" name="payment_method" value="R">
+                                <span class="rv-expense-payment-card rv-payment-r">
+                                    <i class="fas fa-university"></i>
+                                    <strong>Transferencia</strong>
+                                </span>
+                            </label>
+                        </div>
+                    </section>
+
                     <section class="rv-expense-modal-amount-panel" id="movement-amount-panel">
                         <label for="id-total" class="rv-expense-amount-label" id="movement-amount-label">Monto del movimiento</label>
                         <div class="rv-expense-amount-field">

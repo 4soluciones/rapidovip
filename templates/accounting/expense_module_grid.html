@@ -34,6 +34,7 @@
                 <th>Comprobante</th>
                 <th>Nº documento</th>
                 <th>Concepto</th>
+                <th>Tipo de pago</th>
                 <th class="text-right">Total</th>
             </tr>
             </thead>
@@ -52,13 +53,27 @@
                         {% else %}—{% endif %}
                     </td>
                     <td>{{ c.description }}</td>
+                    <td>
+                        {% if c.payment_method %}
+                            <span class="rv-payment-badge rv-payment-badge-{{ c.payment_method|lower }}">
+                                {% if c.payment_method == 'E' %}<i class="fas fa-money-bill-wave"></i>
+                                {% elif c.payment_method == 'T' %}<i class="fas fa-credit-card"></i>
+                                {% elif c.payment_method == 'Y' %}<i class="fas fa-mobile-alt"></i>
+                                {% elif c.payment_method == 'R' %}<i class="fas fa-university"></i>
+                                {% endif %}
+                                {{ c.get_payment_method_display }}
+                            </span>
+                        {% else %}
+                            <span class="rv-payment-badge rv-payment-badge-none">—</span>
+                        {% endif %}
+                    </td>
                     <td class="text-right font-weight-bold rv-expense-amount">S/ {{ c.total|replace_round_separator }}</td>
                 </tr>
             {% endfor %}
             </tbody>
             <tfoot>
             <tr class="rv-expense-total-row">
-                <td colspan="4" class="text-right">Total del día</td>
+                <td colspan="5" class="text-right">Total del día</td>
                 <td class="text-right">S/ {{ sum_total|replace_round_separator }}</td>
             </tr>
             </tfoot>

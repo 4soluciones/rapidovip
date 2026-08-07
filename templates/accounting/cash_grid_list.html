@@ -63,6 +63,7 @@
             <tr>
                 <th>Operación</th>
                 <th>Descripción</th>
+                <th>Tipo de pago</th>
                 <th>Referencia</th>
                 <th>Usuario</th>
                 <th class="text-right">Monto</th>
@@ -82,6 +83,20 @@
                         </span>
                     </td>
                     <td class="rv-cash-desc">{{ c.description|upper }}</td>
+                    <td>
+                        {% if c.payment_method %}
+                            <span class="rv-payment-badge rv-payment-badge-{{ c.payment_method|lower }}">
+                                {% if c.payment_method == 'E' %}<i class="fas fa-money-bill-wave"></i>
+                                {% elif c.payment_method == 'T' %}<i class="fas fa-credit-card"></i>
+                                {% elif c.payment_method == 'Y' %}<i class="fas fa-mobile-alt"></i>
+                                {% elif c.payment_method == 'R' %}<i class="fas fa-university"></i>
+                                {% endif %}
+                                {{ c.get_payment_method_display }}
+                            </span>
+                        {% else %}
+                            <span class="rv-payment-badge rv-payment-badge-none">—</span>
+                        {% endif %}
+                    </td>
                     <td class="rv-cash-ref small">
                         {% if c.order %}
                             {% if c.order.type_order == 'P' %}

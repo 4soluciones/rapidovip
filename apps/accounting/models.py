@@ -83,6 +83,12 @@ class CashFlow(models.Model):
         ('F', 'Factura'), ('B', 'Boleta'), ('T', 'Ticket'), ('V', 'Vale'), ('O', 'Otro'))
     OPERATION_TYPE_CHOICES = (('1', 'Deposito'), ('2', 'Pago electronico'), ('3', 'Compra electronica'), ('4', 'Retiro'), ('5', 'Transferencia bancaria'), ('6', 'Transferencia de Caja a Caja'), ('7', 'Transferencia de Caja a banco'), ('0', 'Ninguno'))
     TYPE_CHOICES = (('A', 'Apertura'), ('C', 'Cierre'), ('E', 'Entrada'), ('S', 'Salida'), ('D', 'Deposito'), ('R', 'Retiro'), ('T', 'Transferencia'),)
+    PAYMENT_METHOD_CHOICES = (
+        ('E', 'EFECTIVO'),
+        ('T', 'TARJETA'),
+        ('Y', 'YAPE'),
+        ('R', 'TRANSFERENCIA'),
+    )
     transaction_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     description = models.CharField('Descripcion', max_length=100, null=True, blank=True)
@@ -91,6 +97,13 @@ class CashFlow(models.Model):
     document_type_attached = models.CharField('Tipo documento', max_length=1, choices=DOCUMENT_TYPE_ATTACHED_CHOICES,
                                               default='O', )
     type = models.CharField('Tipo de transaccion', max_length=1, choices=TYPE_CHOICES, default='E', )
+    payment_method = models.CharField(
+        'Tipo de pago',
+        max_length=1,
+        choices=PAYMENT_METHOD_CHOICES,
+        null=True,
+        blank=True,
+    )
     subtotal = models.DecimalField('subtotal', max_digits=30, decimal_places=15, default=0)
     total = models.DecimalField('total', max_digits=30, decimal_places=15, default=0)
     igv = models.DecimalField('Igv total', max_digits=30, decimal_places=15, default=0)
