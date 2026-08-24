@@ -1,0 +1,136 @@
+{% extends 'home.html' %}
+{% block title %}Comprobantes electrónicos — RapidoVip{% endblock %}
+
+{% block body %}
+<div class="rv-page rv-report-page rv-evoucher-page">
+    <div class="rv-report-hero rv-evoucher-hero">
+        <div class="rv-report-hero-text">
+            <h1><i class="fas fa-file-invoice-dollar"></i> Comprobantes electrónicos</h1>
+            <p>Boletas, facturas y notas de crédito emitidas — consulta, anulación y notas de crédito</p>
+        </div>
+        <div class="rv-report-hero-meta">
+            <span class="rv-report-sede"><i class="fas fa-building"></i> {{ subsidiary.name }}</span>
+        </div>
+    </div>
+
+    <div class="rv-form-section rv-report-filters">
+        <form class="rv-filter-bar" id="evoucher-search-form" method="POST">
+            {% csrf_token %}
+            <div class="rv-form-grid rv-form-grid-4">
+                <div class="rv-form-group">
+                    <label for="id-start-date">Desde</label>
+                    <input type="date" class="rv-form-control" id="id-start-date" name="start-date" value="{{ date_now }}" required>
+                </div>
+                <div class="rv-form-group">
+                    <label for="id-end-date">Hasta</label>
+                    <input type="date" class="rv-form-control" id="id-end-date" name="end-date" value="{{ date_now }}" required>
+                </div>
+                <div class="rv-form-group">
+                    <label for="filter-doc-type">Tipo de comprobante</label>
+                    <select class="rv-form-control" id="filter-doc-type" name="doc_type">
+                        {% for code, label in doc_types %}
+                            <option value="{{ code }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="rv-form-group rv-form-group-action">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="rv-btn rv-btn-search" id="btn-evoucher-search">
+                        <i class="fas fa-search"></i> Generar reporte
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="rv-form-section rv-report-results-wrap">
+        <div id="evoucher-results" class="rv-report-results">
+            <div class="rv-report-empty">
+                <i class="fas fa-receipt"></i>
+                <p>Seleccione un rango de fechas y pulse <strong>Generar reporte</strong> para ver los comprobantes.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="credit-note-modal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div id="credit-note-modal-content"></div>
+</div>
+{% endblock %}
+
+{% block extrajs %}
+<script type="text/javascript">
+(function () {
+    $('#evoucher-search-form').on('submit', function (e) {
+        e.preventDefault();
+        var $btn = $('#btn-evoucher-search');
+        $btn.prop('disabled', true);
+        $('#evoucher-results').html(
+            '<div class="rv-report-loading"><i class="fas fa-spinner fa-spin"></i> Generando reporte...</div>'
+        );
+        $.ajax({
+            url: '{% url "sales:electronic_voucher_report" %}',
+            type: 'POST',
+            data: $(this).serialize(),
+            success: function (r) {
+                $('#evoucher-results').html(r.grid);
+                if (r.error) toastr.info(r.error);
+            },
+            error: function (xhr) {
+                var msg = xhr.responseJSON && xhr.responseJSON.error
+                    ? xhr.responseJSON.error
+                    : 'No se pudo generar el reporte.';
+                toastr.warning(msg);
+                $('#evoucher-results').html(
+                    '<div class="rv-report-empty"><i class="fas fa-inbox"></i><p>' + msg + '</p></div>'
+                );
+            },
+            complete: function () { $btn.prop('disabled', false); }
+        });
+    });
+
+    $(document).on('click', '.btn-evoucher-annul', function () {
+        var $btn = $(this);
+        if ($btn.prop('disabled')) return;
+        var reason = (prompt('Motivo de anulación del comprobante:') || '').trim();
+        if (!reason) {
+            toastr.warning('Debe indicar el motivo de anulación.');
+            return;
+        }
+        if (!confirm('¿Confirma anular este comprobante en SUNAT? Esta acción no se puede deshacer.')) return;
+
+        $btn.prop('disabled', true).find('i').removeClass('fa-ban').addClass('fa-spinner fa-spin');
+        var payload = $('#evoucher-search-form').serialize() +
+            '&' + $.param({ pk: $btn.data('id'), reason: reason });
+
+        $.post('{% url "sales:annul_electronic_voucher" %}', payload)
+            .done(function (r) {
+                toastr.success(r.message || 'Comprobante anulado.');
+                $('#evoucher-results').html(r.grid);
+            })
+            .fail(function (xhr) {
+                toastr.error(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error al anular.');
+                $btn.prop('disabled', false).find('i').removeClass('fa-spinner fa-spin').addClass('fa-ban');
+            });
+    });
+
+    $(document).on('click', '.btn-evoucher-credit-note', function () {
+        var orderId = $(this).data('id');
+        $('#credit-note-modal-content').html(
+            '<div class="modal-dialog modal-dialog-centered modal-xl">' +
+            '<div class="modal-content rv-modal"><div class="modal-body text-center py-5">' +
+            '<i class="fas fa-spinner fa-spin fa-2x text-muted"></i></div></div></div>'
+        );
+        $('#credit-note-modal').modal('show');
+        $.get('{% url "sales:credit_note_modal" 0 %}'.replace('/0/', '/' + orderId + '/'))
+            .done(function (html) {
+                $('#credit-note-modal-content').html(html);
+            })
+            .fail(function (xhr) {
+                $('#credit-note-modal').modal('hide');
+                toastr.error(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'No se pudo cargar el modal.');
+            });
+    });
+})();
+</script>
+{% endblock %}

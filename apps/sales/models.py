@@ -332,6 +332,20 @@ class OrderDetail(models.Model):
         verbose_name_plural = 'Detalles de orden'
 
 
+CREDIT_NOTE_MOTIVE_CHOICES = (
+    ('01', 'Anulación de la operación'),
+    ('02', 'Anulación por error en el RUC'),
+    ('03', 'Corrección por error en la descripción'),
+    ('04', 'Descuento global'),
+    ('05', 'Descuento por ítem'),
+    ('06', 'Devolución total'),
+    ('07', 'Devolución por ítem'),
+    ('08', 'Bonificación'),
+    ('09', 'Disminución en el valor'),
+    ('10', 'Otros conceptos'),
+)
+
+
 class OrderBill(models.Model):
     STATUS_CHOICES = (('E', 'Emitido'), ('A', 'Anulado'),)
     TYPE_CHOICES = (('1', 'Factura'), ('2', 'Boleta'),)
@@ -359,6 +373,41 @@ class OrderBill(models.Model):
     class Meta:
         verbose_name = 'Registro de Comprobante'
         verbose_name_plural = 'Registros de Comprobantes'
+
+
+class OrderCreditNote(models.Model):
+    STATUS_CHOICES = (('E', 'Emitido'), ('A', 'Anulado'),)
+    id = models.AutoField(primary_key=True)
+    order = models.ForeignKey(
+        'Order', on_delete=models.CASCADE, related_name='credit_notes',
+        verbose_name='Orden relacionada',
+    )
+    order_bill = models.ForeignKey(
+        'OrderBill', on_delete=models.CASCADE, related_name='credit_notes',
+        verbose_name='Comprobante afectado',
+    )
+    serial = models.CharField('Serie', max_length=5)
+    n_receipt = models.IntegerField('Número')
+    motive = models.CharField(
+        'Motivo', max_length=2, choices=CREDIT_NOTE_MOTIVE_CHOICES, default='07',
+    )
+    total = models.DecimalField('Total', max_digits=10, decimal_places=2, default=0)
+    status = models.CharField('Estado', max_length=1, choices=STATUS_CHOICES, default='E')
+    operation_id = models.IntegerField('ID operación 4FACT', default=0)
+    sunat_enlace_pdf = models.CharField('Enlace PDF', max_length=500, null=True, blank=True)
+    link_xml = models.CharField('Enlace XML', max_length=900, null=True, blank=True)
+    link_cdr = models.CharField('Enlace CDR', max_length=900, null=True, blank=True)
+    user = models.ForeignKey(User, verbose_name='Usuario', on_delete=models.CASCADE)
+    company = models.ForeignKey('users.Company', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.serial}-{self.n_receipt}'
+
+    class Meta:
+        verbose_name = 'Nota de crédito'
+        verbose_name_plural = 'Notas de crédito'
+        ordering = ['-created_at']
 
 
 class Manifest(models.Model):

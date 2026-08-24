@@ -1,0 +1,132 @@
+{% load app_filters %}
+<div class="rv-report-output rv-evoucher-output">
+    <div class="rv-report-toolbar">
+        <div class="rv-report-toolbar-left">
+            <span class="rv-report-count">{{ count }} comprobante{{ count|pluralize:"s" }}</span>
+            <span class="rv-report-period">{{ f1 }} — {{ f2 }}</span>
+        </div>
+        <div class="rv-report-toolbar-right">
+            <div class="rv-report-search-inline">
+                <i class="fas fa-search"></i>
+                <input type="text" id="evoucher-inline-search" class="rv-form-control" placeholder="Buscar comprobante, cliente..." autocomplete="off">
+            </div>
+            <button type="button" class="rv-btn rv-btn-outline rv-btn-sm" id="btn-evoucher-export" title="Exportar Excel">
+                <i class="fas fa-file-excel"></i> Excel
+            </button>
+        </div>
+    </div>
+
+    <div class="rv-evoucher-summary">
+        <div class="rv-evoucher-summary-card">
+            <span class="rv-evoucher-summary-label">Total vigente</span>
+            <strong class="rv-evoucher-summary-value">S/ {{ total_amount|replace_round_separator }}</strong>
+        </div>
+        <div class="rv-evoucher-summary-card muted">
+            <span class="rv-evoucher-summary-label">Registros</span>
+            <strong class="rv-evoucher-summary-value">{{ count }}</strong>
+        </div>
+        <div class="rv-evoucher-summary-card info">
+            <span class="rv-evoucher-summary-label">Anulación</span>
+            <strong class="rv-evoucher-summary-value small">Boleta: 5 días · Factura: 3 días</strong>
+        </div>
+    </div>
+
+    <div class="rv-table-wrap rv-report-table-wrap">
+        <table class="rv-table rv-report-table rv-evoucher-table" id="evoucher-data-table">
+            <thead>
+                <tr>
+                    <th>Fecha emisión</th>
+                    <th>Tipo</th>
+                    <th>Comprobante</th>
+                    <th>Orden servicio</th>
+                    <th>Cliente</th>
+                    <th>Documento</th>
+                    <th class="text-right">Importe</th>
+                    <th>Usuario</th>
+                    <th>Estado</th>
+                    <th class="noExl">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr class="{% if r.is_cancelled %}rv-report-row-cancelled{% endif %}"
+                    data-id="{{ r.pk }}" data-type="{{ r.doc_type }}">
+                    <td class="rv-report-date">{{ r.emission_date|date:"d/m/Y" }}</td>
+                    <td>
+                        <span class="rv-evoucher-badge rv-evoucher-badge-{{ r.doc_type|lower }}">{{ r.doc_type_label }}</span>
+                        {% if r.related_doc %}
+                            <small class="d-block text-muted mt-1">Ref: {{ r.related_doc }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="rv-report-doc">{{ r.full_number }}</span>
+                    </td>
+                    <td><span class="rv-report-doc">{{ r.order_service|default:"—" }}</span></td>
+                    <td>{{ r.client_names }}</td>
+                    <td class="small text-muted">{{ r.client_document }}</td>
+                    <td class="text-right font-weight-bold rv-report-amount">
+                        {% if not r.is_cancelled %}S/ {{ r.total|replace_round_separator }}{% else %}—{% endif %}
+                    </td>
+                    <td>{{ r.user_name|default:"—" }}</td>
+                    <td>
+                        {% if r.is_cancelled %}
+                            <span class="rv-report-status rv-report-status-cancel">Anulado</span>
+                        {% else %}
+                            <span class="rv-report-status rv-report-status-ok">{{ r.status_label }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="rv-report-actions noExl">
+                        <div class="rv-report-action-group" role="group">
+                            {% if r.pdf_url %}
+                                <a class="rv-report-action-btn" href="{{ r.pdf_url }}" target="_blank" title="Ver PDF SUNAT">
+                                    <i class="fas fa-file-pdf"></i>
+                                </a>
+                            {% endif %}
+                            {% if r.row_type == 'bill' and r.can_credit_note %}
+                                <button type="button" class="rv-report-action-btn rv-report-action-nc btn-evoucher-credit-note"
+                                        data-id="{{ r.order_id }}" title="Emitir nota de crédito">
+                                    <i class="fas fa-undo-alt"></i>
+                                </button>
+                            {% endif %}
+                            {% if r.row_type == 'bill' and r.can_annul %}
+                                <button type="button" class="rv-report-action-btn rv-report-action-danger btn-evoucher-annul"
+                                        data-id="{{ r.order_id }}" title="Anular comprobante">
+                                    <i class="fas fa-ban"></i>
+                                </button>
+                            {% elif r.row_type == 'bill' and not r.is_cancelled and r.annul_reason %}
+                                <button type="button" class="rv-report-action-btn rv-report-action-muted" disabled
+                                        title="{{ r.annul_reason }}">
+                                    <i class="fas fa-clock"></i>
+                                </button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script type="text/javascript">
+(function () {
+    $('#evoucher-inline-search').on('keyup', function () {
+        var q = $(this).val().toLowerCase();
+        $('#evoucher-data-table tbody tr').each(function () {
+            $(this).toggle($(this).text().toLowerCase().indexOf(q) > -1);
+        });
+    });
+
+    $('#btn-evoucher-export').on('click', function () {
+        if ($.fn.table2excel) {
+            $('#evoucher-data-table').table2excel({
+                exclude: '.noExl',
+                name: 'Comprobantes electrónicos',
+                filename: 'comprobantes_electronicos',
+                fileext: '.xls',
+                preserveColors: true
+            });
+        }
+    });
+})();
+</script>

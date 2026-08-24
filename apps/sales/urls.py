@@ -3,6 +3,12 @@ from django.contrib.auth.decorators import login_required
 from apps.sales.views import *
 from apps.sales.views_SUNAT import query_dni
 from apps.sales.api_FACT import send_bill_commodity_fact, send_receipt_commodity_fact
+from apps.sales.views_electronic_vouchers import (
+    annul_electronic_voucher,
+    credit_note_modal,
+    electronic_voucher_report,
+    send_credit_note,
+)
 
 urlpatterns = [
     path('', login_required(Home.as_view()), name='home'),
@@ -40,4 +46,9 @@ urlpatterns = [
 
     path('send_bill_commodity_fact/<int:order_id>/', login_required(send_bill_commodity_fact), name='send_bill_commodity_fact'),
     path('send_receipt_commodity_fact/<int:order_id>/', login_required(send_receipt_commodity_fact), name='send_receipt_commodity_fact'),
+
+    path('electronic-vouchers/', login_required(electronic_voucher_report), name='electronic_voucher_report'),
+    path('electronic-vouchers/annul/', login_required(annul_electronic_voucher), name='annul_electronic_voucher'),
+    path('electronic-vouchers/credit-note/<int:order_id>/', login_required(credit_note_modal), name='credit_note_modal'),
+    path('electronic-vouchers/credit-note/send/', login_required(send_credit_note), name='send_credit_note'),
 ]

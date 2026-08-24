@@ -1,0 +1,153 @@
+{% load app_filters %}
+<div class="modal-dialog modal-dialog-centered modal-xl rv-credit-note-modal-dialog" role="document">
+    <div class="modal-content rv-modal rv-finance-modal rv-credit-note-modal">
+        <form id="credit-note-form" method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="order_id" value="{{ order.id }}">
+
+            <div class="modal-header">
+                <div class="rv-prog-modal-header-content">
+                    <div class="rv-prog-modal-icon rv-credit-note-modal-icon" aria-hidden="true">
+                        <i class="fas fa-undo-alt"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title">Nota de crédito</h5>
+                        <p class="rv-modal-subtitle mb-0">
+                            {{ doc_type_label }} {{ full_number }} · Orden {{ order.order_serial }}-{{ order.order_correlative }}
+                        </p>
+                    </div>
+                </div>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="rv-credit-note-layout">
+                    <section class="rv-credit-note-section rv-credit-note-origin">
+                        <h6 class="rv-credit-note-section-title"><i class="fas fa-file-invoice"></i> Comprobante afectado</h6>
+                        <div class="rv-credit-note-origin-grid">
+                            <div class="rv-credit-note-origin-item">
+                                <span>Tipo</span>
+                                <strong>{{ doc_type_label }}</strong>
+                            </div>
+                            <div class="rv-credit-note-origin-item">
+                                <span>Serie - Número</span>
+                                <strong>{{ full_number }}</strong>
+                            </div>
+                            <div class="rv-credit-note-origin-item">
+                                <span>Fecha traslado</span>
+                                <strong>{{ order.transfer_date|date:"d/m/Y"|default:"—" }}</strong>
+                            </div>
+                            <div class="rv-credit-note-origin-item">
+                                <span>Total original</span>
+                                <strong>S/ {{ order_total|replace_round_separator }}</strong>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rv-credit-note-section">
+                        <h6 class="rv-credit-note-section-title"><i class="fas fa-user"></i> Cliente</h6>
+                        <div class="rv-credit-note-client-card">
+                            <strong>{{ client.names }}</strong>
+                            <span>{{ client.document }}</span>
+                        </div>
+                    </section>
+
+                    <section class="rv-credit-note-section">
+                        <h6 class="rv-credit-note-section-title"><i class="fas fa-list-alt"></i> Motivo SUNAT</h6>
+                        <div class="rv-form-group rv-form-group-required">
+                            <select class="rv-form-control" id="credit-note-motive" name="motive" required>
+                                {% for code, label in motives %}
+                                    <option value="{{ code }}" {% if code == '01' %}selected{% endif %}>{{ code }} — {{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </section>
+
+                    <section class="rv-credit-note-section">
+                        <h6 class="rv-credit-note-section-title"><i class="fas fa-boxes"></i> Detalle a devolver</h6>
+                        <p class="rv-credit-note-hint">Se emitirá un único servicio con cantidad 1 hacia SUNAT.</p>
+                        <div class="rv-table-wrap">
+                            <table class="rv-table rv-credit-note-items-table" id="credit-note-items-table">
+                                <thead>
+                                    <tr>
+                                        <th>Descripción</th>
+                                        <th class="text-center">Cant. a devolver</th>
+                                        <th class="text-right">Importe (inc. IGV)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>{{ service_description }}</td>
+                                        <td class="text-center">
+                                            <span class="rv-credit-note-qty-fixed">1</span>
+                                        </td>
+                                        <td class="text-right font-weight-bold rv-credit-note-line-total">
+                                            S/ {{ order_total|replace_round_separator }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr class="rv-credit-note-subtotal-row">
+                                        <td colspan="2" class="text-right">Subtotal (valor venta)</td>
+                                        <td class="text-right">S/ {{ sub_total|replace_round_separator }}</td>
+                                    </tr>
+                                    <tr class="rv-credit-note-subtotal-row">
+                                        <td colspan="2" class="text-right">IGV (18%)</td>
+                                        <td class="text-right">S/ {{ igv_total|replace_round_separator }}</td>
+                                    </tr>
+                                    <tr class="rv-credit-note-total-row">
+                                        <td colspan="2" class="text-right">Total nota de crédito</td>
+                                        <td class="text-right font-weight-bold" id="credit-note-grand-total">
+                                            S/ {{ order_total|replace_round_separator }}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div class="modal-footer rv-credit-note-footer">
+                <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
+                <button type="submit" class="rv-btn rv-btn-primary" id="btn-send-credit-note">
+                    <i class="fas fa-paper-plane"></i> Emitir nota de crédito
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script type="text/javascript">
+(function () {
+    $('#credit-note-form').off('submit.creditNote').on('submit.creditNote', function (e) {
+        e.preventDefault();
+        var $btn = $('#btn-send-credit-note');
+        if ($btn.prop('disabled')) return;
+
+        var motiveLabel = $('#credit-note-motive option:selected').text();
+        if (!confirm('¿Confirma emitir la nota de crédito?\nMotivo: ' + motiveLabel)) return;
+
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Emitiendo...');
+
+        var payload = $('#evoucher-search-form').serialize() +
+            '&' + $('#credit-note-form').serialize();
+
+        $.post('{% url "sales:send_credit_note" %}', payload)
+            .done(function (r) {
+                toastr.success(r.message || 'Nota de crédito emitida.');
+                $('#credit-note-modal').modal('hide');
+                if (r.grid) $('#evoucher-results').html(r.grid);
+                if (r.pdf_url) window.open(r.pdf_url, '_blank');
+            })
+            .fail(function (xhr) {
+                toastr.error(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error al emitir.');
+            })
+            .always(function () {
+                $btn.prop('disabled', false).html('<i class="fas fa-paper-plane"></i> Emitir nota de crédito');
+            });
+    });
+})();
+</script>

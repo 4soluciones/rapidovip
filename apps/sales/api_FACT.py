@@ -1,4 +1,9 @@
+import json
+import decimal
+import datetime
+import re
 import requests
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from .format_to_dates import utc_to_local
@@ -15,6 +20,56 @@ GRAPHQL_URL = "https://ng.tuf4ctur4.net.pe/graphql"
 # Producción       -> FACT_DRY_RUN = False
 # ---------------------------------------------------------------------------
 FACT_DRY_RUN = False
+
+FACT_COMMODITY_PRODUCT_TEXT = (
+    'TRANSPORTE DE CARGA POR CARRETERA A NIVEL REGIONAL Y NACIONAL'
+)
+FACT_COMMODITY_UNIT_CODE = 'ZZ'
+FACT_COMMODITY_PRODUCT_CODE = '0000'
+FACT_COMMODITY_SUNAT_CODE = '10000000'
+FACT_COMMODITY_QTY_SUNAT = 1
+
+
+def _order_details_amounts(details):
+    """Calcula totales gravados desde líneas de OrderDetail."""
+    sub_total = decimal.Decimal('0')
+    total = decimal.Decimal('0')
+    igv_total = decimal.Decimal('0')
+    for d in details:
+        base_total = (d.quantity or decimal.Decimal('0')) * (d.price_unit or decimal.Decimal('0'))
+        base_amount = base_total / decimal.Decimal('1.1800')
+        igv = base_total - base_amount
+        sub_total += base_amount
+        total += base_total
+        igv_total += igv
+    return sub_total, total, igv_total
+
+
+def _commodity_product_description(details):
+    """Texto SUNAT del servicio; el detalle de la orden va solo como indicativo."""
+    descriptions = []
+    for d in details:
+        desc = (getattr(d, 'description', None) or '').strip()
+        if desc:
+            descriptions.append(desc.upper())
+    if descriptions:
+        suffix = ' - '.join(dict.fromkeys(descriptions))
+        return f'{FACT_COMMODITY_PRODUCT_TEXT} ({suffix})'
+    return FACT_COMMODITY_PRODUCT_TEXT
+
+
+def _build_single_commodity_item(sub_total, product_text):
+    """Un solo ítem hacia SUNAT: cantidad 1, precioBase = total gravado del servicio."""
+    return {
+        'index': '1',
+        'codigoUnidad': FACT_COMMODITY_UNIT_CODE,
+        'codigoProducto': FACT_COMMODITY_PRODUCT_CODE,
+        'codigoSunat': FACT_COMMODITY_SUNAT_CODE,
+        'producto': _gql_escape(product_text),
+        'cantidad': FACT_COMMODITY_QTY_SUNAT,
+        'precioBase': float(round(sub_total, 6)),
+        'tipoIgvCodigo': '10',
+    }
 
 
 tokens = {
@@ -54,7 +109,6 @@ def send_bill_commodity_fact(
     order_obj = Order.objects.get(id=int(order_id))
     serial = serial_override or order_obj.serial
     correlative = correlative_override or order_obj.correlative_sale
-    details = OrderDetail.objects.filter(order=order_obj)
     client_obj_sender = billing_client or order_obj.client
     if client_obj_sender is None:
         client_obj_sender = Client.objects.filter(
@@ -74,33 +128,16 @@ def send_bill_commodity_fact(
     formatdate = (emission_date or order_obj.transfer_date).strftime("%Y-%m-%d")
     hour_date = register_date.strftime("%H:%M:%S")
 
-    items = []
-    index = 1
-    sub_total = 0
-    total = 0
-    igv_total = 0
-    for d in details:
-        base_total = d.quantity * d.price_unit
-        base_amount = base_total / decimal.Decimal(1.1800)
-        igv = base_total - base_amount
-        qty = d.quantity or decimal.Decimal(0)
-        precio_base_unitario = (base_amount / qty) if qty else decimal.Decimal(0)
-        sub_total = sub_total + base_amount
-        total = total + base_total
-        igv_total = igv_total + igv
+    details = list(OrderDetail.objects.filter(order=order_obj))
+    if not details and order_obj.total:
+        sub_total = order_obj.total / decimal.Decimal('1.1800')
+        total = order_obj.total
+        igv_total = total - sub_total
+    else:
+        sub_total, total, igv_total = _order_details_amounts(details)
 
-        item = {
-            "index": str(index),
-            "codigoUnidad": "ZZ",
-            "codigoProducto": "0000",
-            "codigoSunat": "10000000",
-            "producto": "TRANSPORTE DE CARGA POR CARRETERA A NIVEL REGIONAL Y NACIONAL",
-            "cantidad": float(d.quantity),
-            "precioBase": float(round(precio_base_unitario, 6)),
-            "tipoIgvCodigo": "10"
-        }
-        items.append(item)
-        index += 1
+    product_text = _commodity_product_description(details)
+    items = [_build_single_commodity_item(sub_total, product_text)]
 
     items_graphql = ", ".join(
         f"""{{  
@@ -216,7 +253,6 @@ def send_receipt_commodity_fact(
     serial = serial_override or order_obj.serial
     # n_receipt = get_correlative(order_obj, 'B')
     correlative = correlative_override or order_obj.correlative_sale
-    details = OrderDetail.objects.filter(order=order_obj)
     client_first_address = ""
     client_obj_sender = billing_client or order_obj.client
     if client_obj_sender is None:
@@ -236,33 +272,16 @@ def send_receipt_commodity_fact(
     formatdate = (emission_date or register_date.date()).strftime("%Y-%m-%d")
     hour_date = register_date.strftime("%H:%M:%S")
 
-    items = []
-    index = 1
-    sub_total = 0
-    total = 0
-    igv_total = 0
-    for d in details:
-        base_total = d.quantity * d.price_unit
-        base_amount = base_total / decimal.Decimal(1.1800)
-        igv = base_total - base_amount
-        qty = d.quantity or decimal.Decimal(0)
-        precio_base_unitario = (base_amount / qty) if qty else decimal.Decimal(0)
-        sub_total = sub_total + base_amount
-        total = total + base_total
-        igv_total = igv_total + igv
+    details = list(OrderDetail.objects.filter(order=order_obj))
+    if not details and order_obj.total:
+        sub_total = order_obj.total / decimal.Decimal('1.1800')
+        total = order_obj.total
+        igv_total = total - sub_total
+    else:
+        sub_total, total, igv_total = _order_details_amounts(details)
 
-        item = {
-            "index": str(index),
-            "codigoUnidad": "ZZ",
-            "codigoProducto": "0000",
-            "codigoSunat": "10000000",
-            "producto": "TRANSPORTE DE CARGA POR CARRETERA A NIVEL REGIONAL Y NACIONAL",
-            "cantidad": float(d.quantity),
-            "precioBase": float(round(precio_base_unitario, 6)),
-            "tipoIgvCodigo": "10"
-        }
-        items.append(item)
-        index += 1
+    product_text = _commodity_product_description(details)
+    items = [_build_single_commodity_item(sub_total, product_text)]
 
     items_graphql = ", ".join(
         f"""{{                     
@@ -1335,3 +1354,239 @@ def send_guide_transportation_fact(guide_id):
         return {"success": False, "error": f"Error en la solicitud: {str(e)}"}
     except ValueError:
         return {"success": False, "error": "La respuesta no es un JSON válido"}
+
+
+def _fact_sale_serial(order_bill):
+    """Serie SUNAT del comprobante original (F001 / B001)."""
+    serial = (order_bill.serial or order_bill.order.serial or '').strip()
+    prefix = 'F' if order_bill.type == '1' else 'B'
+    if serial and serial[0] in ('F', 'B'):
+        return f'{serial[0]}{serial[1:]}'
+    return f'{prefix}{serial[1:]}' if len(serial) > 1 else prefix + serial
+
+
+def _fact_credit_note_serial(order_bill):
+    sale_serial = _fact_sale_serial(order_bill)
+    return sale_serial[0] + 'N01'
+
+
+def _next_credit_note_correlative(cn_serial, company):
+    last = OrderCreditNote.objects.filter(
+        company=company, serial=cn_serial,
+    ).order_by('-n_receipt').first()
+    return (last.n_receipt + 1) if last else 1
+
+
+def _billing_client_for_order(order_obj):
+    client_obj = order_obj.client
+    if client_obj is None:
+        client_obj = Client.objects.filter(
+            orderaction__order=order_obj, orderaction__type='R',
+        ).first()
+    return client_obj
+
+
+def send_credit_note_fact(order_id, details, motive, fees='', user=None):
+    """
+    Emite nota de crédito en 4FACT para una boleta o factura de encomienda.
+    details: lista de dicts con detailID, quantityReturned, price, unit.
+    """
+    order_obj = Order.objects.select_related('company', 'subsidiary').get(id=int(order_id))
+    order_bill = OrderBill.objects.get(order=order_obj)
+    if order_bill.status != 'E':
+        return {'success': False, 'message': 'El comprobante no está vigente.'}
+    if order_obj.type_document not in ('B', 'F'):
+        return {'success': False, 'message': 'Solo se pueden emitir notas de crédito a boletas o facturas.'}
+
+    client_obj = _billing_client_for_order(order_obj)
+    if client_obj is None:
+        return {'success': False, 'message': 'No se encontró el cliente del comprobante.'}
+
+    codigo_tipo, client_document = _client_document_info(client_obj)
+    if not client_document:
+        return {'success': False, 'message': 'El cliente no tiene documento registrado.'}
+    if codigo_tipo is None:
+        codigo_tipo = 6 if order_obj.type_document == 'F' else 1
+
+    client_address, _ubigeo = _client_address_info(client_obj)
+    client_names = _gql_escape(client_obj.names)
+    client_document_clean = re.sub(r'\D', '', client_document)
+
+    cn_serial = _fact_credit_note_serial(order_bill)
+    correlative = _next_credit_note_correlative(cn_serial, order_obj.company)
+
+    order_details = list(OrderDetail.objects.filter(order=order_obj))
+    if not order_details and order_obj.total:
+        sub_total = order_obj.total / decimal.Decimal('1.18')
+        total = order_obj.total
+    else:
+        sub_total, total, _igv_total = _order_details_amounts(order_details)
+
+    if sub_total <= 0:
+        return {'success': False, 'message': 'El comprobante no tiene importe a devolver.'}
+
+    product_text = _commodity_product_description(order_details)
+    items = [_build_single_commodity_item(sub_total, product_text)]
+
+    items_graphql = ', '.join(
+        f"""{{  
+               producto: "{item['producto']}", 
+               cantidad: {item['cantidad']}, 
+               precioBase: {item['precioBase']}, 
+               codigoSunat: "{item['codigoSunat']}",
+               codigoProducto: "{item['codigoProducto']}",
+               codigoUnidad: "{item['codigoUnidad']}",                                            
+               tipoIgvCodigo: "{item['tipoIgvCodigo']}" 
+        }}"""
+        for item in items
+    )
+    items_graphql = f'[{items_graphql}]'
+
+    total_engraved = sub_total
+    total_invoice = total
+    total_igv = total_invoice - total_engraved
+
+    forma_pago_id = 1
+    items_credit_graphql = '[]'
+    if fees and fees != '':
+        forma_pago_id = 9
+        if isinstance(fees, str):
+            try:
+                fees_parsed = json.loads(fees)
+            except json.JSONDecodeError:
+                fees_parsed = []
+        else:
+            fees_parsed = fees
+        credit = []
+        for j, c in enumerate(fees_parsed):
+            credit.append({
+                'cuota': str(j + 1),
+                'transaction_date': c['date'],
+                'importe': c['amount'],
+                'descripcion': f'Cuota {j + 1}',
+            })
+        items_credit_graphql = ', '.join(
+            f"""{{
+                transactionDate: "{item['transaction_date']}",
+                amount: {item['importe']},
+                description: "{item['descripcion']}"
+            }}"""
+            for item in credit
+        )
+        items_credit_graphql = f'[{items_credit_graphql}]'
+
+    formatdate = datetime.datetime.now().strftime('%Y-%m-%d')
+    hour_date = datetime.datetime.now().strftime('%H:%M:%S')
+    type_document_code = '01' if order_bill.type == '1' else '03'
+    related_serial = _fact_sale_serial(order_bill)
+    related_number = str(order_bill.n_receipt)
+    motive_safe = _gql_escape(motive)
+
+    graphql_query = f"""
+        mutation RegisterCreditNote  {{
+            registerCreditNote(            
+                client: {{
+                    razonSocialNombres: "{client_names}",
+                    numeroDocumento: "{client_document_clean}",
+                    codigoTipoEntidad: {codigo_tipo},
+                    clienteDireccion: "{_gql_escape(client_address)}"
+                }},
+                creditNote: {{
+                    serie: "{cn_serial}",
+                    numero: "{correlative}",
+                    fechaEmision: "{formatdate}",
+                    horaEmision: "{hour_date}",
+                    fechaVencimiento: "{formatdate}",
+                    monedaId: 1,                
+                    formaPagoId: {forma_pago_id},
+                    totalGravada: {float(total_engraved)},
+                    totalDescuentoGlobalPorcentaje: 0,
+                    totalDescuentoGlobal: 0,
+                    totalIgv: {float(total_igv)},
+                    totalExonerada: 0,
+                    totalInafecta: 0,
+                    totalImporte: {float(round(total_invoice, 2))},
+                    totalAPagar: {float(round(total_invoice, 2))},
+                    tipoDocumentoCodigo: "07",
+                    nota: "",
+                    motiveCreditNote: "{motive_safe}"
+                }},
+                relatedDocuments: {{
+                    serial: "{related_serial}"      
+                    number: "{related_number}"      
+                    codeTypeDocument: "{type_document_code}"      
+                }},
+                items: {items_graphql},
+                creditPay: {items_credit_graphql}
+            ) {{
+                message
+                error
+                operationId
+            }}
+        }}
+        """
+
+    # print(graphql_query)
+
+    token = tokens.get(order_obj.company.ruc, 'ID no encontrado')
+    headers = {
+        'Content-Type': 'application/json',
+        'token': token,
+    }
+
+    if FACT_DRY_RUN:
+        return _fact_dry_run_response(
+            'send_credit_note_fact (NOTA DE CRÉDITO)',
+            graphql_query,
+            {
+                'serie': cn_serial,
+                'numero': correlative,
+                'tipo_de_comprobante': '3',
+                'enlace_del_pdf': f'https://ng.tuf4ctur4.net.pe/operations/print_credit_note/999999/',
+            },
+        )
+
+    try:
+        response = requests.post(GRAPHQL_URL, json={'query': graphql_query}, headers=headers)
+        response.raise_for_status()
+        result = response.json()
+        cn_data = result.get('data', {}).get('registerCreditNote', {})
+        success = not cn_data.get('error')
+
+        if success:
+            operation_id = cn_data.get('operationId')
+            pdf_link = f'https://ng.tuf4ctur4.net.pe/operations/print_credit_note/{operation_id}/'
+            credit_note = OrderCreditNote.objects.create(
+                order=order_obj,
+                order_bill=order_bill,
+                serial=cn_serial,
+                n_receipt=int(correlative),
+                motive=motive[:2] if len(motive) <= 2 else '07',
+                total=round(total_invoice, 2),
+                status='E',
+                operation_id=int(operation_id or 0),
+                sunat_enlace_pdf=pdf_link,
+                user=user or order_bill.user,
+                company=order_obj.company,
+            )
+            return {
+                'success': True,
+                'message': cn_data.get('message'),
+                'operationId': operation_id,
+                'serie': cn_serial,
+                'numero': correlative,
+                'tipo_de_comprobante': '3',
+                'enlace_del_pdf': pdf_link,
+                'credit_note_id': credit_note.id,
+            }
+
+        return {
+            'success': False,
+            'message': 'La operación no fue exitosa, revise la venta e informe a Sistemas',
+            'error': cn_data.get('error'),
+        }
+
+    except requests.exceptions.RequestException as e:
+        return {'success': False, 'error': f'Error en la solicitud: {str(e)}'}
+    except ValueError:
+        return {'success': False, 'error': 'La respuesta no es un JSON válido'}
