@@ -4,6 +4,9 @@
         <div class="rv-report-toolbar-left">
             <span class="rv-report-count">{{ count }} comprobante{{ count|pluralize:"s" }}</span>
             <span class="rv-report-period">{{ f1 }} — {{ f2 }}</span>
+            {% if subsidiary_name %}
+                <span class="rv-report-sede-inline"><i class="fas fa-building"></i> {{ subsidiary_name }}</span>
+            {% endif %}
         </div>
         <div class="rv-report-toolbar-right">
             <div class="rv-report-search-inline">

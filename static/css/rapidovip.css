@@ -7954,6 +7954,19 @@ a.rv-btn,
 }
 
 /* ---- COMPROBANTES ELECTRÓNICOS ---- */
+.rv-report-sede-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: 0.75rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
 .rv-evoucher-page .rv-evoucher-hero {
     background: linear-gradient(135deg, #1a3a5c 0%, #2563eb 55%, #3b82f6 100%);
 }

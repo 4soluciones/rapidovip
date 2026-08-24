@@ -6,7 +6,7 @@
     <div class="rv-report-hero rv-evoucher-hero">
         <div class="rv-report-hero-text">
             <h1><i class="fas fa-file-invoice-dollar"></i> Comprobantes electrónicos</h1>
-            <p>Boletas, facturas y notas de crédito emitidas — consulta, anulación y notas de crédito</p>
+            <p>Boletas, facturas y notas de crédito emitidas por sede — consulta, anulación y notas de crédito</p>
         </div>
         <div class="rv-report-hero-meta">
             <span class="rv-report-sede"><i class="fas fa-building"></i> {{ subsidiary.name }}</span>
@@ -17,6 +17,19 @@
         <form class="rv-filter-bar" id="evoucher-search-form" method="POST">
             {% csrf_token %}
             <div class="rv-form-grid rv-form-grid-4">
+                <div class="rv-form-group">
+                    <label for="filter-subsidiary">Sede</label>
+                    {% if is_admin %}
+                        <select class="rv-form-control" id="filter-subsidiary" name="subsidiary" required>
+                            {% for s in subsidiaries %}
+                                <option value="{{ s.id }}" {% if subsidiary and s.id == subsidiary.id %}selected{% endif %}>{{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                    {% else %}
+                        <input type="hidden" name="subsidiary" value="{{ subsidiary.id }}">
+                        <input type="text" class="rv-form-control" id="filter-subsidiary" value="{{ subsidiary.name }}" readonly>
+                    {% endif %}
+                </div>
                 <div class="rv-form-group">
                     <label for="id-start-date">Desde</label>
                     <input type="date" class="rv-form-control" id="id-start-date" name="start-date" value="{{ date_now }}" required>
@@ -122,7 +135,7 @@
             '<i class="fas fa-spinner fa-spin fa-2x text-muted"></i></div></div></div>'
         );
         $('#credit-note-modal').modal('show');
-        $.get('{% url "sales:credit_note_modal" 0 %}'.replace('/0/', '/' + orderId + '/'))
+        $.get('{% url "sales:credit_note_modal" 0 %}'.replace('/0/', '/' + orderId + '/'), $('#evoucher-search-form').serialize())
             .done(function (html) {
                 $('#credit-note-modal-content').html(html);
             })

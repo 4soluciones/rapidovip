@@ -23,9 +23,70 @@ from apps.sales.models import (
     OrderCreditNote,
     OrderDetail,
 )
+from apps.users.models import Company, CompanyUser, Subsidiary, SubsidiarySerial
+from apps.users.roles import user_is_administrator
 from apps.users.user_helpers import get_subsidiary_by_user
 
 ANNUL_DAYS_LIMIT = {'B': 5, 'F': 3}
+
+
+def _company_for_user(user):
+    try:
+        return user.companyuser.company_rotation
+    except CompanyUser.DoesNotExist:
+        return Company.objects.filter(is_enabled=True).first()
+
+
+def _voucher_belongs_to_subsidiary(order, order_bill, subsidiary, company):
+    """Valida que el comprobante corresponda a las series de la sede consultada."""
+    if not subsidiary:
+        return False
+    bill_serials, _cn_serials = _subsidiary_voucher_serials(subsidiary, company)
+    bill_serial = (order_bill.serial or order.serial or '').strip()
+    if bill_serials:
+        return bill_serial in bill_serials
+    return order.subsidiary_id == subsidiary.id
+
+
+def _resolve_report_subsidiary(request):
+    """Sede del reporte: la activa del usuario o la elegida (solo administradores)."""
+    subsidiary = get_subsidiary_by_user(request.user)
+    subsidiary_id = (request.POST.get('subsidiary') or request.GET.get('subsidiary') or '').strip()
+    if subsidiary_id.isdigit() and user_is_administrator(request.user):
+        selected = Subsidiary.objects.filter(pk=int(subsidiary_id), is_enabled=True).first()
+        if selected:
+            subsidiary = selected
+    return subsidiary
+
+
+def _subsidiary_voucher_serials(subsidiary, company):
+    """
+    Series de boleta/factura y notas de crédito configuradas para la sede.
+    El filtro por serie evita mezclar comprobantes emitidos en otra sede
+    (p. ej. cobro en destino con serie distinta a la sede de origen de la orden).
+    """
+    if not subsidiary or not company:
+        return [], []
+
+    records = SubsidiarySerial.objects.filter(
+        subsidiary=subsidiary,
+        company=company,
+        service_type='E',
+        document_type__in=('B', 'F'),
+        active=True,
+    )
+    bill_serials = []
+    credit_note_serials = []
+    for record in records:
+        serial = (record.serial or '').strip()
+        if not serial:
+            continue
+        bill_serials.append(serial)
+        prefix = serial[0].upper()
+        if prefix in ('F', 'B'):
+            credit_note_serials.append(f'{prefix}N01')
+
+    return bill_serials, list(dict.fromkeys(credit_note_serials))
 
 
 def _emission_date(order_bill, order):
@@ -158,15 +219,30 @@ def _build_voucher_rows(bills_qs, credit_notes_qs):
     return rows
 
 
-def _filter_voucher_querysets(subsidiary, start_date, end_date, doc_filter=''):
-    bill_qs = OrderBill.objects.filter(
-        order__subsidiary=subsidiary,
-        order__type_document__in=('B', 'F'),
-    ).select_related('order', 'order__client', 'order__user', 'order__company')
+def _filter_voucher_querysets(subsidiary, company, start_date, end_date, doc_filter=''):
+    bill_serials, cn_serials = _subsidiary_voucher_serials(subsidiary, company)
 
-    cn_qs = OrderCreditNote.objects.filter(
-        order__subsidiary=subsidiary,
-    ).select_related('order', 'order__client', 'order__user', 'order_bill', 'user')
+    bill_qs = OrderBill.objects.filter(
+        order__type_document__in=('B', 'F'),
+    ).select_related('order', 'order__client', 'order__user', 'order__company', 'order__subsidiary')
+
+    cn_qs = OrderCreditNote.objects.filter().select_related(
+        'order', 'order__client', 'order__user', 'order__subsidiary', 'order_bill', 'user',
+    )
+
+    if bill_serials:
+        bill_qs = bill_qs.filter(serial__in=bill_serials)
+    else:
+        bill_qs = bill_qs.filter(order__subsidiary=subsidiary)
+
+    if cn_serials:
+        cn_qs = cn_qs.filter(serial__in=cn_serials)
+    else:
+        cn_qs = cn_qs.filter(order__subsidiary=subsidiary)
+
+    if company:
+        bill_qs = bill_qs.filter(company=company)
+        cn_qs = cn_qs.filter(company=company)
 
     if start_date and end_date:
         bill_qs = bill_qs.filter(
@@ -188,8 +264,10 @@ def _filter_voucher_querysets(subsidiary, start_date, end_date, doc_filter=''):
     return bill_qs, cn_qs
 
 
-def _render_voucher_grid(request, subsidiary, start_date, end_date, doc_filter=''):
-    bill_qs, cn_qs = _filter_voucher_querysets(subsidiary, start_date, end_date, doc_filter)
+def _render_voucher_grid(request, subsidiary, company, start_date, end_date, doc_filter=''):
+    bill_qs, cn_qs = _filter_voucher_querysets(
+        subsidiary, company, start_date, end_date, doc_filter,
+    )
     rows = _build_voucher_rows(bill_qs, cn_qs)
     total_amount = sum(
         (r['total'] for r in rows if not r['is_cancelled']),
@@ -203,45 +281,63 @@ def _render_voucher_grid(request, subsidiary, start_date, end_date, doc_filter='
         'f2': end_date,
         'total_amount': total_amount,
         'doc_filter': doc_filter,
+        'subsidiary_name': subsidiary.name if subsidiary else '',
     }, request)
 
 
 @login_required
 def electronic_voucher_report(request):
-    subsidiary = get_subsidiary_by_user(request.user)
+    subsidiary = _resolve_report_subsidiary(request)
+    company = _company_for_user(request.user)
     date_now = datetime.now().strftime('%Y-%m-%d')
+    is_admin = user_is_administrator(request.user)
+    subsidiaries = Subsidiary.objects.filter(is_enabled=True).order_by('name') if is_admin else []
 
     if request.method == 'GET':
         return render(request, 'sales/electronic_voucher_report.html', {
             'date_now': date_now,
             'subsidiary': subsidiary,
+            'company': company,
             'doc_types': (
                 ('', 'Todos'),
                 ('B', 'Boletas'),
                 ('F', 'Facturas'),
                 ('NC', 'Notas de crédito'),
             ),
+            'subsidiaries': subsidiaries,
+            'is_admin': is_admin,
         })
 
     if request.method == 'POST':
         start_date = (request.POST.get('start-date') or '').strip()
         end_date = (request.POST.get('end-date') or '').strip()
         doc_filter = (request.POST.get('doc_type') or '').strip()
+        subsidiary = _resolve_report_subsidiary(request)
+
+        if not subsidiary:
+            return JsonResponse({'error': 'No se pudo determinar la sede del reporte.'}, status=HTTPStatus.BAD_REQUEST)
 
         if not start_date or not end_date:
             return JsonResponse({'error': 'Indique el rango de fechas.'}, status=HTTPStatus.BAD_REQUEST)
 
-        grid_html = _render_voucher_grid(request, subsidiary, start_date, end_date, doc_filter)
-        bill_qs, cn_qs = _filter_voucher_querysets(subsidiary, start_date, end_date, doc_filter)
+        grid_html = _render_voucher_grid(
+            request, subsidiary, company, start_date, end_date, doc_filter,
+        )
+        bill_qs, cn_qs = _filter_voucher_querysets(
+            subsidiary, company, start_date, end_date, doc_filter,
+        )
         count = bill_qs.count() + cn_qs.count()
 
         if count == 0:
             return JsonResponse({
-                'error': f'No hay comprobantes electrónicos del {start_date} al {end_date}.',
+                'error': (
+                    f'No hay comprobantes electrónicos en {subsidiary.name} '
+                    f'del {start_date} al {end_date}.'
+                ),
                 'grid': (
                     '<div class="rv-report-empty"><i class="fas fa-inbox"></i>'
-                    f'<p>No hay comprobantes electrónicos del <strong>{start_date}</strong> '
-                    f'al <strong>{end_date}</strong>.</p></div>'
+                    f'<p>No hay comprobantes electrónicos en <strong>{subsidiary.name}</strong> '
+                    f'del {start_date} al {end_date}.</p></div>'
                 ),
             }, status=HTTPStatus.OK)
 
@@ -264,12 +360,17 @@ def annul_electronic_voucher(request):
     except (TypeError, ValueError):
         return JsonResponse({'error': 'Comprobante no válido.'}, status=HTTPStatus.BAD_REQUEST)
 
-    subsidiary = get_subsidiary_by_user(request.user)
+    subsidiary = _resolve_report_subsidiary(request)
+    company = _company_for_user(request.user)
     try:
-        order = Order.objects.get(pk=order_id, subsidiary=subsidiary, type_document__in=('B', 'F'))
+        order = Order.objects.get(pk=order_id, type_document__in=('B', 'F'))
         order_bill = OrderBill.objects.get(order=order)
     except (Order.DoesNotExist, OrderBill.DoesNotExist):
         return JsonResponse({'error': 'El comprobante no existe.'}, status=HTTPStatus.NOT_FOUND)
+
+    bill_serials, _cn_serials = _subsidiary_voucher_serials(subsidiary, company)
+    if not _voucher_belongs_to_subsidiary(order, order_bill, subsidiary, company):
+        return JsonResponse({'error': 'El comprobante no pertenece a la sede seleccionada.'}, status=HTTPStatus.FORBIDDEN)
 
     can_annul, annul_msg = _can_annul_voucher(order_bill, order)
     if not can_annul:
@@ -290,7 +391,9 @@ def annul_electronic_voucher(request):
     start_date = (request.POST.get('start-date') or '').strip()
     end_date = (request.POST.get('end-date') or '').strip()
     doc_filter = (request.POST.get('doc_type') or '').strip()
-    grid_html = _render_voucher_grid(request, subsidiary, start_date, end_date, doc_filter)
+    grid_html = _render_voucher_grid(
+        request, subsidiary, company, start_date, end_date, doc_filter,
+    )
 
     return JsonResponse({
         'message': 'Comprobante anulado correctamente en SUNAT.',
@@ -300,7 +403,8 @@ def annul_electronic_voucher(request):
 
 @login_required
 def credit_note_modal(request, order_id):
-    subsidiary = get_subsidiary_by_user(request.user)
+    subsidiary = _resolve_report_subsidiary(request)
+    company = _company_for_user(request.user)
     try:
         order = Order.objects.prefetch_related(
             Prefetch('orderdetail_set', queryset=OrderDetail.objects.select_related('unit')),
@@ -309,10 +413,13 @@ def credit_note_modal(request, order_id):
                 queryset=ClientType.objects.select_related('document_type'),
             ),
             Prefetch('client__clientaddress_set'),
-        ).get(pk=order_id, subsidiary=subsidiary, type_document__in=('B', 'F'))
+        ).get(pk=order_id, type_document__in=('B', 'F'))
         order_bill = OrderBill.objects.get(order=order)
     except (Order.DoesNotExist, OrderBill.DoesNotExist):
         return JsonResponse({'error': 'Comprobante no encontrado.'}, status=HTTPStatus.NOT_FOUND)
+
+    if not _voucher_belongs_to_subsidiary(order, order_bill, subsidiary, company):
+        return JsonResponse({'error': 'El comprobante no pertenece a la sede seleccionada.'}, status=HTTPStatus.FORBIDDEN)
 
     if not _can_issue_credit_note(order_bill, order):
         return JsonResponse({
@@ -354,12 +461,16 @@ def send_credit_note(request):
     if not motive:
         return JsonResponse({'error': 'Seleccione el motivo de la nota de crédito.'}, status=HTTPStatus.BAD_REQUEST)
 
-    subsidiary = get_subsidiary_by_user(request.user)
+    subsidiary = _resolve_report_subsidiary(request)
+    company = _company_for_user(request.user)
     try:
-        order = Order.objects.get(pk=order_id, subsidiary=subsidiary, type_document__in=('B', 'F'))
+        order = Order.objects.get(pk=order_id, type_document__in=('B', 'F'))
         order_bill = OrderBill.objects.get(order=order)
     except (Order.DoesNotExist, OrderBill.DoesNotExist):
         return JsonResponse({'error': 'Comprobante no encontrado.'}, status=HTTPStatus.NOT_FOUND)
+
+    if not _voucher_belongs_to_subsidiary(order, order_bill, subsidiary, company):
+        return JsonResponse({'error': 'El comprobante no pertenece a la sede seleccionada.'}, status=HTTPStatus.FORBIDDEN)
 
     if not _can_issue_credit_note(order_bill, order):
         return JsonResponse({
@@ -391,7 +502,9 @@ def send_credit_note(request):
     start_date = (request.POST.get('start-date') or '').strip()
     end_date = (request.POST.get('end-date') or '').strip()
     doc_filter = (request.POST.get('doc_type') or '').strip()
-    grid_html = _render_voucher_grid(request, subsidiary, start_date, end_date, doc_filter)
+    grid_html = _render_voucher_grid(
+        request, subsidiary, company, start_date, end_date, doc_filter,
+    )
 
     return JsonResponse({
         'message': result.get('message') or 'Nota de crédito emitida correctamente.',
