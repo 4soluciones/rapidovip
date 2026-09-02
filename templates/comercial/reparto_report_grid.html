@@ -59,6 +59,9 @@
                     <td>
                         <span class="rv-report-doc">{{ order.order_service_number }}</span>
                         <small class="rv-report-doc-type">Origen: {{ order.origin_office }}</small>
+                        {% if order.is_own_origin %}
+                            <small class="rv-report-doc-type">Emitida en esta sede</small>
+                        {% endif %}
                         {% if order.destiny_label %}
                             <small class="rv-report-doc-type">{{ order.destiny_label }}</small>
                         {% endif %}
@@ -134,13 +137,13 @@
                         {% endif %}
                     </td>
                     <td class="rv-report-actions noExl">
-                        {% if order.is_cash and order.status != 'A' and not order.is_delivered %}
+                        {% if order.can_operate and order.is_cash and order.status != 'A' and not order.is_delivered %}
                             <button type="button"
                                     class="rv-report-action-btn rv-reception-action-deliver btn-cash-delivery"
                                     data-id="{{ order.id }}" title="Registrar entrega">
                                 <i class="fas fa-box-open"></i>
                             </button>
-                        {% elif not order.can_collect %}
+                        {% elif not order.can_operate or not order.can_collect %}
                             <a class="rv-report-action-btn"
                                href="{% url 'comercial:print_ticket_order_commodity' order.id %}"
                                target="_blank" title="Ver orden de servicio">
@@ -153,7 +156,7 @@
                                target="_blank" title="Ver comprobante PDF">
                                 <i class="fas fa-file-pdf"></i>
                             </a>
-                        {% elif order.can_collect %}
+                        {% elif order.can_operate and order.can_collect %}
                             <button type="button"
                                     class="rv-report-action-btn rv-reception-action-collect btn-collect-destination"
                                     data-id="{{ order.id }}" title="Cobrar y emitir comprobante">
@@ -169,7 +172,7 @@
     {% else %}
     <div class="rv-report-empty rv-reception-empty">
         <i class="fas fa-truck"></i>
-        <p>No se encontraron encomiendas de reparto (origen distinto de <strong>{{ subsidiary.name }}</strong>)
+        <p>No se encontraron encomiendas de reparto
             con los criterios seleccionados.</p>
     </div>
     {% endif %}

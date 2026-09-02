@@ -2,14 +2,14 @@ import decimal
 import json
 import random
 import string
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from http import HTTPStatus
 
 from django.contrib.auth.models import User
 from django.core import serializers
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.template import loader
@@ -1507,6 +1507,22 @@ def _normalize_delivery_filter(value):
     return 'pending'
 
 
+def _orders_in_local_date_range(start_date, end_date):
+    """
+    Incluye la orden si la fecha de traslado O la fecha local de registro
+    caen en el rango (ambos extremos inclusive).
+
+    Evita perder encomiendas creadas un día con traslado al día siguiente:
+    create_at se guarda en UTC y transfer_date puede diferir del día de emisión.
+    """
+    tz = timezone.get_current_timezone()
+    start_dt = timezone.make_aware(datetime.combine(start_date, time.min), tz)
+    end_dt = timezone.make_aware(datetime.combine(end_date, time.max), tz)
+    return Q(transfer_date__range=[start_date, end_date]) | Q(
+        create_at__range=(start_dt, end_dt),
+    )
+
+
 def _apply_reception_type_commodity(encomienda, type_commodity):
     """Actualiza type_commodity y alinea status_transport cuando se entrega."""
     code = (type_commodity or '').strip().upper()
@@ -1537,7 +1553,7 @@ def _reception_orders(
             orderaction__client__clienttype__document_number=dni,
         )
     elif start_date and end_date:
-        orders = orders.filter(transfer_date__range=[start_date, end_date])
+        orders = orders.filter(_orders_in_local_date_range(start_date, end_date))
 
     delivery_filter = _normalize_delivery_filter(delivery_filter)
     if delivery_filter == 'delivered':
@@ -1649,15 +1665,14 @@ def _reparto_orders(
     subsidiary_obj, company_obj, start_date=None, end_date=None, dni='', delivery_filter='pending',
 ):
     """
-    Encomiendas REPARTO de la empresa cuyo origen NO es la sede activa.
-    Así la sede de origen no ve en este reporte lo que ya emitió.
+    Encomiendas REPARTO de la empresa: las emitidas en esta sede y las
+    recibidas de otras. El cobro/entrega en destino sigue restringido a
+    origen distinto (ver _order_is_accessible_for_destination_actions).
     """
     orders = Order.objects.filter(
         type_order='E',
         company=company_obj,
         encomienda__type_guide='R',
-    ).exclude(
-        encomienda__office_origin=subsidiary_obj,
     )
     if dni:
         orders = orders.filter(
@@ -1665,7 +1680,7 @@ def _reparto_orders(
             orderaction__client__clienttype__document_number=dni,
         )
     elif start_date and end_date:
-        orders = orders.filter(transfer_date__range=[start_date, end_date])
+        orders = orders.filter(_orders_in_local_date_range(start_date, end_date))
 
     delivery_filter = _normalize_delivery_filter(delivery_filter)
     if delivery_filter == 'delivered':
@@ -1678,23 +1693,29 @@ def _reparto_orders(
     ).order_by('-transfer_date', '-id')
 
 
-def _reparto_order_values(order_set):
+def _reparto_order_values(order_set, subsidiary_obj=None):
     rows = _reception_order_values(order_set)
     orders_by_id = {order.id: order for order in order_set}
+    subsidiary_id = subsidiary_obj.id if subsidiary_obj is not None else None
     for row in rows:
         order_obj = orders_by_id[row['id']]
         encomienda = order_obj.encomienda
         delivery = encomienda.delivery_destination
+        origin_id = encomienda.office_origin_id or order_obj.subsidiary_id
+        is_own_origin = subsidiary_id is not None and origin_id == subsidiary_id
+        can_operate = not is_own_origin
         row.update({
             'destiny_label': encomienda.effective_destination_label(),
             'address_delivery': (encomienda.address_delivery or '').strip(),
             'delivery_destination_name': (delivery.name if delivery else '') or '',
+            'is_own_origin': is_own_origin,
+            'can_operate': can_operate,
         })
     return rows
 
 
 def reparto_report(request):
-    """Reporte de encomiendas REPARTO (excluye las emitidas en la sede activa)."""
+    """Reporte de encomiendas REPARTO (emitidas aquí o recibidas de otras sedes)."""
     user_obj = request.user
     subsidiary_obj = get_subsidiary_by_user(user_obj)
     company_obj = user_obj.companyuser.company_rotation
@@ -1738,7 +1759,7 @@ def reparto_report(request):
     order_set = list(_reparto_orders(
         subsidiary_obj, company_obj, start_date, end_date, dni, delivery_filter,
     ))
-    rows = _reparto_order_values(order_set)
+    rows = _reparto_order_values(order_set, subsidiary_obj)
     grid = loader.get_template('comercial/reparto_report_grid.html').render({
         'order_set': rows,
         'count': len(rows),
