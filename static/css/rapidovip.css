@@ -6396,6 +6396,28 @@ body.rv-body {
     border-bottom: 1px solid #eef2f6;
     background: #f8fafc;
 }
+.rv-assignment-manifest-dest {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem 1rem;
+    flex-wrap: wrap;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid #eef2f6;
+    background: #fffaf0;
+}
+.rv-assignment-manifest-dest label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #0b1f33;
+    margin: 0;
+}
+.rv-assignment-manifest-dest .rv-assignment-prog-select {
+    min-width: min(100%, 240px);
+}
+.rv-assignment-manifest-dest small {
+    color: #6b7c8f;
+    font-size: 0.78rem;
+}
 .rv-assignment-check-col {
     width: 2.2rem;
     text-align: center !important;
@@ -8062,6 +8084,14 @@ a.rv-btn,
 }
 
 /* Modal nota de crédito */
+#credit-note-modal {
+    z-index: 1060;
+}
+
+#credit-note-modal .modal-dialog {
+    pointer-events: auto;
+}
+
 .rv-credit-note-modal-dialog {
     max-width: 920px;
 }
@@ -8069,6 +8099,18 @@ a.rv-btn,
 .rv-credit-note-modal .modal-header {
     border-bottom: 1px solid #e2e8f0;
     padding: 1.1rem 1.25rem;
+    position: relative;
+}
+
+.rv-credit-note-modal .modal-header .rv-prog-modal-header-content {
+    min-width: 0;
+    flex: 1;
+}
+
+.rv-credit-note-modal .modal-header .close {
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
 }
 
 .rv-credit-note-modal-icon {

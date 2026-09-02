@@ -85,6 +85,7 @@ from .forms import FormDriver, FormProgramming, FormTruck
 from .guide_assignment import (
     assign_order_to_programming,
     create_cargo_manifest_for_programming,
+    unique_destination_labels,
     unassign_carrier_guide,
 )
 from .models import (
@@ -2758,6 +2759,10 @@ class GuideAssignmentView(TemplateView):
         except ValueError:
             search_date = today
 
+        guides_qs = CarrierRemissionGuide.objects.filter(status='I').select_related(
+            'order__encomienda__office_destination',
+            'order__encomienda__delivery_destination',
+        )
         programmings = Programming.objects.filter(
             subsidiary=subsidiary_obj,
             departure_date=search_date,
@@ -2769,7 +2774,21 @@ class GuideAssignmentView(TemplateView):
             'subsidiary',
             'company',
             'cargo_manifest',
-        ).prefetch_related('carrier_guides').order_by('truck_exit', 'id')
+        ).prefetch_related(
+            Prefetch('carrier_guides', queryset=guides_qs),
+        ).order_by('truck_exit', 'id')
+        for programming in programmings:
+            programming.manifest_destinations_json = json.dumps(
+                unique_destination_labels(programming.carrier_guides.all()),
+            )
+
+        subsidiary_destinations = []
+        seen_destinations = set()
+        for sub in Subsidiary.objects.filter(is_enabled=True).order_by('short_name', 'name'):
+            label = (sub.short_name or sub.name or '').strip().upper()
+            if label and label not in seen_destinations:
+                seen_destinations.add(label)
+                subsidiary_destinations.append(label)
 
         pending_orders = Order.objects.filter(
             subsidiary=subsidiary_obj,
@@ -2815,6 +2834,7 @@ class GuideAssignmentView(TemplateView):
             'assigned_guides': assigned_guides,
             'cargo_manifests': cargo_manifests,
             'subsidiary': subsidiary_obj,
+            'manifest_subsidiary_destinations_json': json.dumps(subsidiary_destinations),
         })
         return context
 
@@ -3096,6 +3116,13 @@ def create_cargo_manifest(request):
                 'message': f'La programación no pertenece a la sede activa ({subsidiary_obj.name}).',
             }, status=HTTPStatus.BAD_REQUEST)
 
+        destination_label = (request.POST.get('destination_label') or '').strip()
+        if not destination_label:
+            return JsonResponse({
+                'success': False,
+                'message': 'Seleccione el destino del manifiesto antes de emitir.',
+            }, status=HTTPStatus.BAD_REQUEST)
+
         guides = list(
             CarrierRemissionGuide.objects.filter(
                 programming=programming_obj, status='I',
@@ -3139,7 +3166,9 @@ def create_cargo_manifest(request):
                 send_warnings.append(f'GRT {guide.document_number()}: {detail}')
 
         # 3) Manifiesto de carga
-        manifest = create_cargo_manifest_for_programming(programming_obj, request.user)
+        manifest = create_cargo_manifest_for_programming(
+            programming_obj, request.user, destination_label=destination_label,
+        )
 
         message = f'Manifiesto {manifest.document_number()} emitido.'
         if sent_count:

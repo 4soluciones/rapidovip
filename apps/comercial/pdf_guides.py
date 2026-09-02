@@ -1071,8 +1071,22 @@ def _order_detail_quantity(order_obj, fallback_quantity):
 
 
 def _guide_destination_label(order_obj, encomienda_obj):
-    if encomienda_obj:
-        return encomienda_obj.effective_destination_label() or '-'
+    """Etiqueta compacta de destino para la columna estrecha del manifiesto."""
+    if not encomienda_obj:
+        return '-'
+    if encomienda_obj.is_reparto:
+        dest_name = ''
+        if encomienda_obj.delivery_destination_id:
+            dest_name = (encomienda_obj.delivery_destination.name or '').strip()
+        if not dest_name:
+            dest_name = (encomienda_obj.address_delivery or '').strip()
+        dest_name = dest_name.upper()
+        if dest_name:
+            return 'REPARTO<br/>{}'.format(dest_name)
+        return 'REPARTO'
+    office = getattr(encomienda_obj, 'office_destination', None)
+    if office:
+        return (office.short_name or office.name or '-').upper()
     return '-'
 
 
@@ -1181,6 +1195,7 @@ def print_cargo_manifest(request, pk=None):  # Manifiesto de Carga
     carrier_guides_qs = list(
         cargo_manifest_obj.carrier_guides.filter(status='I').select_related(
             'order', 'order__encomienda', 'order__encomienda__office_destination',
+            'order__encomienda__delivery_destination',
             'order__orderbill',
         ).prefetch_related(
             'order__orderdetail_set__unit',
@@ -1357,7 +1372,7 @@ def print_cargo_manifest(request, pk=None):  # Manifiesto de Carga
             unit_name,
             str(cantidad.to_integral_value() if cantidad == cantidad.to_integral_value() else cantidad),
             str(round(peso, 2)),
-            destino,
+            Paragraph(destino, styles['Helvetica_Center_7']),
             Paragraph(remitente, style_l7),
             Paragraph(destinatario, style_l7),
             Paragraph(related_doc, style_l7),
@@ -1366,7 +1381,7 @@ def print_cargo_manifest(request, pk=None):  # Manifiesto de Carga
     if not carrier_guides_qs:
         detail_rows.append(['-', '-', '-', '-', '-', '-', '-', 'SIN GRT EMITIDAS', '-', '-'])
 
-    col_widths = [_bts * pct / 100 for pct in (3, 7, 10, 7, 5, 5, 10, 16, 16, 21)]
+    col_widths = [_bts * pct / 100 for pct in (3, 7, 10, 7, 5, 5, 12, 16, 16, 19)]
     table_detail = Table(detail_rows, colWidths=col_widths, repeatRows=2)
     table_detail.setStyle(TableStyle([
         ('SPAN', (0, 0), (6, 0)),

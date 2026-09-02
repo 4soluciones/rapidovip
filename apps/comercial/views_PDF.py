@@ -875,8 +875,10 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
         ('FONTSIZE', (0, 0), (-1, -1), 8),
         ('FONTSIZE', (3, 0), (3, -1), 10),
         ('FONTNAME', (3, 0), (3, -1), 'Helvetica-Bold'),
-        ('RIGHTPADDING', (2, 0), (2, -1), 6),  # separa S/ del número
+        ('LEFTPADDING', (2, 0), (2, -1), 0),
+        ('RIGHTPADDING', (2, 0), (2, -1), 2),  # separa S/ del número
         ('ALIGNMENT', (2, 0), (2, -1), 'RIGHT'),  # third column
+        ('LEFTPADDING', (3, 0), (3, -1), 1),
         ('RIGHTPADDING', (3, 0), (3, -1), 0.3),  # four column
         ('ALIGNMENT', (3, 0), (3, -1), 'RIGHT'),  # four column
         ('LEFTPADDING', (0, 0), (0, -1), 0.5),  # first column
@@ -1071,10 +1073,11 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
     ana_c7 = Table(_rows, colWidths=col_detail, rowHeights=0.28 * inch)
     ana_c7.setStyle(TableStyle(my_style_table4))
 
-    td_importe_total = ('IMPORTE TOTAL', '', 'S/', str(decimal.Decimal(round(total, 2))))
+    td_importe_total = (
+        'IMPORTE TOTAL', '', 'S/', '{:.2f}'.format(decimal.Decimal(round(total, 2))))
 
     ana_c8 = Table([td_importe_total],
-                   colWidths=[_wt * 60 / 100, _wt * 10 / 100, _wt * 17 / 100, _wt * 13 / 100])
+                   colWidths=[_wt * 54 / 100, _wt * 8 / 100, _wt * 17 / 100, _wt * 21 / 100])
 
     ana_c8.setStyle(TableStyle(my_style_table5))
 

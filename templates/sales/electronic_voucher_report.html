@@ -66,14 +66,44 @@
     </div>
 </div>
 
-<div class="modal fade" id="credit-note-modal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div id="credit-note-modal-content"></div>
-</div>
+<div class="modal fade" id="credit-note-modal" tabindex="-1" role="dialog" aria-hidden="true"></div>
 {% endblock %}
 
 {% block extrajs %}
 <script type="text/javascript">
 (function () {
+    var creditNoteUrlTpl = '{% url "sales:credit_note_modal" 123456789 %}';
+    var sendCreditNoteUrl = '{% url "sales:send_credit_note" %}';
+
+    function creditNoteModal() {
+        return $('#credit-note-modal');
+    }
+
+    function stripCreditNoteModal() {
+        var $modal = creditNoteModal();
+        var instance = $modal.data('bs.modal');
+        if (instance) {
+            instance._isTransitioning = false;
+        }
+        if (instance) {
+            $modal.modal('dispose');
+        }
+        $modal.removeClass('show').hide().attr('aria-hidden', 'true').removeData('bs.modal');
+        $('.modal-backdrop').remove();
+        $('body').removeClass('modal-open').css('padding-right', '');
+    }
+
+    function closeCreditNoteModal() {
+        var $modal = creditNoteModal();
+        var instance = $modal.data('bs.modal');
+        if (instance) {
+            instance._isTransitioning = false;
+            $modal.modal('hide');
+            return;
+        }
+        stripCreditNoteModal();
+    }
+
     $('#evoucher-search-form').on('submit', function (e) {
         e.preventDefault();
         var $btn = $('#btn-evoucher-search');
@@ -128,20 +158,70 @@
     });
 
     $(document).on('click', '.btn-evoucher-credit-note', function () {
-        var orderId = $(this).data('id');
-        $('#credit-note-modal-content').html(
-            '<div class="modal-dialog modal-dialog-centered modal-xl">' +
-            '<div class="modal-content rv-modal"><div class="modal-body text-center py-5">' +
-            '<i class="fas fa-spinner fa-spin fa-2x text-muted"></i></div></div></div>'
-        );
-        $('#credit-note-modal').modal('show');
-        $.get('{% url "sales:credit_note_modal" 0 %}'.replace('/0/', '/' + orderId + '/'), $('#evoucher-search-form').serialize())
+        var $btn = $(this);
+        if ($btn.prop('disabled')) return;
+        var orderId = $btn.data('id');
+        var url = creditNoteUrlTpl.replace('123456789', String(orderId));
+        var $icon = $btn.find('i');
+
+        $btn.prop('disabled', true);
+        $icon.removeClass('fa-undo-alt').addClass('fa-spinner fa-spin');
+
+        $.get(url, $('#evoucher-search-form').serialize())
             .done(function (html) {
-                $('#credit-note-modal-content').html(html);
+                var $modal = creditNoteModal();
+                stripCreditNoteModal();
+                $modal.html(html).appendTo(document.body).modal('show');
             })
             .fail(function (xhr) {
-                $('#credit-note-modal').modal('hide');
+                stripCreditNoteModal();
                 toastr.error(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'No se pudo cargar el modal.');
+            })
+            .always(function () {
+                $btn.prop('disabled', false);
+                $icon.removeClass('fa-spinner fa-spin').addClass('fa-undo-alt');
+            });
+    });
+
+    $(document).on('click', '#credit-note-modal [data-dismiss="modal"]', function (e) {
+        e.preventDefault();
+        closeCreditNoteModal();
+    });
+
+    $(document).on('hidden.bs.modal', '#credit-note-modal', function () {
+        var $modal = $(this);
+        $modal.empty();
+        if (!$('.modal.show').length) {
+            $('.modal-backdrop').remove();
+            $('body').removeClass('modal-open').css('padding-right', '');
+        }
+    });
+
+    $(document).on('submit', '#credit-note-form', function (e) {
+        e.preventDefault();
+        var $btn = $('#btn-send-credit-note');
+        if ($btn.prop('disabled')) return;
+
+        var motiveLabel = $('#credit-note-motive option:selected').text();
+        if (!confirm('¿Confirma emitir la nota de crédito?\nMotivo: ' + motiveLabel)) return;
+
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Emitiendo...');
+
+        var payload = $('#evoucher-search-form').serialize() +
+            '&' + $('#credit-note-form').serialize();
+
+        $.post(sendCreditNoteUrl, payload)
+            .done(function (r) {
+                toastr.success(r.message || 'Nota de crédito emitida.');
+                closeCreditNoteModal();
+                if (r.grid) $('#evoucher-results').html(r.grid);
+                if (r.pdf_url) window.open(r.pdf_url, '_blank');
+            })
+            .fail(function (xhr) {
+                toastr.error(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error al emitir.');
+            })
+            .always(function () {
+                $btn.prop('disabled', false).html('<i class="fas fa-paper-plane"></i> Emitir nota de crédito');
             });
     });
 })();

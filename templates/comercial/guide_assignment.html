@@ -8,7 +8,8 @@
      data-url-assign="{% url 'comercial:assign_order_guide' %}"
      data-url-manifest="{% url 'comercial:create_cargo_manifest' %}"
      data-url-unassign="{% url 'comercial:unassign_order_guide' %}"
-     data-csrf="{{ csrf_token }}">
+     data-csrf="{{ csrf_token }}"
+     data-subsidiary-destinations="{{ manifest_subsidiary_destinations_json|default:'[]' }}">
 
     <header class="rv-assignment-hero">
         <div>
@@ -94,6 +95,8 @@
                          data-status="{{ p.get_status_display }}"
                          data-has-manifest="{% if p.cargo_manifest %}1{% else %}0{% endif %}"
                          data-grt-count="{{ p.carrier_guides.all|length }}"
+                         data-destinations="{{ p.manifest_destinations_json|default:'[]' }}"
+                         data-manifest-destination="{% if p.cargo_manifest %}{{ p.cargo_manifest.destination_label }}{% endif %}"
                          {% if programmings|length == 1 %}style="display:block;"{% elif forloop.first %}style="display:block;"{% else %}style="display:none;"{% endif %}>
                     <div class="rv-assignment-prog-card-head">
                         <div>
@@ -334,6 +337,13 @@
                         EMITIR MANIFIESTO Y GENERAR GRTs
                     </button>
                 </header>
+                <div class="rv-assignment-manifest-dest">
+                    <label for="manifest-destination">Destino del manifiesto</label>
+                    <select id="manifest-destination" class="rv-assignment-prog-select">
+                        <option value="">Seleccione destino…</option>
+                    </select>
+                    <small>Se imprime en la cabecera del PDF. Elijalo antes de emitir.</small>
+                </div>
                 <p class="rv-assignment-hint" id="manifest-hint">
                     Valida las GRT de la programación, las envía a facturación electrónica (4FACT)
                     y emite el manifiesto de carga.
@@ -344,6 +354,7 @@
                             <tr>
                                 <th>Manifiesto</th>
                                 <th>Unidad</th>
+                                <th>Destino</th>
                                 <th>GRT</th>
                                 <th>Bultos</th>
                                 <th>Peso</th>
@@ -356,6 +367,7 @@
                             <tr>
                                 <td><strong>{{ m.document_number }}</strong></td>
                                 <td>{% if m.truck %}{{ m.truck.license_plate }}{% else %}—{% endif %}</td>
+                                <td>{{ m.destination_label|default:'—' }}</td>
                                 <td>{{ m.guides_count }}</td>
                                 <td>{{ m.quantity_packages }}</td>
                                 <td>{{ m.total_weight }} kg</td>
@@ -366,7 +378,7 @@
                                 </td>
                             </tr>
                             {% empty %}
-                            <tr><td colspan="7" class="rv-assignment-empty">Aún no hay manifiestos de carga.</td></tr>
+                            <tr><td colspan="8" class="rv-assignment-empty">Aún no hay manifiestos de carga.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -469,6 +481,50 @@
     }
 
     // --------------------------- Programación ---------------------------
+    function parseJsonList(raw) {
+        if (!raw) return [];
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function fillManifestDestinations(card) {
+        const select = document.getElementById('manifest-destination');
+        if (!select) return;
+        const fromGuides = parseJsonList(card && card.dataset.destinations);
+        const subsidiaries = parseJsonList(root.dataset.subsidiaryDestinations);
+        const current = ((card && card.dataset.manifestDestination) || '').trim().toUpperCase();
+        const seen = new Set();
+        const options = [];
+
+        function addOption(label) {
+            const value = String(label || '').trim().toUpperCase();
+            if (!value || value === 'VARIOS' || value === '—' || seen.has(value)) return;
+            seen.add(value);
+            options.push(value);
+        }
+
+        fromGuides.forEach(addOption);
+        subsidiaries.forEach(addOption);
+        addOption(current);
+
+        select.innerHTML = '<option value="">Seleccione destino…</option>' +
+            options.map(function (label) {
+                return '<option value="' + label.replace(/"/g, '&quot;') + '">' + label + '</option>';
+            }).join('');
+
+        if (current && current !== 'VARIOS' && seen.has(current)) {
+            select.value = current;
+        } else if (fromGuides.length === 1) {
+            select.value = String(fromGuides[0] || '').trim().toUpperCase();
+        } else {
+            select.value = '';
+        }
+    }
+
     function selectProgramming(card) {
         if (!card) return;
         document.querySelectorAll('.rv-assignment-prog-card').forEach(el => {
@@ -490,6 +546,7 @@
         if (sel && sel.value !== selectedProgrammingId) {
             sel.value = selectedProgrammingId;
         }
+        fillManifestDestinations(card);
     }
 
     const firstCard = document.querySelector('.rv-assignment-prog-card.is-selected')
@@ -617,9 +674,17 @@
                 toast(false, 'Seleccione una programación.');
                 return;
             }
-            if (!confirm('¿Emitir el manifiesto y enviar las GRT a facturación electrónica?')) return;
+            const destSelect = document.getElementById('manifest-destination');
+            const destination = destSelect ? (destSelect.value || '').trim() : '';
+            if (!destination) {
+                toast(false, 'Seleccione el destino del manifiesto antes de emitir.');
+                if (destSelect) destSelect.focus();
+                return;
+            }
+            if (!confirm('¿Emitir el manifiesto con destino ' + destination + ' y enviar las GRT a facturación electrónica?')) return;
             const fd = new FormData();
             fd.append('programming_id', selectedProgrammingId);
+            fd.append('destination_label', destination);
             fd.append('csrfmiddlewaretoken', csrf);
             this.disabled = true;
             showLoader('Validando GRTs, enviando a 4FACT y emitiendo el manifiesto…');

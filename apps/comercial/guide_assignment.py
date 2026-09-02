@@ -88,27 +88,44 @@ def related_document_for_order(order_obj):
     return ''
 
 
-def _destination_label_for_guides(carrier_guides):
+def compact_destination_label(encomienda_obj):
+    """Nombre corto de destino (sede o destino de reparto) para el manifiesto."""
+    if not encomienda_obj:
+        return ''
+    if encomienda_obj.is_reparto:
+        dest_name = ''
+        if encomienda_obj.delivery_destination_id:
+            dest_name = (encomienda_obj.delivery_destination.name or '').strip()
+        if not dest_name:
+            dest_name = (encomienda_obj.address_delivery or '').strip()
+        return dest_name.upper() if dest_name else 'REPARTO'
+    office = getattr(encomienda_obj, 'office_destination', None)
+    if office:
+        return ((office.short_name or office.name) or '').strip().upper()
+    return ''
+
+
+def unique_destination_labels(carrier_guides):
+    """Destinos únicos y compactos de las GRT (sin prefijo REPARTO duplicado)."""
     labels = []
+    seen = set()
     for guide in carrier_guides:
-        order = guide.order
+        order = getattr(guide, 'order', None)
         if not order:
             continue
-        encomienda = getattr(order, 'encomienda', None)
-        if not encomienda:
+        label = compact_destination_label(getattr(order, 'encomienda', None))
+        if not label or label in seen:
             continue
-        label = encomienda.effective_destination_label()
-        if label and label != '—':
-            labels.append(label)
-    unique = []
-    for label in labels:
-        if label and label not in unique:
-            unique.append(label)
-    if not unique:
-        return '—'
-    if len(unique) == 1:
-        return unique[0]
-    return 'VARIOS'
+        seen.add(label)
+        labels.append(label)
+    return labels
+
+
+def _destination_label_for_guides(carrier_guides):
+    labels = unique_destination_labels(carrier_guides)
+    if len(labels) == 1:
+        return labels[0]
+    return ''
 
 
 @transaction.atomic
@@ -188,14 +205,19 @@ def assign_order_to_programming(order_obj, programming_obj, user):
 
 
 @transaction.atomic
-def create_cargo_manifest_for_programming(programming_obj, user):
+def create_cargo_manifest_for_programming(programming_obj, user, destination_label=None):
     """
     Emite/actualiza el manifiesto de carga agrupando las GRT de la programación.
+    El destino de cabecera debe indicarse al emitir; no se usa VARIOS.
     """
     carrier_guides = list(
         CarrierRemissionGuide.objects.filter(
             programming=programming_obj, status='I',
-        ).select_related('order', 'order__encomienda')
+        ).select_related(
+            'order', 'order__encomienda',
+            'order__encomienda__office_destination',
+            'order__encomienda__delivery_destination',
+        )
     )
     if not carrier_guides:
         raise ValueError('No hay guías transportista emitidas para esta programación.')
@@ -203,7 +225,11 @@ def create_cargo_manifest_for_programming(programming_obj, user):
     weight = sum((g.total_weight or 0) for g in carrier_guides)
     packages = sum((g.quantity_packages or 0) for g in carrier_guides)
     amount = sum((g.order.total or 0) for g in carrier_guides if g.order_id)
-    destination = _destination_label_for_guides(carrier_guides)
+    destination = (destination_label or '').strip().upper()
+    if not destination:
+        destination = _destination_label_for_guides(carrier_guides)
+    if not destination:
+        raise ValueError('Debe indicar el destino del manifiesto de carga.')
     driver_name = programming_obj.support_pilot or ''
     co_pilot_name = programming_obj.support_copilot or ''
 
