@@ -2506,8 +2506,10 @@ def cancel_commodity(request):
     if order_obj.type_document in ('B', 'F') and OrderBill.objects.filter(order=order_obj.id).exists():
         r = annul_invoice(order_obj.id)
         if not r.get('success'):
+            sunat_msg = (r.get('message') or '').strip()
+            error_msg = sunat_msg or 'Error de anulación en SUNAT. Actualice o vuelva a intentarlo.'
             return JsonResponse(
-                {'error': 'Error de anulación en SUNAT. Actualice o vuelva a intentarlo.'},
+                {'error': error_msg},
                 status=HTTPStatus.INTERNAL_SERVER_ERROR)
         message = 'Encomienda anulada correctamente en SUNAT.'
 

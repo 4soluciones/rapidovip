@@ -431,18 +431,28 @@ def annul_invoice(order_id):
 
         result = response.json()
 
-        data = result.get("data", {}).get("annulInvoice")
+        payload = result.get("data") or {}
+        data = payload.get("annulInvoice") if isinstance(payload, dict) else None
 
-        if data and data.get("success"):
+        if data and data.get("success") is True:
             return {
                 "success": True,
                 "message": data.get("message"),
             }
-        else:
-            return {
-                "success": False,
-                "message": data.get("message") if data else "No se obtuvo respuesta del servidor.",
-            }
+
+        graphql_errors = result.get("errors") or []
+        graphql_msg = None
+        if graphql_errors and isinstance(graphql_errors[0], dict):
+            graphql_msg = graphql_errors[0].get("message")
+
+        return {
+            "success": False,
+            "message": (
+                (data.get("message") if data else None)
+                or graphql_msg
+                or "No se obtuvo respuesta del servidor."
+            ),
+        }
 
     except requests.exceptions.RequestException as e:
         return {"success": False, "message": f"Error en la solicitud: {str(e)}"}
