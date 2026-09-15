@@ -57,106 +57,161 @@
     </div>
     {% endwith %}
 
-    <div class="rv-cash-table-card rv-cash-table-wrap">
-        <table class="rv-table rv-cash-table table table-hover table-sm mb-0" id="cash-movements-table">
-            <thead>
-            <tr>
-                <th>Operación</th>
-                <th>Descripción</th>
-                <th>Tipo de pago</th>
-                <th>Referencia</th>
-                <th>Usuario</th>
-                <th class="text-right">Monto</th>
-                {% if is_admin %}
-                <th class="text-center noExl">Acciones</th>
-                {% endif %}
-            </tr>
-            </thead>
-            <tbody>
-            {% for c in cash_flow_set %}
-                <tr class="rv-cash-row rv-cash-row-{{ c.type|lower }}">
-                    <td data-label="Operación">
-                        <span class="rv-cash-type-badge rv-cash-type-{{ c.type|lower }}">
-                            {% if c.type == 'A' %}<i class="fas fa-door-open"></i>
-                            {% elif c.type == 'C' %}<i class="fas fa-door-closed"></i>
-                            {% elif c.type == 'E' %}<i class="fas fa-arrow-down"></i>
-                            {% elif c.type == 'S' %}<i class="fas fa-receipt"></i>
-                            {% else %}<i class="fas fa-exchange-alt"></i>{% endif %}
-                            {{ c.get_type_display }}
-                        </span>
-                    </td>
-                    <td class="rv-cash-desc" data-label="Descripción">{{ c.description|upper }}</td>
-                    <td data-label="Tipo de pago">
-                        {% if c.payment_method %}
-                            <span class="rv-payment-badge rv-payment-badge-{{ c.payment_method|lower }}">
-                                {% if c.payment_method == 'E' %}<i class="fas fa-money-bill-wave"></i>
-                                {% elif c.payment_method == 'T' %}<i class="fas fa-credit-card"></i>
-                                {% elif c.payment_method == 'Y' %}<i class="fas fa-mobile-alt"></i>
-                                {% elif c.payment_method == 'R' %}<i class="fas fa-university"></i>
-                                {% endif %}
-                                {{ c.get_payment_method_display }}
-                            </span>
-                        {% else %}
-                            <span class="rv-payment-badge rv-payment-badge-none">—</span>
-                        {% endif %}
-                    </td>
-                    <td class="rv-cash-ref small" data-label="Referencia">
-                        {% if c.order %}
-                            {% if c.order.type_order == 'P' %}
-                                {{ c.order.client.names|default_if_none:"-" }}
-                            {% else %}
-                                {{ c.order.serial|default_if_none:"" }}-{{ c.order.correlative_sale|zfill:6|default_if_none:"" }}
-                            {% endif %}
-                        {% else %}
-                            —
-                        {% endif %}
-                    </td>
-                    <td class="rv-cash-user small" data-label="Usuario">
-                        {% if c.user %}
-                            {{ c.user.worker_set.last.employee.full_name|upper|default:c.user.username|upper }}
-                        {% else %}
-                            —
-                        {% endif %}
-                    </td>
-                    <td class="text-right rv-cash-amount" data-label="Monto">
-                        {% if c.type == 'S' or c.type == 'C' %}
-                            <span class="rv-amount-out">- S/ {{ c.total|floatformat:2 }}</span>
-                        {% elif c.type == 'E' %}
-                            <span class="rv-amount-in">+ S/ {{ c.total|floatformat:2 }}</span>
-                        {% else %}
-                            <span class="rv-amount-base">S/ {{ c.total|floatformat:2 }}</span>
-                        {% endif %}
-                    </td>
+    <div class="rv-cash-desktop-table">
+        <div class="rv-cash-table-card rv-cash-table-wrap">
+            <table class="rv-table rv-cash-table table table-hover table-sm mb-0" id="cash-movements-table">
+                <thead>
+                <tr>
+                    <th>Operación</th>
+                    <th>Descripción</th>
+                    <th>Tipo de pago</th>
+                    <th>Referencia</th>
+                    <th>Usuario</th>
+                    <th class="text-right">Monto</th>
                     {% if is_admin %}
-                    <td class="rv-cash-row-actions noExl" data-label="Acciones">
-                        {% if c.type == 'E' or c.type == 'S' %}
-                            {% if not c.order %}
-                            <div class="rv-cash-action-group">
-                                <button type="button" class="rv-report-action-btn btn-edit-cash-flow"
-                                        data-pk="{{ c.pk }}" title="Editar movimiento">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button type="button" class="rv-report-action-btn rv-cash-action-delete btn-delete-cash-flow"
-                                        data-pk="{{ c.pk }}" title="Eliminar movimiento">
-                                    <i class="fas fa-trash-alt"></i>
-                                </button>
-                            </div>
-                            {% else %}
-                            <span class="rv-cash-action-locked" title="Movimiento generado por una venta. No se edita ni elimina desde caja.">
-                                <i class="fas fa-lock"></i>
-                            </span>
-                            {% endif %}
-                        {% else %}
-                            <span class="rv-cash-action-locked" title="Apertura y cierre se gestionan con los botones de caja.">
-                                <i class="fas fa-lock"></i>
-                            </span>
-                        {% endif %}
-                    </td>
+                    <th class="text-center noExl">Acciones</th>
                     {% endif %}
                 </tr>
-            {% endfor %}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                {% for c in cash_flow_set %}
+                    <tr class="rv-cash-row rv-cash-row-{{ c.type|lower }}">
+                        <td>
+                            <span class="rv-cash-type-badge rv-cash-type-{{ c.type|lower }}">
+                                {% if c.type == 'A' %}<i class="fas fa-door-open"></i>
+                                {% elif c.type == 'C' %}<i class="fas fa-door-closed"></i>
+                                {% elif c.type == 'E' %}<i class="fas fa-arrow-down"></i>
+                                {% elif c.type == 'S' %}<i class="fas fa-receipt"></i>
+                                {% else %}<i class="fas fa-exchange-alt"></i>{% endif %}
+                                {{ c.get_type_display }}
+                            </span>
+                        </td>
+                        <td class="rv-cash-desc">{{ c.description|upper }}</td>
+                        <td>
+                            {% if c.payment_method %}{{ c.get_payment_method_display }}{% else %}—{% endif %}
+                        </td>
+                        <td class="rv-cash-ref small">
+                            {% if c.order %}
+                                {% if c.order.type_order == 'P' %}
+                                    {{ c.order.client.names|default_if_none:"-" }}
+                                {% else %}
+                                    {{ c.order.serial|default_if_none:"" }}-{{ c.order.correlative_sale|zfill:6|default_if_none:"" }}
+                                {% endif %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="rv-cash-user small">
+                            {% if c.user %}
+                                {{ c.user.worker_set.last.employee.full_name|upper|default:c.user.username|upper }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="text-right rv-cash-amount">
+                            {% if c.type == 'S' or c.type == 'C' %}
+                                <span class="rv-amount-out">- S/ {{ c.total|floatformat:2 }}</span>
+                            {% elif c.type == 'E' %}
+                                <span class="rv-amount-in">+ S/ {{ c.total|floatformat:2 }}</span>
+                            {% else %}
+                                <span class="rv-amount-base">S/ {{ c.total|floatformat:2 }}</span>
+                            {% endif %}
+                        </td>
+                        {% if is_admin %}
+                        <td class="rv-cash-row-actions noExl">
+                            {% if c.type == 'E' or c.type == 'S' %}
+                                {% if not c.order %}
+                                <div class="rv-cash-action-group">
+                                    <button type="button" class="rv-report-action-btn btn-edit-cash-flow"
+                                            data-pk="{{ c.pk }}" title="Editar movimiento">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button type="button" class="rv-report-action-btn rv-cash-action-delete btn-delete-cash-flow"
+                                            data-pk="{{ c.pk }}" title="Eliminar movimiento">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                                {% else %}
+                                <span class="rv-cash-action-locked" title="Movimiento generado por una venta.">
+                                    <i class="fas fa-lock"></i>
+                                </span>
+                                {% endif %}
+                            {% else %}
+                                <span class="rv-cash-action-locked" title="Apertura y cierre se gestionan con los botones de caja.">
+                                    <i class="fas fa-lock"></i>
+                                </span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="rv-cash-mobile-list">
+        {% for c in cash_flow_set %}
+        <article class="rv-cash-mobile-card rv-cash-mobile-{{ c.type|lower }}">
+            <div class="rv-cash-mobile-top">
+                <span class="rv-cash-type-badge rv-cash-type-{{ c.type|lower }}">
+                    {% if c.type == 'A' %}<i class="fas fa-door-open"></i>
+                    {% elif c.type == 'C' %}<i class="fas fa-door-closed"></i>
+                    {% elif c.type == 'E' %}<i class="fas fa-arrow-down"></i>
+                    {% elif c.type == 'S' %}<i class="fas fa-receipt"></i>
+                    {% else %}<i class="fas fa-exchange-alt"></i>{% endif %}
+                    {{ c.get_type_display }}
+                </span>
+                <strong class="rv-cash-mobile-amount">
+                    {% if c.type == 'S' or c.type == 'C' %}
+                        <span class="rv-amount-out">- S/ {{ c.total|floatformat:2 }}</span>
+                    {% elif c.type == 'E' %}
+                        <span class="rv-amount-in">+ S/ {{ c.total|floatformat:2 }}</span>
+                    {% else %}
+                        <span class="rv-amount-base">S/ {{ c.total|floatformat:2 }}</span>
+                    {% endif %}
+                </strong>
+            </div>
+            <p class="rv-cash-mobile-desc">{{ c.description|upper }}</p>
+            <div class="rv-cash-mobile-meta">
+                <span><i class="fas fa-wallet"></i> {% if c.payment_method %}{{ c.get_payment_method_display }}{% else %}Sin tipo de pago{% endif %}</span>
+                <span><i class="fas fa-user"></i>
+                    {% if c.user %}
+                        {{ c.user.worker_set.last.employee.full_name|upper|default:c.user.username|upper }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </span>
+                {% if c.order %}
+                <span><i class="fas fa-file-alt"></i>
+                    {% if c.order.type_order == 'P' %}
+                        {{ c.order.client.names|default_if_none:"-" }}
+                    {% else %}
+                        {{ c.order.serial|default_if_none:"" }}-{{ c.order.correlative_sale|zfill:6|default_if_none:"" }}
+                    {% endif %}
+                </span>
+                {% endif %}
+            </div>
+            {% if is_admin %}
+            <div class="rv-cash-mobile-actions noExl">
+                {% if c.type == 'E' or c.type == 'S' %}
+                    {% if not c.order %}
+                    <button type="button" class="rv-btn rv-btn-outline rv-btn-sm btn-edit-cash-flow" data-pk="{{ c.pk }}">
+                        <i class="fas fa-edit"></i> Editar
+                    </button>
+                    <button type="button" class="rv-btn rv-btn-sm rv-cash-mobile-delete btn-delete-cash-flow" data-pk="{{ c.pk }}">
+                        <i class="fas fa-trash-alt"></i> Eliminar
+                    </button>
+                    {% else %}
+                    <small class="text-muted"><i class="fas fa-lock"></i> Viene de una venta</small>
+                    {% endif %}
+                {% else %}
+                    <small class="text-muted"><i class="fas fa-lock"></i> Use reabrir / cerrar caja</small>
+                {% endif %}
+            </div>
+            {% endif %}
+        </article>
+        {% endfor %}
     </div>
 </div>
 

@@ -2738,6 +2738,8 @@ button.rv-btn-search {
     flex-wrap: wrap;
     gap: 0.5rem;
 }
+.rv-cash-desktop-table { display: block; }
+.rv-cash-mobile-list { display: none; }
 
 @media (max-width: 1100px) {
     .rv-cash-kpi-row {
@@ -2746,129 +2748,25 @@ button.rv-btn-search {
 }
 
 @media (max-width: 991px) {
-    .rv-cash-page-actions {
-        width: 100%;
-    }
-    .rv-cash-movements-panel {
-        overflow: visible;
-    }
+    .rv-cash-desktop-table { display: none !important; }
+    .rv-cash-mobile-list { display: block !important; }
+    .rv-cash-movements-panel { overflow: visible; }
+    .rv-cash-page-actions { width: 100%; }
     .rv-cash-page-actions .rv-btn {
-        flex: 1 1 calc(50% - 0.5rem);
-        width: auto;
-        min-width: 140px;
+        flex: 1 1 100%;
+        width: 100%;
         justify-content: center;
     }
     .rv-cash-movements {
         padding: 1rem 0.85rem 1.1rem;
         gap: 1rem;
     }
-    .rv-cash-movements-header {
-        align-items: stretch;
-    }
-    .rv-cash-export-btn {
-        width: 100%;
-        justify-content: center;
-    }
-    .rv-cash-movements-meta {
-        gap: 0.55rem 0.85rem;
-        font-size: 0.8rem;
-    }
+    .rv-cash-export-btn { width: 100%; justify-content: center; }
     .rv-cash-kpi-row {
         grid-template-columns: 1fr 1fr;
         gap: 0.65rem;
     }
-    .rv-expense-summary-card {
-        padding: 0.8rem 0.9rem;
-    }
-    .rv-expense-summary-value {
-        font-size: 1.15rem;
-    }
-    .rv-cash-actions {
-        justify-content: stretch;
-    }
-    .rv-cash-actions .rv-btn {
-        width: 100%;
-        justify-content: center;
-    }
-    .rv-cash-table-card,
-    .rv-cash-table-wrap {
-        overflow: visible;
-        background: transparent;
-        border: none;
-        border-radius: 0;
-    }
-    .rv-cash-table {
-        min-width: 0;
-        border: none;
-    }
-    .rv-cash-table thead {
-        display: none;
-    }
-    .rv-cash-table tbody,
-    .rv-cash-table tr.rv-cash-row,
-    .rv-cash-table td {
-        display: block;
-        width: 100%;
-    }
-    .rv-cash-table tr.rv-cash-row {
-        margin-bottom: 0.75rem;
-        border: 1px solid var(--rv-border);
-        border-radius: 12px;
-        overflow: hidden;
-        background: #fff;
-        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
-    }
-    .rv-cash-table tbody td {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.75rem;
-        padding: 0.55rem 0.85rem;
-        border-bottom: 1px solid #f1f5f9;
-        border-left: none !important;
-        text-align: right;
-        background: #fff;
-    }
-    .rv-cash-table tbody td:last-child {
-        border-bottom: none;
-    }
-    .rv-cash-table tbody td::before {
-        content: attr(data-label);
-        font-size: 0.72rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: var(--rv-text-muted);
-        text-align: left;
-        flex: 0 0 42%;
-    }
-    .rv-cash-desc {
-        max-width: none;
-        word-break: break-word;
-    }
-    .rv-cash-row-actions {
-        justify-content: flex-end;
-        white-space: normal;
-    }
-    .rv-cash-action-group .rv-report-action-btn {
-        width: 40px;
-        height: 40px;
-    }
-    .rv-cash-row:hover td {
-        background: #fff;
-    }
-}
-
-@media (max-width: 768px) {
-    .rv-cash-kpi-row {
-        grid-template-columns: 1fr 1fr;
-    }
-    .rv-cash-page-actions .rv-btn {
-        flex: 1 1 100%;
-    }
-    .rv-cash-type-badge {
-        white-space: normal;
-    }
+    .rv-cash-actions .rv-btn { width: 100%; }
 }
 
 /* ---- EMISIÓN DE SERVICIOS (v2) ---- */
