@@ -3,6 +3,7 @@ from django.shortcuts import render
 from django.contrib.auth.models import User
 
 from apps.users.user_helpers import get_subsidiary_by_user
+from apps.users.roles import user_is_administrator
 
 from apps.users.models import Subsidiary, UserSubsidiary
 
@@ -42,6 +43,43 @@ from django.db.models import Sum
 from ..comercial.models import Programming
 
 
+MANAGEABLE_CASH_FLOW_TYPES = ('E', 'S')
+
+
+def _admin_forbidden_response():
+    response = JsonResponse({
+        'error': 'Solo los administradores pueden editar o borrar movimientos de caja.',
+    })
+    response.status_code = HTTPStatus.FORBIDDEN
+    return response
+
+
+def _cash_flow_can_manage(cash_flow):
+    return cash_flow.type in MANAGEABLE_CASH_FLOW_TYPES and not cash_flow.order_id
+
+
+def _sync_day_closing(cash_obj, transaction_date):
+    if not cash_obj or not transaction_date:
+        return
+    closing = CashFlow.objects.filter(
+        cash=cash_obj, transaction_date=transaction_date, type='C'
+    ).first()
+    if not closing:
+        return
+    sample = CashFlow.objects.filter(
+        cash=cash_obj, transaction_date=transaction_date
+    ).exclude(type='C').first()
+    if sample:
+        closing.total = sample.return_balance()
+        closing.save(update_fields=['total'])
+
+
+def _error_response(message, status=HTTPStatus.BAD_REQUEST):
+    response = JsonResponse({'error': message})
+    response.status_code = status
+    return response
+
+
 def _render_cash_grid(request, id_cash, start_date, user_type, user_obj=None):
 
     start_date = parse_date(start_date)
@@ -63,6 +101,7 @@ def _render_cash_grid(request, id_cash, start_date, user_type, user_obj=None):
         'cash_name': cash_obj.name,
         'report_date_display': start_date.strftime('%d/%m/%Y'),
         'movement_count': cash_flow_set.count(),
+        'is_admin': user_is_administrator(request.user),
     }, request)
 
 
@@ -640,32 +679,63 @@ def expense_module(request):
 
 
 def modal_expense(request):
-    if request.method == 'GET':
-        cash_id = request.GET.get('cash_id', '')
-        my_date = datetime.now()
-        formatdate = my_date.strftime("%Y-%m-%d")
-        user_id = request.user.id
-        user_obj = User.objects.get(id=user_id)
-        subsidiary_obj = get_subsidiary_by_user(user_obj)
-        user_subsidiary_set = UserSubsidiary.objects.filter(subsidiary=subsidiary_obj, rol__in=['A', 'O'],
-                                                            user__is_active=True)
-        cash_obj = Cash.objects.get(id=int(cash_id))
-        tpl = loader.get_template('accounting/expense_modal_form.html')
-        context = ({
-            'cash_obj': cash_obj,
-            'formatdate': formatdate,
-            'subsidiary_obj': subsidiary_obj,
-            'user_subsidiary_set': user_subsidiary_set,
-            'cash_set': Cash.objects.filter(
-                subsidiary=subsidiary_obj,
-                is_bank=False,
-            ),
-            'choices_payment_methods': CashFlow.PAYMENT_METHOD_CHOICES,
-        })
-        return JsonResponse({
-            'success': True,
-            'grid': tpl.render(context, request),
-        }, status=HTTPStatus.OK)
+    if request.method != 'GET':
+        return JsonResponse({'error': True}, status=HTTPStatus.METHOD_NOT_ALLOWED)
+
+    pk = (request.GET.get('pk') or '').strip()
+    cash_flow_obj = None
+    cash_id = request.GET.get('cash_id', '')
+    formatdate = datetime.now().strftime("%Y-%m-%d")
+    edit_total = ''
+
+    if pk:
+        if not user_is_administrator(request.user):
+            return _admin_forbidden_response()
+        cash_flow_obj = CashFlow.objects.select_related('cash').filter(id=int(pk)).first()
+        if not cash_flow_obj:
+            return _error_response('El movimiento no existe.', HTTPStatus.NOT_FOUND)
+        if not _cash_flow_can_manage(cash_flow_obj):
+            return _error_response(
+                'Este movimiento no se puede editar. Solo se modifican entradas y salidas manuales.'
+            )
+        cash_id = cash_flow_obj.cash_id
+        if cash_flow_obj.transaction_date:
+            formatdate = cash_flow_obj.transaction_date.strftime('%Y-%m-%d')
+        edit_total = format(cash_flow_obj.total.quantize(decimal.Decimal('0.01')), 'f')
+
+    if not cash_id:
+        return _error_response('Seleccione una caja.')
+
+    user_obj = User.objects.get(pk=request.user.id)
+    subsidiary_obj = get_subsidiary_by_user(user_obj)
+    user_subsidiary_set = UserSubsidiary.objects.filter(
+        subsidiary=subsidiary_obj, rol__in=['A', 'O'], user__is_active=True
+    )
+    cash_obj = Cash.objects.get(id=int(cash_id))
+    extra_user = None
+    if cash_flow_obj and cash_flow_obj.user_id:
+        if not user_subsidiary_set.filter(user_id=cash_flow_obj.user_id).exists():
+            extra_user = cash_flow_obj.user
+    tpl = loader.get_template('accounting/expense_modal_form.html')
+    context = {
+        'cash_obj': cash_obj,
+        'cash_flow_obj': cash_flow_obj,
+        'is_edit': bool(cash_flow_obj),
+        'edit_total': edit_total,
+        'extra_user': extra_user,
+        'formatdate': formatdate,
+        'subsidiary_obj': subsidiary_obj,
+        'user_subsidiary_set': user_subsidiary_set,
+        'cash_set': Cash.objects.filter(
+            subsidiary=subsidiary_obj,
+            is_bank=False,
+        ),
+        'choices_payment_methods': CashFlow.PAYMENT_METHOD_CHOICES,
+    }
+    return JsonResponse({
+        'success': True,
+        'grid': tpl.render(context, request),
+    }, status=HTTPStatus.OK)
 
 
 def new_expense(request):
@@ -723,3 +793,110 @@ def new_expense(request):
             'grid': cash_grid,
         }, status=HTTPStatus.OK)
     return JsonResponse({'message': 'Error de peticion.'}, status=HTTPStatus.BAD_REQUEST)
+
+
+def _parse_cash_flow_form(request):
+    _cash = request.POST.get('cash')
+    _user = request.POST.get('user')
+    _operation_date = request.POST.get('operation_date')
+    _description = request.POST.get('description')
+    _total = request.POST.get('total', '')
+    _movement_type = (request.POST.get('movement_type') or 'S').upper()
+    _payment_method = (request.POST.get('payment_method') or '').strip().upper()
+    if _movement_type not in MANAGEABLE_CASH_FLOW_TYPES:
+        return None, _error_response('Tipo de movimiento no válido. Use Entrada o Salida.')
+    payment_method_codes = {code for code, _ in CashFlow.PAYMENT_METHOD_CHOICES}
+    if _payment_method not in payment_method_codes:
+        return None, _error_response('Seleccione un tipo de pago válido.')
+    try:
+        amount = decimal.Decimal(str(_total or '0').strip().replace(',', ''))
+    except decimal.InvalidOperation:
+        return None, _error_response('El monto ingresado no es válido.')
+    if amount <= 0:
+        return None, _error_response('El monto debe ser mayor a cero.')
+    cash_obj = Cash.objects.get(id=int(_cash))
+    user_obj = User.objects.get(id=_user)
+    return {
+        'cash_obj': cash_obj,
+        'user_obj': user_obj,
+        'operation_date': parse_date(_operation_date),
+        'description': (_description or '').upper(),
+        'amount': amount,
+        'movement_type': _movement_type,
+        'payment_method': _payment_method,
+    }, None
+
+
+def update_cash_flow(request):
+    if request.method != 'POST':
+        return JsonResponse({'message': 'Error de peticion.'}, status=HTTPStatus.BAD_REQUEST)
+    if not user_is_administrator(request.user):
+        return _admin_forbidden_response()
+    pk = request.POST.get('cash_flow_id') or request.POST.get('pk')
+    if not pk:
+        return _error_response('No se indicó el movimiento a editar.')
+    cash_flow_obj = CashFlow.objects.select_related('cash').filter(id=int(pk)).first()
+    if not cash_flow_obj:
+        return _error_response('El movimiento no existe.', HTTPStatus.NOT_FOUND)
+    if not _cash_flow_can_manage(cash_flow_obj):
+        return _error_response(
+            'Este movimiento no se puede editar. Solo se modifican entradas y salidas manuales.'
+        )
+    parsed, error = _parse_cash_flow_form(request)
+    if error:
+        return error
+    old_cash = cash_flow_obj.cash
+    old_date = cash_flow_obj.transaction_date
+    cash_flow_obj.transaction_date = parsed['operation_date']
+    cash_flow_obj.cash = parsed['cash_obj']
+    cash_flow_obj.description = parsed['description']
+    cash_flow_obj.total = parsed['amount']
+    cash_flow_obj.user = parsed['user_obj']
+    cash_flow_obj.type = parsed['movement_type']
+    cash_flow_obj.payment_method = parsed['payment_method']
+    cash_flow_obj.save()
+    _sync_day_closing(old_cash, old_date)
+    if (
+        not old_cash
+        or old_cash.id != parsed['cash_obj'].id
+        or old_date != parsed['operation_date']
+    ):
+        _sync_day_closing(parsed['cash_obj'], parsed['operation_date'])
+    cash_grid = _render_cash_grid(
+        request, parsed['cash_obj'].id, parsed['operation_date'], '1', None
+    )
+    label = 'Entrada' if parsed['movement_type'] == 'E' else 'Salida'
+    return JsonResponse({
+        'message': f'{label} actualizada con éxito.',
+        'grid': cash_grid,
+    }, status=HTTPStatus.OK)
+
+
+def delete_cash_flow(request):
+    if request.method != 'POST':
+        return JsonResponse({'message': 'Error de peticion.'}, status=HTTPStatus.BAD_REQUEST)
+    if not user_is_administrator(request.user):
+        return _admin_forbidden_response()
+    pk = request.POST.get('pk')
+    if not pk:
+        return _error_response('No se indicó el movimiento a eliminar.')
+    cash_flow_obj = CashFlow.objects.select_related('cash').filter(id=int(pk)).first()
+    if not cash_flow_obj:
+        return _error_response('El movimiento no existe.', HTTPStatus.NOT_FOUND)
+    if not _cash_flow_can_manage(cash_flow_obj):
+        return _error_response(
+            'Este movimiento no se puede eliminar. Solo se borran entradas y salidas manuales.'
+        )
+    cash_id = cash_flow_obj.cash_id
+    transaction_date = cash_flow_obj.transaction_date
+    cash_obj = cash_flow_obj.cash
+    cash_flow_obj.delete()
+    _sync_day_closing(cash_obj, transaction_date)
+    user_type = request.POST.get('user', '1')
+    cash_grid = _render_cash_grid(
+        request, cash_id, transaction_date, user_type, request.user
+    )
+    return JsonResponse({
+        'message': 'Movimiento eliminado con éxito.',
+        'grid': cash_grid,
+    }, status=HTTPStatus.OK)

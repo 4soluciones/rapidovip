@@ -84,18 +84,29 @@
         });
     }
 
-    function openExpenseModal() {
+    function openExpenseModal(pk) {
         var cashId = $('#id-cash').val();
-        if (!cashId) {
+        if (!cashId && !pk) {
             toastr.warning('Seleccione o cree una caja primero');
             return;
         }
-        $.get('{% url "accounting:modal_expense" %}', { cash_id: cashId }, function (response) {
+        var params = { cash_id: cashId };
+        if (pk && (typeof pk === 'string' || typeof pk === 'number')) {
+            params.pk = pk;
+        }
+        $.get('{% url "accounting:modal_expense" %}', params, function (response) {
             if (response.success) {
                 $('#modal-expense').html(response.grid);
                 $('#modal-expense').modal('show');
             }
+        }).fail(function (jqXhr) {
+            toastr.error(jqXhr.responseJSON?.error || 'No se pudo abrir el formulario');
         });
+    }
+
+    function cashCsrfToken() {
+        return $('#search-form input[name="csrfmiddlewaretoken"]').val()
+            || $('input[name="csrfmiddlewaretoken"]').first().val();
     }
 
     function reloadCashGrid(response) {
@@ -105,7 +116,9 @@
     }
 
     $('.btn-new-cash').on('click', openCashModal);
-    $('#btn_expense').on('click', openExpenseModal);
+    $('#btn_expense').on('click', function () {
+        openExpenseModal();
+    });
 
     $('.btn-open-cash').on('click', function () {
         var selectedCash = $('#id-cash').val();
@@ -226,6 +239,44 @@
             $('#search-form').trigger('submit');
         }).fail(function (jqXhr) {
             toastr.error(jqXhr.responseJSON?.error || 'Error al cerrar caja');
+        });
+    });
+
+    $(document).on('click', '.btn-edit-cash-flow', function () {
+        openExpenseModal($(this).data('pk'));
+    });
+
+    $(document).on('click', '.btn-delete-cash-flow', function () {
+        var pk = $(this).data('pk');
+        if (!pk) {
+            return;
+        }
+        if (!confirm('¿Eliminar este movimiento de caja? Esta acción no se puede deshacer.')) {
+            return;
+        }
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        $.ajax({
+            url: '{% url "accounting:delete_cash_flow" %}',
+            type: 'POST',
+            data: {
+                pk: pk,
+                cash: $('#id-cash').val(),
+                user: $('#id-user').val(),
+                csrfmiddlewaretoken: cashCsrfToken()
+            },
+            success: function (response) {
+                toastr.success(response.message);
+                if ($('#search-form').length) {
+                    $('#search-form').trigger('submit');
+                } else {
+                    reloadCashGrid(response);
+                }
+            },
+            error: function (jqXhr) {
+                $btn.prop('disabled', false);
+                toastr.error(jqXhr.responseJSON?.error || 'Error al eliminar el movimiento');
+            }
         });
     });
 </script>
