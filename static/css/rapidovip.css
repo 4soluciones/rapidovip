@@ -2693,6 +2693,184 @@ button.rv-btn-search {
     color: #fff !important;
 }
 
+.rv-cash-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.rv-cash-table {
+    width: 100%;
+    min-width: 720px;
+}
+.rv-cash-row-actions {
+    text-align: center;
+    white-space: nowrap;
+}
+.rv-cash-action-group {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    padding: 0.2rem;
+    border: 1px solid #e8eef5;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+.rv-cash-action-delete {
+    color: #b91c1c !important;
+}
+.rv-cash-action-delete:hover {
+    background: #fee2e2 !important;
+    border-color: #fecaca !important;
+    color: #991b1b !important;
+}
+.rv-cash-action-locked {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    color: #94a3b8;
+    opacity: 0.85;
+}
+.rv-cash-page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+@media (max-width: 1100px) {
+    .rv-cash-kpi-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 991px) {
+    .rv-cash-page-actions {
+        width: 100%;
+    }
+    .rv-cash-movements-panel {
+        overflow: visible;
+    }
+    .rv-cash-page-actions .rv-btn {
+        flex: 1 1 calc(50% - 0.5rem);
+        width: auto;
+        min-width: 140px;
+        justify-content: center;
+    }
+    .rv-cash-movements {
+        padding: 1rem 0.85rem 1.1rem;
+        gap: 1rem;
+    }
+    .rv-cash-movements-header {
+        align-items: stretch;
+    }
+    .rv-cash-export-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .rv-cash-movements-meta {
+        gap: 0.55rem 0.85rem;
+        font-size: 0.8rem;
+    }
+    .rv-cash-kpi-row {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.65rem;
+    }
+    .rv-expense-summary-card {
+        padding: 0.8rem 0.9rem;
+    }
+    .rv-expense-summary-value {
+        font-size: 1.15rem;
+    }
+    .rv-cash-actions {
+        justify-content: stretch;
+    }
+    .rv-cash-actions .rv-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .rv-cash-table-card,
+    .rv-cash-table-wrap {
+        overflow: visible;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+    }
+    .rv-cash-table {
+        min-width: 0;
+        border: none;
+    }
+    .rv-cash-table thead {
+        display: none;
+    }
+    .rv-cash-table tbody,
+    .rv-cash-table tr.rv-cash-row,
+    .rv-cash-table td {
+        display: block;
+        width: 100%;
+    }
+    .rv-cash-table tr.rv-cash-row {
+        margin-bottom: 0.75rem;
+        border: 1px solid var(--rv-border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: #fff;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+    }
+    .rv-cash-table tbody td {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.55rem 0.85rem;
+        border-bottom: 1px solid #f1f5f9;
+        border-left: none !important;
+        text-align: right;
+        background: #fff;
+    }
+    .rv-cash-table tbody td:last-child {
+        border-bottom: none;
+    }
+    .rv-cash-table tbody td::before {
+        content: attr(data-label);
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--rv-text-muted);
+        text-align: left;
+        flex: 0 0 42%;
+    }
+    .rv-cash-desc {
+        max-width: none;
+        word-break: break-word;
+    }
+    .rv-cash-row-actions {
+        justify-content: flex-end;
+        white-space: normal;
+    }
+    .rv-cash-action-group .rv-report-action-btn {
+        width: 40px;
+        height: 40px;
+    }
+    .rv-cash-row:hover td {
+        background: #fff;
+    }
+}
+
+@media (max-width: 768px) {
+    .rv-cash-kpi-row {
+        grid-template-columns: 1fr 1fr;
+    }
+    .rv-cash-page-actions .rv-btn {
+        flex: 1 1 100%;
+    }
+    .rv-cash-type-badge {
+        white-space: normal;
+    }
+}
+
 /* ---- EMISIÓN DE SERVICIOS (v2) ---- */
 .rv-guide-page {
     width: 100%;
