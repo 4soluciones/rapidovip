@@ -1141,6 +1141,10 @@ DOCUMENT_TYPE_SUNAT = {
     '07': 'PASAPORTE',
 }
 
+GENERIC_BILLING_DOCUMENT = '00000000'
+GENERIC_BILLING_DOCUMENT_TYPE = '01'
+GENERIC_BILLING_NAME = 'CLIENTES VARIOS'
+
 
 def get_document_type(doc_code):
     """Resuelve el tipo de documento por código SUNAT (ej. 01, 06)."""
@@ -1840,6 +1844,63 @@ def _is_destination_payment_collected(order_obj):
     return CashFlow.objects.filter(order_id=order_obj.pk, type='E').exists()
 
 
+def _get_generic_billing_client():
+    """Cliente genérico CLIENTES VARIOS (00000000) para cobros en destino sin DNI."""
+    client_type = (
+        ClientType.objects.filter(document_number=GENERIC_BILLING_DOCUMENT)
+        .select_related('client')
+        .first()
+    )
+    if not client_type or not client_type.client_id:
+        raise ValueError(
+            'No se encontró el cliente genérico CLIENTES VARIOS (00000000). '
+            'Regístrelo para cobrar encomiendas sin DNI.'
+        )
+    return client_type.client
+
+
+def _generic_billing_client_payload():
+    try:
+        client = _get_generic_billing_client()
+    except ValueError:
+        return {
+            'names': GENERIC_BILLING_NAME,
+            'document_type': GENERIC_BILLING_DOCUMENT_TYPE,
+            'document_number': GENERIC_BILLING_DOCUMENT,
+            'address': '',
+        }
+    client_type = client.clienttype_set.select_related('document_type').first()
+    address_obj = client.clientaddress_set.first()
+    return {
+        'names': ((client.names or GENERIC_BILLING_NAME).strip().upper()),
+        'document_type': (
+            client_type.document_type_id if client_type else GENERIC_BILLING_DOCUMENT_TYPE
+        ) or GENERIC_BILLING_DOCUMENT_TYPE,
+        'document_number': (
+            (client_type.document_number if client_type else '') or GENERIC_BILLING_DOCUMENT
+        ),
+        'address': ((address_obj.address if address_obj else '') or ''),
+    }
+
+
+def _destination_billing_client_payload(recipient):
+    """Datos de facturación: si no hay DNI, usa CLIENTES VARIOS."""
+    client_type = (
+        recipient.clienttype_set.select_related('document_type').first()
+        if recipient else None
+    )
+    document_number = ((client_type.document_number if client_type else '') or '').strip()
+    if not document_number:
+        return _generic_billing_client_payload(), True
+    address_obj = recipient.clientaddress_set.first() if recipient else None
+    return {
+        'names': (recipient.names if recipient else '') or '',
+        'document_type': client_type.document_type_id if client_type else GENERIC_BILLING_DOCUMENT_TYPE,
+        'document_number': document_number,
+        'address': (address_obj.address if address_obj else '') or '',
+    }, False
+
+
 def _resolve_billing_client(*, names, document_type_code, document_number, address=''):
     """Crea o actualiza el cliente de facturación con los datos editados en el modal."""
     names = (names or '').strip().upper()
@@ -1847,12 +1908,13 @@ def _resolve_billing_client(*, names, document_type_code, document_number, addre
     document_number = (document_number or '').strip().upper()
     address = (address or '').strip().upper()
 
+    if not document_number or document_number == GENERIC_BILLING_DOCUMENT:
+        return _get_generic_billing_client()
+
     if not names:
         raise ValueError('Ingrese el nombre o razón social del cliente.')
     if document_type_code not in ('01', '04', '06', '07'):
         raise ValueError('Seleccione un tipo de documento válido.')
-    if not document_number:
-        raise ValueError('Ingrese el número de documento del cliente.')
     if document_type_code == '01' and len(document_number) != 8:
         raise ValueError('El DNI debe contener exactamente 8 dígitos.')
     if document_type_code == '06' and len(document_number) != 11:
@@ -1922,8 +1984,7 @@ def reception_billing_data(request):
 
     recipient_action = _destination_recipient(order_obj)
     recipient = recipient_action.client if recipient_action else None
-    client_type = recipient.clienttype_set.select_related('document_type').first() if recipient else None
-    address_obj = recipient.clientaddress_set.first() if recipient else None
+    client_payload, used_generic_client = _destination_billing_client_payload(recipient)
     serials = {
         row.document_type: row.serial
         for row in SubsidiarySerial.objects.filter(
@@ -1954,12 +2015,8 @@ def reception_billing_data(request):
         ),
         'sender': _client_party_payload(_order_sender(order_obj)),
         'recipient': _client_party_payload(recipient_action),
-        'client': {
-            'names': (recipient.names if recipient else '') or '',
-            'document_type': client_type.document_type_id if client_type else '01',
-            'document_number': client_type.document_number if client_type else '',
-            'address': (address_obj.address if address_obj else '') or '',
-        },
+        'client': client_payload,
+        'used_generic_client': used_generic_client,
         'document_types': [
             {'id': '01', 'label': 'DNI'},
             {'id': '06', 'label': 'RUC'},

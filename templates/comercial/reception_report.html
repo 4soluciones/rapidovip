@@ -440,6 +440,8 @@
     var csrfToken = $('#reception-search-form [name=csrfmiddlewaretoken]').val();
     var DOC_LENGTHS = { '01': 8, '06': 11 };
     var DOC_NAMES = { '01': 'DNI', '06': 'RUC' };
+    var GENERIC_CLIENT_DNI = '00000000';
+    var GENERIC_CLIENT_NAME = 'CLIENTES VARIOS';
     var STATUS_ICONS = {
         S: 'fa-clock',
         E: 'fa-check-circle',
@@ -604,6 +606,36 @@
         $group.find('.rv-doc-search-btn').prop('disabled', loading);
     }
 
+    function applyGenericBillingClient(triggerSearch) {
+        $('#collection-client-doc-type').val('01');
+        applyDocMaxLength($('#collection-client-doc'), '01');
+        $('#collection-client-doc').val(GENERIC_CLIENT_DNI);
+        if (!($('#collection-client-name').val() || '').trim()) {
+            $('#collection-client-name').val(GENERIC_CLIENT_NAME);
+        }
+        updateConfirmState();
+        if (triggerSearch) searchClientDocument();
+    }
+
+    function ensureBillingClientFilled(forInvoice) {
+        var docNumber = ($('#collection-client-doc').val() || '').trim();
+        var names = ($('#collection-client-name').val() || '').trim();
+        if (docNumber && names) return true;
+        if (forInvoice) {
+            toastr.warning('El documento y el nombre del cliente no pueden estar vacíos.');
+            return false;
+        }
+        applyGenericBillingClient(false);
+        docNumber = ($('#collection-client-doc').val() || '').trim();
+        names = ($('#collection-client-name').val() || '').trim();
+        if (!docNumber || !names) {
+            toastr.warning('El documento y el nombre del cliente no pueden estar vacíos.');
+            return false;
+        }
+        toastr.info('Sin DNI: se utilizará CLIENTES VARIOS (' + GENERIC_CLIENT_DNI + ').');
+        return true;
+    }
+
     function searchClientDocument() {
         var type = $('#collection-client-doc-type').val();
         var nro = ($('#collection-client-doc').val() || '').trim();
@@ -734,6 +766,12 @@
                 $('#collection-serial-B').text(data.serials.B || 'Sin configurar');
                 $('#collection-serial-F').text(data.serials.F || 'Sin configurar');
                 applyDocMaxLength($('#collection-client-doc'), $('#collection-client-doc-type').val());
+                var needsGenericClient = data.used_generic_client ||
+                    !($('#collection-client-doc').val() || '').trim();
+                if (needsGenericClient) {
+                    applyGenericBillingClient(true);
+                    toastr.info('Esta encomienda no tiene DNI. Se usará CLIENTES VARIOS (' + GENERIC_CLIENT_DNI + ').');
+                }
 
                 renderTypeCommodityOptions(
                     $('#collection-type-commodity-options'),
@@ -1010,6 +1048,8 @@
         if ($('#btn-confirm-collection').prop('disabled')) return;
 
         var selected = $('input[name="document_type"]:checked').val();
+        if (!ensureBillingClientFilled(selected === 'F')) return;
+
         var docType = $('#collection-client-doc-type').val();
         var docNumber = ($('#collection-client-doc').val() || '').trim();
         var address = ($('#collection-client-address').val() || '').trim();
