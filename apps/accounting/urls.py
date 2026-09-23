@@ -22,5 +22,7 @@ urlpatterns = [
     path('expense_module/', login_required(expense_module), name='expense_module'),
     path('modal_expense/', login_required(modal_expense), name='modal_expense'),
     path('new_expense/', login_required(new_expense), name='new_expense'),
+    path('update_cash_flow/', login_required(update_cash_flow), name='update_cash_flow'),
+    path('delete_cash_flow/', login_required(delete_cash_flow), name='delete_cash_flow'),
 
 ]

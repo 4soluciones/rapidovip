@@ -1,0 +1,96 @@
+<div class="rv-report-output rv-electronic-output">
+    <div class="rv-report-toolbar">
+        <div class="rv-report-toolbar-left">
+            <span class="rv-report-count">{{ count }} registro{{ count|pluralize:"s" }}</span>
+            <span class="rv-report-period">{{ f1 }} — {{ f2 }}</span>
+            <span class="rv-electronic-type-pill rv-electronic-type-{{ doc_type|lower }}">{{ type_label }}</span>
+        </div>
+        <div class="rv-report-toolbar-right">
+            <div class="rv-report-search-inline">
+                <i class="fas fa-search"></i>
+                <input type="text" id="electronic-inline-search" class="rv-form-control"
+                       placeholder="Filtrar en tabla..." autocomplete="off">
+            </div>
+            <div class="rv-electronic-total-chip">
+                <span>Total</span>
+                <strong>S/ {{ total_amount }}</strong>
+            </div>
+        </div>
+    </div>
+
+    <div class="rv-table-wrap rv-report-table-wrap">
+        <table class="rv-table rv-report-table" id="electronic-vouchers-table">
+            <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Comprobante</th>
+                {% if doc_type == 'N' %}<th>Doc. relacionado</th>{% endif %}
+                <th>Cliente</th>
+                <th>Importe</th>
+                <th>Estado</th>
+                {% if doc_type == 'N' %}<th>Motivo</th>{% endif %}
+                <th>Usuario</th>
+                <th class="noExl">Acciones</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for row in rows %}
+            <tr class="{% if row.has_credit_note and doc_type != 'N' %}rv-electronic-row-nc{% endif %}">
+                <td class="rv-report-date">
+                    {% if row.date %}{{ row.date|date:"d/m/Y H:i" }}{% else %}—{% endif %}
+                </td>
+                <td>
+                    <span class="rv-report-doc">{{ row.document_number }}</span>
+                    {% if row.has_credit_note and doc_type != 'N' %}
+                        <small class="rv-electronic-nc-badge">NC {{ row.credit_note_number }}</small>
+                    {% endif %}
+                </td>
+                {% if doc_type == 'N' %}
+                    <td><span class="rv-report-doc">{{ row.related_document }}</span></td>
+                {% endif %}
+                <td>{{ row.client_name|upper }}</td>
+                <td class="rv-report-amount"><strong>S/ {{ row.total }}</strong></td>
+                <td>
+                    {% if row.has_credit_note and doc_type != 'N' %}
+                        <span class="rv-report-status rv-report-status-warn">{{ row.status_label }}</span>
+                    {% else %}
+                        <span class="rv-report-status rv-report-status-ok">{{ row.status_label }}</span>
+                    {% endif %}
+                </td>
+                {% if doc_type == 'N' %}
+                    <td><small>{{ row.motive_label }}</small></td>
+                {% endif %}
+                <td>{{ row.user|upper }}</td>
+                <td class="rv-report-actions noExl">
+                    <div class="rv-report-action-group">
+                        {% if row.pdf_url %}
+                            <a class="rv-report-action-btn" href="{{ row.pdf_url }}" target="_blank" title="Ver PDF">
+                                <i class="fas fa-file-pdf"></i>
+                            </a>
+                        {% endif %}
+                        {% if row.can_credit_note %}
+                            <button type="button"
+                                    class="rv-report-action-btn rv-electronic-nc-btn btn-open-credit-note"
+                                    data-order-id="{{ row.order_id }}"
+                                    title="Generar nota de crédito">
+                                <i class="fas fa-file-medical"></i>
+                            </button>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="9" class="text-center text-muted py-4">Sin registros</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script type="text/javascript">
+$('#electronic-inline-search').on('keyup', function () {
+    var q = ($(this).val() || '').toLowerCase();
+    $('#electronic-vouchers-table tbody tr').each(function () {
+        $(this).toggle(($(this).text() || '').toLowerCase().indexOf(q) !== -1);
+    });
+});
+</script>

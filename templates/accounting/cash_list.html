@@ -2,6 +2,80 @@
 {% block title %}Caja y movimientos{% endblock %}
 
 {% block body %}
+<style>
+    .rv-page,
+    .rv-cash-movements-panel,
+    #account-grid-list,
+    .rv-cash-movements {
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+    .rv-cash-mobile-list { display: none; }
+    .rv-cash-desktop-table { display: block; }
+    .rv-cash-mobile-card {
+        background: #fff;
+        border: 1px solid #d7e0ea;
+        border-radius: 12px;
+        padding: 0.9rem 1rem;
+        margin-bottom: 0.75rem;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+    }
+    .rv-cash-mobile-a { border-left: 4px solid #22c55e; }
+    .rv-cash-mobile-e { border-left: 4px solid #3b82f6; }
+    .rv-cash-mobile-s { border-left: 4px solid #f97316; }
+    .rv-cash-mobile-c { border-left: 4px solid #ef4444; }
+    .rv-cash-mobile-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.45rem;
+    }
+    .rv-cash-mobile-amount { font-size: 1.05rem; font-family: Outfit, sans-serif; }
+    .rv-cash-mobile-desc {
+        font-weight: 700;
+        margin: 0 0 0.55rem;
+        word-break: break-word;
+        color: #243447;
+    }
+    .rv-cash-mobile-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.28rem;
+        font-size: 0.82rem;
+        color: #6b7c8f;
+    }
+    .rv-cash-mobile-meta i { width: 1rem; text-align: center; margin-right: 0.25rem; }
+    .rv-cash-mobile-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        flex-wrap: wrap;
+    }
+    .rv-cash-mobile-actions .rv-btn { flex: 1 1 auto; min-height: 40px; }
+    .rv-cash-mobile-delete {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+    }
+    @media (max-width: 991px) {
+        .rv-page { padding: 0.85rem 0.7rem 1.5rem !important; }
+        .rv-cash-desktop-table { display: none !important; }
+        .rv-cash-mobile-list { display: block !important; }
+        .rv-cash-movements-panel,
+        .rv-cash-table-card,
+        .rv-cash-table-wrap { overflow: visible !important; }
+        .rv-cash-kpi-row { grid-template-columns: 1fr 1fr !important; }
+        .rv-expense-summary-value { font-size: 1.05rem !important; }
+        .rv-cash-actions .rv-btn { width: 100%; }
+        .rv-cash-page-actions { width: 100%; }
+        .rv-cash-page-actions .rv-btn {
+            flex: 1 1 100%;
+            width: 100% !important;
+        }
+    }
+</style>
 <div class="rv-page">
     <div class="rv-page-header">
         <div>
@@ -84,18 +158,29 @@
         });
     }
 
-    function openExpenseModal() {
+    function openExpenseModal(pk) {
         var cashId = $('#id-cash').val();
-        if (!cashId) {
+        if (!cashId && !pk) {
             toastr.warning('Seleccione o cree una caja primero');
             return;
         }
-        $.get('{% url "accounting:modal_expense" %}', { cash_id: cashId }, function (response) {
+        var params = { cash_id: cashId };
+        if (pk && (typeof pk === 'string' || typeof pk === 'number')) {
+            params.pk = pk;
+        }
+        $.get('{% url "accounting:modal_expense" %}', params, function (response) {
             if (response.success) {
                 $('#modal-expense').html(response.grid);
                 $('#modal-expense').modal('show');
             }
+        }).fail(function (jqXhr) {
+            toastr.error(jqXhr.responseJSON?.error || 'No se pudo abrir el formulario');
         });
+    }
+
+    function cashCsrfToken() {
+        return $('#search-form input[name="csrfmiddlewaretoken"]').val()
+            || $('input[name="csrfmiddlewaretoken"]').first().val();
     }
 
     function reloadCashGrid(response) {
@@ -105,7 +190,9 @@
     }
 
     $('.btn-new-cash').on('click', openCashModal);
-    $('#btn_expense').on('click', openExpenseModal);
+    $('#btn_expense').on('click', function () {
+        openExpenseModal();
+    });
 
     $('.btn-open-cash').on('click', function () {
         var selectedCash = $('#id-cash').val();
@@ -226,6 +313,44 @@
             $('#search-form').trigger('submit');
         }).fail(function (jqXhr) {
             toastr.error(jqXhr.responseJSON?.error || 'Error al cerrar caja');
+        });
+    });
+
+    $(document).on('click', '.btn-edit-cash-flow', function () {
+        openExpenseModal($(this).data('pk'));
+    });
+
+    $(document).on('click', '.btn-delete-cash-flow', function () {
+        var pk = $(this).data('pk');
+        if (!pk) {
+            return;
+        }
+        if (!confirm('¿Eliminar este movimiento de caja? Esta acción no se puede deshacer.')) {
+            return;
+        }
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        $.ajax({
+            url: '{% url "accounting:delete_cash_flow" %}',
+            type: 'POST',
+            data: {
+                pk: pk,
+                cash: $('#id-cash').val(),
+                user: $('#id-user').val(),
+                csrfmiddlewaretoken: cashCsrfToken()
+            },
+            success: function (response) {
+                toastr.success(response.message);
+                if ($('#search-form').length) {
+                    $('#search-form').trigger('submit');
+                } else {
+                    reloadCashGrid(response);
+                }
+            },
+            error: function (jqXhr) {
+                $btn.prop('disabled', false);
+                toastr.error(jqXhr.responseJSON?.error || 'Error al eliminar el movimiento');
+            }
         });
     });
 </script>

@@ -1,0 +1,253 @@
+{% extends 'home.html' %}
+{% block title %}Comprobantes electrónicos — RapidoVip{% endblock %}
+
+{% block body %}
+<div class="rv-page rv-report-page rv-electronic-page">
+    <div class="rv-report-hero rv-electronic-hero">
+        <div class="rv-report-hero-text">
+            <h1><i class="fas fa-file-invoice"></i> Comprobantes electrónicos</h1>
+            <p>Consulte boletas, facturas y notas de crédito. Genere notas de crédito desde el comprobante original.</p>
+        </div>
+        <div class="rv-report-hero-meta">
+            <span class="rv-report-sede"><i class="fas fa-building"></i> {{ subsidiary.name }}</span>
+        </div>
+    </div>
+
+    <div class="rv-form-section rv-report-filters">
+        <form class="rv-filter-bar" id="electronic-search-form" method="POST">
+            {% csrf_token %}
+            <div class="rv-form-grid rv-form-grid-4">
+                <div class="rv-form-group">
+                    <label for="id-start-date">Desde</label>
+                    <input type="date" class="rv-form-control" id="id-start-date"
+                           name="start-date" value="{{ date_now }}" required>
+                </div>
+                <div class="rv-form-group">
+                    <label for="id-end-date">Hasta</label>
+                    <input type="date" class="rv-form-control" id="id-end-date"
+                           name="end-date" value="{{ date_now }}" required>
+                </div>
+                <div class="rv-form-group">
+                    <label for="filter-doc-type">Tipo de comprobante</label>
+                    <select class="rv-form-control" id="filter-doc-type" name="doc_type">
+                        <option value="B">Boletas</option>
+                        <option value="F">Facturas</option>
+                        <option value="N">Notas de crédito</option>
+                    </select>
+                </div>
+                <div class="rv-form-group rv-form-group-action">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="rv-btn rv-btn-search" id="btn-electronic-search">
+                        <i class="fas fa-search"></i> Generar reporte
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="rv-form-section rv-report-results-wrap">
+        <div id="electronic-results" class="rv-report-results">
+            <div class="rv-report-empty">
+                <i class="fas fa-file-invoice-dollar"></i>
+                <p>Seleccione fechas y tipo de comprobante, luego pulse <strong>Generar reporte</strong>.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade rv-modal rv-credit-note-modal" id="credit-note-modal" tabindex="-1"
+     role="dialog" aria-labelledby="credit-note-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="credit-note-title">
+                        <i class="fas fa-file-medical"></i> Generar nota de crédito
+                    </h5>
+                    <div class="rv-modal-subtitle" id="credit-note-subtitle">Comprobante de origen</div>
+                </div>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="credit-note-form">
+                {% csrf_token %}
+                <input type="hidden" id="cn-order-id" value="">
+                <div class="modal-body">
+                    <div class="rv-cn-summary">
+                        <div class="rv-cn-summary-item">
+                            <span>Comprobante</span>
+                            <strong id="cn-document-number">—</strong>
+                        </div>
+                        <div class="rv-cn-summary-item">
+                            <span>Cliente</span>
+                            <strong id="cn-client-name">—</strong>
+                        </div>
+                        <div class="rv-cn-summary-item">
+                            <span>Total</span>
+                            <strong id="cn-total">S/ 0.00</strong>
+                        </div>
+                    </div>
+
+                    <div class="rv-form-group">
+                        <label for="cn-motive">Motivo SUNAT</label>
+                        <select class="rv-form-control" id="cn-motive" required>
+                            {% for code, label in motive_choices %}
+                                <option value="{{ code }}">{{ code }} — {{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="rv-form-group">
+                        <label for="cn-motive-description">Detalle del motivo <small>(opcional)</small></label>
+                        <textarea class="rv-form-control" id="cn-motive-description" rows="2"
+                                  maxlength="250"
+                                  placeholder="Describa brevemente el motivo de la nota de crédito"></textarea>
+                    </div>
+
+                    <div class="rv-cn-details-wrap">
+                        <div class="rv-cn-details-head">
+                            <h6>Ítems a acreditar</h6>
+                            <span class="rv-cn-hint">Se acredita el total del comprobante</span>
+                        </div>
+                        <div class="rv-table-wrap">
+                            <table class="rv-table rv-cn-details-table">
+                                <thead>
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th class="text-right">Cant.</th>
+                                    <th class="text-right">P. Unit.</th>
+                                    <th class="text-right">Importe</th>
+                                </tr>
+                                </thead>
+                                <tbody id="cn-details-body">
+                                <tr><td colspan="4" class="text-muted">Cargando…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="rv-modal-hint">
+                        <i class="fas fa-info-circle"></i>
+                        La nota de crédito se enviará a SUNAT vía 4FACT y quedará vinculada a este comprobante.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="rv-btn rv-btn-primary" id="btn-cn-submit">
+                        <i class="fas fa-paper-plane"></i> Emitir nota de crédito
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extrajs %}
+<script type="text/javascript">
+(function ($) {
+    function loadGrid() {
+        var $btn = $('#btn-electronic-search');
+        $btn.prop('disabled', true);
+        $('#electronic-results').html(
+            '<div class="rv-report-loading"><i class="fas fa-spinner fa-spin"></i> Generando reporte...</div>'
+        );
+        $.ajax({
+            url: '{% url "sales:electronic_vouchers_grid" %}',
+            type: 'POST',
+            data: $('#electronic-search-form').serialize(),
+            success: function (r) {
+                $('#electronic-results').html(r.grid);
+                if (r.error) { toastr.info(r.error); }
+            },
+            error: function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.error)
+                    ? xhr.responseJSON.error : 'No se pudo generar el reporte.';
+                toastr.warning(msg);
+                $('#electronic-results').html(
+                    '<div class="rv-report-empty"><i class="fas fa-inbox"></i><p>' + msg + '</p></div>'
+                );
+            },
+            complete: function () { $btn.prop('disabled', false); }
+        });
+    }
+
+    $('#electronic-search-form').on('submit', function (e) {
+        e.preventDefault();
+        loadGrid();
+    });
+
+    $(document).on('click', '.btn-open-credit-note', function () {
+        var orderId = $(this).data('order-id');
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        $.ajax({
+            url: '{% url "sales:electronic_voucher_credit_note_data" 0 %}'.replace('/0/', '/' + orderId + '/'),
+            type: 'GET',
+            success: function (data) {
+                $('#cn-order-id').val(data.order_id);
+                $('#credit-note-subtitle').text(data.document_type_label + ' ' + data.document_number);
+                $('#cn-document-number').text(data.document_number);
+                $('#cn-client-name').text(data.client_name);
+                $('#cn-total').text('S/ ' + Number(data.total).toFixed(2));
+                $('#cn-motive').val('01');
+                $('#cn-motive-description').val('');
+                var html = '';
+                (data.details || []).forEach(function (d) {
+                    html += '<tr data-detail-id="' + d.id + '" data-qty="' + d.quantity + '">' +
+                        '<td>' + d.description + '</td>' +
+                        '<td class="text-right">' + d.quantity + '</td>' +
+                        '<td class="text-right">S/ ' + Number(d.price_unit).toFixed(2) + '</td>' +
+                        '<td class="text-right">S/ ' + Number(d.amount).toFixed(2) + '</td></tr>';
+                });
+                $('#cn-details-body').html(html || '<tr><td colspan="4" class="text-muted">Sin ítems</td></tr>');
+                $('#credit-note-modal').modal('show');
+            },
+            error: function (xhr) {
+                toastr.warning((xhr.responseJSON && xhr.responseJSON.error) || 'No se pudo cargar el comprobante.');
+            },
+            complete: function () { $btn.prop('disabled', false); }
+        });
+    });
+
+    $('#credit-note-form').on('submit', function (e) {
+        e.preventDefault();
+        var orderId = $('#cn-order-id').val();
+        if (!orderId) { toastr.warning('No se identificó la orden.'); return; }
+        var details = [];
+        $('#cn-details-body tr[data-detail-id]').each(function () {
+            details.push({
+                detail_id: parseInt($(this).data('detail-id'), 10),
+                quantity: parseFloat($(this).data('qty'))
+            });
+        });
+        var $submit = $('#btn-cn-submit');
+        $submit.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Emitiendo...');
+        $.ajax({
+            url: '{% url "sales:electronic_voucher_generate_credit_note" %}',
+            type: 'POST',
+            contentType: 'application/json',
+            headers: {'X-CSRFToken': $('#credit-note-form [name=csrfmiddlewaretoken]').val()},
+            data: JSON.stringify({
+                order_id: orderId,
+                motive: $('#cn-motive').val(),
+                motive_description: $('#cn-motive-description').val(),
+                details: details
+            }),
+            success: function (r) {
+                toastr.success(r.message || 'Nota de crédito emitida.');
+                $('#credit-note-modal').modal('hide');
+                if (r.pdf_url) { window.open(r.pdf_url, '_blank'); }
+                loadGrid();
+            },
+            error: function (xhr) {
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'No se pudo emitir la nota de crédito.');
+            },
+            complete: function () {
+                $submit.prop('disabled', false).html('<i class="fas fa-paper-plane"></i> Emitir nota de crédito');
+            }
+        });
+    });
+})(jQuery);
+</script>
+{% endblock %}

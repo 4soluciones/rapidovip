@@ -2,13 +2,16 @@
     <div class="modal-content rv-modal rv-finance-modal rv-expense-modal">
         <form id="new-expense-form" method="POST" class="rv-expense-modal-form">
             {% csrf_token %}
+            {% if cash_flow_obj %}
+            <input type="hidden" name="cash_flow_id" id="id-cash-flow" value="{{ cash_flow_obj.pk }}">
+            {% endif %}
             <div class="modal-header">
                 <div class="rv-prog-modal-header-content">
                     <div class="rv-prog-modal-icon rv-expense-modal-icon" id="movement-modal-icon" aria-hidden="true">
                         <i class="fas fa-exchange-alt"></i>
                     </div>
                     <div>
-                        <h5 class="modal-title" id="movement-modal-title">Registrar movimiento</h5>
+                        <h5 class="modal-title" id="movement-modal-title">{% if is_edit %}Editar movimiento{% else %}Registrar movimiento{% endif %}</h5>
                         <p class="rv-modal-subtitle mb-0">
                             {% if cash_obj %}{{ cash_obj.name }} · {{ subsidiary_obj.name|default:"Sede" }}{% else %}Movimiento de caja{% endif %}
                         </p>
@@ -25,7 +28,7 @@
                         <h6 class="rv-expense-modal-section-title">Tipo de movimiento</h6>
                         <div class="rv-movement-type-toggle" role="group" aria-label="Tipo de movimiento">
                             <label class="rv-movement-type-option">
-                                <input type="radio" name="movement_type" value="S" checked>
+                                <input type="radio" name="movement_type" value="S" {% if not cash_flow_obj or cash_flow_obj.type == 'S' %}checked{% endif %}>
                                 <span class="rv-movement-type-card rv-movement-type-out">
                                     <i class="fas fa-arrow-up"></i>
                                     <strong>Salida / Gasto</strong>
@@ -33,7 +36,7 @@
                                 </span>
                             </label>
                             <label class="rv-movement-type-option">
-                                <input type="radio" name="movement_type" value="E">
+                                <input type="radio" name="movement_type" value="E" {% if cash_flow_obj.type == 'E' %}checked{% endif %}>
                                 <span class="rv-movement-type-card rv-movement-type-in">
                                     <i class="fas fa-arrow-down"></i>
                                     <strong>Entrada / Ingreso</strong>
@@ -62,8 +65,11 @@
                             <div class="rv-form-group rv-form-group-required rv-form-group-full">
                                 <label for="id_user">Registrado por</label>
                                 <select class="rv-form-control" id="id_user" name="user" required>
+                                    {% if extra_user %}
+                                        <option value="{{ extra_user.id }}" selected>{{ extra_user.username|upper }}</option>
+                                    {% endif %}
                                     {% for us in user_subsidiary_set %}
-                                        <option value="{{ us.user.id }}" {% if us.user.id == request.user.id %}selected{% endif %}>{{ us.user.username|upper }}</option>
+                                        <option value="{{ us.user.id }}" {% if cash_flow_obj and us.user.id == cash_flow_obj.user_id %}selected{% elif not cash_flow_obj and us.user.id == request.user.id %}selected{% endif %}>{{ us.user.username|upper }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
@@ -71,6 +77,7 @@
                                 <label for="id-description">Concepto</label>
                                 <input type="text" class="rv-form-control text-uppercase" id="id-description"
                                        name="description" maxlength="100"
+                                       value="{{ cash_flow_obj.description|default:'' }}"
                                        placeholder="Ej. Comisión, combustible, peaje..." required>
                             </div>
                         </div>
@@ -80,28 +87,28 @@
                         <h6 class="rv-expense-modal-section-title">Tipo de pago</h6>
                         <div class="rv-expense-payment-options" role="group" aria-label="Tipo de pago">
                             <label class="rv-expense-payment-option">
-                                <input type="radio" name="payment_method" value="E" checked required>
+                                <input type="radio" name="payment_method" value="E" {% if not cash_flow_obj or cash_flow_obj.payment_method == 'E' %}checked{% endif %} required>
                                 <span class="rv-expense-payment-card rv-payment-e">
                                     <i class="fas fa-money-bill-wave"></i>
                                     <strong>Efectivo</strong>
                                 </span>
                             </label>
                             <label class="rv-expense-payment-option">
-                                <input type="radio" name="payment_method" value="T">
+                                <input type="radio" name="payment_method" value="T" {% if cash_flow_obj.payment_method == 'T' %}checked{% endif %}>
                                 <span class="rv-expense-payment-card rv-payment-t">
                                     <i class="fas fa-credit-card"></i>
                                     <strong>Tarjeta</strong>
                                 </span>
                             </label>
                             <label class="rv-expense-payment-option">
-                                <input type="radio" name="payment_method" value="Y">
+                                <input type="radio" name="payment_method" value="Y" {% if cash_flow_obj.payment_method == 'Y' %}checked{% endif %}>
                                 <span class="rv-expense-payment-card rv-payment-y">
                                     <i class="fas fa-mobile-alt"></i>
                                     <strong>Yape</strong>
                                 </span>
                             </label>
                             <label class="rv-expense-payment-option">
-                                <input type="radio" name="payment_method" value="R">
+                                <input type="radio" name="payment_method" value="R" {% if cash_flow_obj.payment_method == 'R' %}checked{% endif %}>
                                 <span class="rv-expense-payment-card rv-payment-r">
                                     <i class="fas fa-university"></i>
                                     <strong>Transferencia</strong>
@@ -115,7 +122,7 @@
                         <div class="rv-expense-amount-field">
                             <span class="rv-expense-currency">S/</span>
                             <input type="number" step="0.01" min="0.01" class="rv-expense-total-input" id="id-total"
-                                   name="total" placeholder="0.00" required autofocus>
+                                   name="total" placeholder="0.00" value="{{ edit_total }}" required {% if not is_edit %}autofocus{% endif %}>
                         </div>
                         <p class="rv-expense-amount-hint mb-0" id="movement-amount-hint">
                             Se registrará como salida y restará del saldo de caja.
@@ -127,7 +134,7 @@
             <div class="modal-footer">
                 <button type="button" class="rv-btn rv-btn-outline" data-dismiss="modal">Cancelar</button>
                 <button type="submit" class="rv-btn rv-btn-success" id="btn-expense-save">
-                    <i class="fas fa-save"></i> <span id="movement-save-label">Registrar movimiento</span>
+                    <i class="fas fa-save"></i> <span id="movement-save-label">{% if is_edit %}Guardar cambios{% else %}Registrar movimiento{% endif %}</span>
                 </button>
             </div>
         </form>
@@ -139,20 +146,29 @@
         function syncMovementTypeUI() {
             var type = $('input[name="movement_type"]:checked').val() || 'S';
             var isIncome = type === 'E';
+            var isEdit = !!$('#id-cash-flow').val();
             var $panel = $('#movement-amount-panel');
             var $icon = $('#movement-modal-icon');
 
             $panel.toggleClass('is-income', isIncome).toggleClass('is-expense', !isIncome);
             $icon.toggleClass('is-income', isIncome).toggleClass('is-expense', !isIncome);
 
-            $('#movement-modal-title').text(isIncome ? 'Registrar entrada' : 'Registrar salida');
+            $('#movement-modal-title').text(
+                isEdit
+                    ? (isIncome ? 'Editar entrada' : 'Editar salida')
+                    : (isIncome ? 'Registrar entrada' : 'Registrar salida')
+            );
             $('#movement-amount-label').text(isIncome ? 'Monto del ingreso' : 'Monto del gasto');
             $('#movement-amount-hint').text(
                 isIncome
                     ? 'Se registrará como entrada y sumará al saldo de caja.'
                     : 'Se registrará como salida y restará del saldo de caja.'
             );
-            $('#movement-save-label').text(isIncome ? 'Registrar entrada' : 'Registrar salida');
+            $('#movement-save-label').text(
+                isEdit
+                    ? 'Guardar cambios'
+                    : (isIncome ? 'Registrar entrada' : 'Registrar salida')
+            );
             $('#id-description').attr(
                 'placeholder',
                 isIncome ? 'Ej. Comisión, reembolso, ingreso varios...' : 'Ej. Combustible, peaje, útiles...'
@@ -168,9 +184,10 @@
             e.preventDefault();
             var data = new FormData(this);
             var type = $('input[name="movement_type"]:checked').val() || 'S';
+            var isEdit = !!$('#id-cash-flow').val();
             $('#btn-expense-save').prop('disabled', true);
             $.ajax({
-                url: '{% url "accounting:new_expense" %}',
+                url: isEdit ? '{% url "accounting:update_cash_flow" %}' : '{% url "accounting:new_expense" %}',
                 type: 'POST',
                 data: data,
                 cache: false,
@@ -191,9 +208,11 @@
                 },
                 error: function (jqXhr) {
                     $('#btn-expense-save').prop('disabled', false);
-                    toastr.error(jqXhr.responseJSON?.error || (type === 'E'
-                        ? 'Error al registrar la entrada'
-                        : 'Error al registrar la salida'));
+                    toastr.error(jqXhr.responseJSON?.error || (isEdit
+                        ? 'Error al actualizar el movimiento'
+                        : (type === 'E'
+                            ? 'Error al registrar la entrada'
+                            : 'Error al registrar la salida')));
                 }
             });
         });
