@@ -1,0 +1,297 @@
+<div class="rv-report-output rv-total-report-output">
+    <div class="rv-report-toolbar">
+        <div class="rv-report-toolbar-left">
+            <span class="rv-report-count">{{ count }} encomienda{{ count|pluralize:"s" }}</span>
+            {% if dni %}
+                <span class="rv-report-period"><i class="fas fa-id-card"></i> DNI {{ dni }}</span>
+            {% else %}
+                <span class="rv-report-period">{{ f1|date:"d/m/Y" }} — {{ f2|date:"d/m/Y" }}</span>
+            {% endif %}
+            {% if delivery_filter == 'delivered' %}
+                <span class="rv-report-period rv-total-filter-tag is-delivered">
+                    <i class="fas fa-check-circle"></i> Entregadas
+                </span>
+            {% elif delivery_filter == 'pending' %}
+                <span class="rv-report-period rv-total-filter-tag is-pending">
+                    <i class="fas fa-clock"></i> Pendientes de entrega
+                </span>
+            {% else %}
+                <span class="rv-report-period rv-total-filter-tag">Todas</span>
+            {% endif %}
+        </div>
+        <div class="rv-report-toolbar-right">
+            <div class="rv-report-search-inline">
+                <i class="fas fa-search"></i>
+                <input type="text" id="total-inline-search" class="rv-form-control"
+                       placeholder="Filtrar resultados…" autocomplete="off">
+            </div>
+            <button type="button" class="rv-btn rv-btn-outline rv-btn-sm" id="btn-total-excel"
+                    {% if not count %}disabled{% endif %}>
+                <i class="fas fa-file-excel"></i> Excel
+            </button>
+        </div>
+    </div>
+
+    {% if count %}
+    <div class="rv-total-summary">
+        {% for g in groups %}
+            <article class="rv-total-summary-card rv-total-group-{{ g.css }}">
+                <header class="rv-total-summary-head">
+                    <span class="rv-total-summary-icon"><i class="fas {{ g.icon }}"></i></span>
+                    <div>
+                        <strong>{{ g.label }}</strong>
+                        <small>{{ g.count }} encomienda{{ g.count|pluralize:"s" }}</small>
+                    </div>
+                </header>
+                <div class="rv-total-summary-amount">
+                    <span>Total del grupo</span>
+                    <strong>S/ {{ g.total }}</strong>
+                </div>
+                <ul class="rv-total-summary-metrics">
+                    <li><span>Pendientes</span><b>{{ g.pending }}</b></li>
+                    <li><span>Entregadas</span><b>{{ g.delivered }}</b></li>
+                    <li><span>Internadas</span><b>{{ g.interned }}</b></li>
+                    <li><span>Anuladas</span><b>{{ g.cancelled }}</b></li>
+                </ul>
+            </article>
+        {% endfor %}
+        <article class="rv-total-summary-card is-grand">
+            <header class="rv-total-summary-head">
+                <span class="rv-total-summary-icon"><i class="fas fa-chart-line"></i></span>
+                <div>
+                    <strong>Total general</strong>
+                    <small>{{ count }} encomienda{{ count|pluralize:"s" }}</small>
+                </div>
+            </header>
+            <div class="rv-total-summary-amount">
+                <span>Importe acumulado</span>
+                <strong>S/ {{ total_general }}</strong>
+            </div>
+            <ul class="rv-total-summary-metrics">
+                <li><span>Al contado</span><b>S/ {{ total_cash }}</b></li>
+                <li><span>Pago destino</span><b>S/ {{ total_destination }}</b></li>
+            </ul>
+        </article>
+    </div>
+
+    <div class="rv-table-wrap rv-report-table-wrap">
+        <table class="rv-table rv-report-table rv-total-table" id="total-services-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Orden de servicio</th>
+                    <th>Comprobante</th>
+                    <th>Tipo</th>
+                    <th>Remitente</th>
+                    <th>Destinatario</th>
+                    <th>Destino</th>
+                    <th>Detalle</th>
+                    <th>Importe</th>
+                    <th>Estado</th>
+                    <th class="noExl">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for g in groups %}
+                <tr class="rv-total-group-row rv-total-group-{{ g.css }}">
+                    <td colspan="11">
+                        <span class="rv-total-group-label">
+                            <i class="fas {{ g.icon }}"></i> {{ g.label }}
+                        </span>
+                        <span class="rv-total-group-meta">
+                            {{ g.count }} encomienda{{ g.count|pluralize:"s" }}
+                            &nbsp;·&nbsp; Pendientes {{ g.pending }}
+                            &nbsp;·&nbsp; Entregadas {{ g.delivered }}
+                            &nbsp;·&nbsp; Subtotal
+                            <b>S/ {{ g.total }}</b>
+                        </span>
+                    </td>
+                </tr>
+                {% for o in g.rows %}
+                <tr data-id="{{ o.id }}" data-group="{{ o.group_css }}"
+                    class="rv-total-row rv-total-group-{{ o.group_css }}{% if o.status == 'A' %} rv-report-row-cancelled{% endif %}">
+                    <td class="rv-report-date">
+                        <span>{{ o.create_date|date:"d/m/Y" }}</span>
+                        <small class="rv-report-date-transfer">Traslado: {{ o.transfer_date|date:"d/m/Y"|default:"—" }}</small>
+                    </td>
+                    <td>
+                        <span class="rv-report-doc">{{ o.order_service_number }}</span>
+                        {% if o.order_code_track %}
+                            <small class="rv-report-doc-type">Seguimiento: {{ o.order_code_track }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if o.serial and o.correlative_sale %}
+                            <span class="rv-report-doc">{{ o.serial }}-{{ o.correlative_sale }}</span>
+                            <small class="rv-report-doc-type">{{ o.type_document_label|title }}</small>
+                        {% else %}
+                            <span class="rv-total-nill">Sin comprobante</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="rv-total-badge rv-total-badge-{{ o.group_css }}">
+                            <i class="fas {{ g.icon }}"></i> {{ o.type_guide_label|title }}
+                        </span>
+                        {% if o.origin_office and o.origin_office != '—' %}
+                            <small class="rv-report-doc-type">Origen: {{ o.origin_office }}</small>
+                        {% endif %}
+                    </td>
+                    <td>{{ o.item_action_sender.0.client_names|default:"—"|upper }}</td>
+                    <td>
+                        {% if o.type_commodity_destiny %}
+                            <span class="rv-report-tag rv-report-tag-warn">Canje</span>
+                        {% else %}
+                            <strong class="rv-total-recipient">
+                                {{ o.item_action_addressee.0.client_names|default:"—"|upper }}
+                            </strong>
+                            {% if o.recipient_document %}
+                                <small class="rv-report-doc-type">
+                                    <i class="fas fa-id-card"></i> {{ o.recipient_document }}
+                                </small>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td class="rv-report-detail">
+                        <strong>{{ o.delivery_destination_name|default:o.destiny_label|default:"—" }}</strong>
+                        {% if o.address_delivery %}
+                            <small>{{ o.address_delivery|upper }}</small>
+                        {% endif %}
+                    </td>
+                    <td class="rv-report-detail">
+                        {% for detail in o.item_detail_order %}
+                            <span>{{ detail.description|default:"Encomienda"|upper }}</span>
+                            <small>{{ detail.quantity|floatformat:0 }} {{ detail.unit_description|upper }}
+                                {% if detail.weight %}· {{ detail.weight }} kg{% endif %}</small>
+                        {% empty %}
+                            —
+                        {% endfor %}
+                    </td>
+                    <td class="rv-report-amount">
+                        {% if o.status != 'A' and not o.type_commodity_destiny %}
+                            <strong>S/ {{ o.total }}</strong>
+                            <small class="rv-report-pay rv-report-pay-{{ o.way_to_pay|lower }}">
+                                {{ o.way_to_pay_label|title }}
+                            </small>
+                            {% if o.destination_collected %}
+                                <small class="rv-report-pay-collected">Cobrado en destino</small>
+                            {% elif o.way_to_pay == 'D' %}
+                                <small class="rv-report-pay-pending">Pendiente de cobro</small>
+                            {% endif %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if o.status == 'A' %}
+                            <span class="rv-report-status rv-report-status-cancel">Anulada</span>
+                        {% else %}
+                            <div class="rv-total-status-stack">
+                                <span class="rv-report-status rv-reception-commodity-{{ o.type_commodity|lower }}">
+                                    {{ o.type_commodity_label|title }}
+                                </span>
+                                {% if o.status_transport_label|upper != o.type_commodity_label|upper %}
+                                    <span class="rv-report-status rv-reception-status-{{ o.status_transport_code|lower }}">
+                                        {{ o.status_transport_label|title }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td class="rv-report-actions noExl">
+                        <div class="rv-report-action-group" role="group" aria-label="Acciones">
+                            <a class="rv-report-action-btn"
+                               href="{% url 'comercial:print_ticket_order_commodity' o.id %}"
+                               target="_blank" title="Ver orden de servicio">
+                                <i class="fas fa-file-alt"></i>
+                            </a>
+                            {% if o.serial and o.correlative_sale %}
+                                <a class="rv-report-action-btn"
+                                   href="{% url 'comercial:print_bill_order_commodity' o.id %}"
+                                   target="_blank" title="Ver comprobante">
+                                    <i class="fas fa-file-invoice"></i>
+                                </a>
+                            {% endif %}
+                            <a class="rv-report-action-btn rv-report-action-label"
+                               href="{% url 'comercial:print_label_order_commodity' o.id %}"
+                               target="_blank" title="Reimprimir etiqueta">
+                                <i class="fas fa-tags"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr class="rv-total-group-empty">
+                    <td colspan="11">
+                        <i class="fas fa-inbox"></i>
+                        Sin encomiendas de este tipo en el período seleccionado.
+                    </td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr class="rv-report-totals-row">
+                    <td colspan="8" class="rv-report-totals-label">Totales del reporte</td>
+                    <td colspan="3" class="rv-report-totals-values">
+                        <div class="rv-report-totals">
+                            <div class="rv-report-total rv-report-total-cash">
+                                <span>Al contado</span>
+                                <strong>S/ {{ total_cash }}</strong>
+                            </div>
+                            <div class="rv-report-total rv-report-total-destiny">
+                                <span>Pago destino</span>
+                                <strong>S/ {{ total_destination }}</strong>
+                            </div>
+                            <div class="rv-report-total rv-report-total-general">
+                                <span>Total general</span>
+                                <strong>S/ {{ total_general }}</strong>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% else %}
+    <div class="rv-report-empty">
+        <i class="fas fa-layer-group"></i>
+        <p>No se encontraron encomiendas con los criterios seleccionados.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script type="text/javascript">
+(function () {
+    $('#total-inline-search').on('input', function () {
+        var query = $(this).val().toLowerCase().trim();
+        var table = $('#total-services-table');
+        var groups = table.find('tr.rv-total-group-row');
+        var totalsRow = table.find('tfoot tr.rv-report-totals-row');
+
+        groups.each(function () {
+            var $group = $(this);
+            var $rows = $group.nextUntil('tr.rv-total-group-row, tfoot');
+            var visible = 0;
+            $rows.each(function () {
+                var $row = $(this);
+                var match = !query || $row.text().toLowerCase().indexOf(query) !== -1;
+                $row.toggle(match);
+                if (match) visible += 1;
+            });
+            $group.toggle(visible > 0);
+        });
+
+        if (query) totalsRow.hide();
+    });
+
+    $('#btn-total-excel').on('click', function () {
+        if ($.fn.table2excel) {
+            $('#total-services-table').table2excel({
+                exclude: '.noExl',
+                name: 'Reporte total de encomiendas',
+                filename: 'reporte_total_encomiendas',
+                fileext: '.xls',
+                preserveColors: true
+            });
+        }
+    });
+})();
+</script>

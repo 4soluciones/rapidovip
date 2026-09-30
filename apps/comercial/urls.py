@@ -59,6 +59,7 @@ urlpatterns = [
     path('report_comodity_grid/', login_required(report_comodity_grid), name='report_comodity_grid'),
     path('reception_report/', login_required(reception_report), name='reception_report'),
     path('reparto_report/', login_required(reparto_report), name='reparto_report'),
+    path('total_commodity_report/', login_required(total_commodity_report), name='total_commodity_report'),
     path('reception_billing_data/', login_required(reception_billing_data), name='reception_billing_data'),
     path('reception_delivery_data/', login_required(reception_delivery_data), name='reception_delivery_data'),
     path('update_reception_type_commodity/', login_required(update_reception_type_commodity), name='update_reception_type_commodity'),

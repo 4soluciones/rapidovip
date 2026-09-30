@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.core import serializers
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.template import loader
@@ -53,6 +53,7 @@ from apps.sales.api_FACT import (
 )
 from apps.sales.models import (
     DeliveryDestination,
+    GUIDE_TYPE_CHOICES,
     Order,
     OrderAction,
     OrderAddressee,
@@ -1777,6 +1778,273 @@ def reparto_report(request):
     return JsonResponse({'grid': grid, 'count': len(rows)}, status=HTTPStatus.OK)
 
 
+# Grupos del reporte total. El color de cada uno vive en la clase CSS
+# .rv-total-group-<css>; no se hardcodea hex aquí para no romper el tema.
+TOTAL_REPORT_GROUPS = (
+    {
+        'code': 'O',
+        'css': 'oficina',
+        'label': 'Encomiendas de oficina',
+        'short': 'Oficina',
+        'icon': 'fa-building',
+    },
+    {
+        'code': 'R',
+        'css': 'reparto',
+        'label': 'Encomiendas de reparto',
+        'short': 'Reparto',
+        'icon': 'fa-truck',
+    },
+)
+
+
+def _normalize_type_guide_filter(value):
+    raw = (value or '').strip().upper()
+    return raw if raw in ('O', 'R') else ''
+
+
+def _total_report_orders(
+    subsidiary_obj, company_obj, start_date=None, end_date=None, dni='',
+    type_guide='', way_to_pay='', user_selected='', origin_subsidiary='',
+    delivery_filter='all',
+):
+    """
+    Todas las encomiendas de la empresa en el rango, sin separar OFICINA de REPARTO.
+    La partición por tipo de guía se hace en Python para que ambos grupos provengan
+    de una sola consulta y los totales sean consistentes entre ellos.
+    """
+    orders = Order.objects.filter(
+        type_order='E',
+        company=company_obj,
+        encomienda__type_guide__in=[group['code'] for group in TOTAL_REPORT_GROUPS],
+    )
+    if dni:
+        orders = orders.filter(
+            orderaction__type='D',
+            orderaction__client__clienttype__document_number=dni,
+        )
+    elif start_date and end_date:
+        orders = orders.filter(_orders_in_local_date_range(start_date, end_date))
+
+    type_guide = _normalize_type_guide_filter(type_guide)
+    if type_guide:
+        orders = orders.filter(encomienda__type_guide=type_guide)
+
+    way_to_pay = (way_to_pay or '').strip()
+    if way_to_pay and way_to_pay.upper() not in ('T', 'ALL'):
+        orders = orders.filter(way_to_pay=way_to_pay)
+
+    user_selected = (user_selected or '').strip()
+    if user_selected.isdigit():
+        orders = orders.filter(user_id=int(user_selected))
+
+    # El origen real es office_origin y, si no se registro, la sede de la orden.
+    origin_subsidiary = (origin_subsidiary or '').strip()
+    if origin_subsidiary.isdigit():
+        origin_id = int(origin_subsidiary)
+        orders = orders.filter(
+            Q(encomienda__office_origin_id=origin_id)
+            | Q(encomienda__office_origin_id__isnull=True, subsidiary_id=origin_id)
+        )
+
+    delivery_filter = _normalize_delivery_filter(delivery_filter)
+    if delivery_filter == 'delivered':
+        orders = orders.filter(encomienda__type_commodity='E')
+    elif delivery_filter == 'pending':
+        orders = orders.filter(encomienda__type_commodity='S')
+
+    return prefetch_orders_for_report(
+        orders.select_related('orderbill').distinct()
+    ).order_by('-transfer_date', '-id')
+
+
+def _total_report_row_values(order_set, subsidiary_obj=None):
+    """
+    Filas del reporte total con los datos de destino de cada guía.
+
+    Replica el enriquecimiento de _reception_order_values / _reparto_order_values
+    pero resolviendo en lote lo que allí se consulta orden por orden. Este reporte
+    abarca todas las encomiendas de la empresa, así que el N+1 de la versión
+    original convertía la consulta en varios minutos contra una BD remota.
+    """
+    orders_by_id = {order.id: order for order in order_set}
+    recipients = _batch_destination_recipients(order_set)
+    documents = _batch_client_documents(recipients.values())
+    groups_by_code = {group['code']: group for group in TOTAL_REPORT_GROUPS}
+    subsidiary_id = subsidiary_obj.id if subsidiary_obj is not None else None
+
+    rows = get_order_comodity_values(
+        order_set, totals=_batch_order_totals(order_set),
+    )
+    for row in rows:
+        order_obj = orders_by_id[row['id']]
+        encomienda = order_obj.encomienda
+        recipient_action = recipients.get(row['id'])
+        recipient = recipient_action.client if recipient_action else None
+        document = documents.get(recipient_action.client_id) if recipient_action else None
+        order_bill = getattr(order_obj, 'orderbill', None)
+        origin_office = encomienda.office_origin
+        type_commodity = encomienda.type_commodity or 'S'
+        origin_id = encomienda.office_origin_id or order_obj.subsidiary_id
+        code = (encomienda.type_guide or 'O').upper()
+        group = groups_by_code.get(code) or groups_by_code['O']
+
+        row.update({
+            'origin_office': (
+                (origin_office.short_name or origin_office.name) if origin_office else '—'
+            ),
+            'recipient_document': document[1] if document else '',
+            'recipient_document_type': document[0] if document else '',
+            'recipient_phone': recipient.phone if recipient else '',
+            'status_transport_code': encomienda.status_transport,
+            'status_transport_label': encomienda.get_status_transport_display(),
+            'type_commodity': type_commodity,
+            'type_commodity_label': encomienda.get_type_commodity_display(),
+            'is_cash': order_obj.way_to_pay == 'C',
+            'is_delivered': type_commodity == 'E',
+            'can_collect': (
+                order_obj.status != 'A'
+                and order_obj.way_to_pay == 'D'
+                and order_bill is None
+            ),
+            'bill_pdf_available': order_bill is not None and order_bill.status == 'E',
+            'destiny_label': encomienda.effective_destination_label(),
+            'address_delivery': (encomienda.address_delivery or '').strip(),
+            'delivery_destination_name': (
+                (encomienda.delivery_destination.name
+                 if encomienda.delivery_destination_id else '') or ''
+            ),
+            'is_own_origin': subsidiary_id is not None and origin_id == subsidiary_id,
+            'type_guide': group['code'],
+            'type_guide_label': encomienda.get_type_guide_display(),
+            'group_css': group['css'],
+            'group_short': group['short'],
+            'order_code_track': (encomienda.code_track or '').strip(),
+        })
+    return rows
+
+
+def _row_counts_for_totals(row):
+    """La fila suma al reporte: se excluyen anuladas y canjes de encomienda."""
+    return row.get('status') != 'A' and not row.get('type_commodity_destiny')
+
+
+def _total_report_group_totals(rows):
+    total_cash, total_destination = _report_payment_totals(rows)
+    valid = [row for row in rows if _row_counts_for_totals(row)]
+    return {
+        'count': len(rows),
+        'total_cash': total_cash,
+        'total_destination': total_destination,
+        'total': total_cash + total_destination,
+        'pending': sum(1 for row in valid if row.get('type_commodity') == 'S'),
+        'delivered': sum(1 for row in valid if row.get('type_commodity') == 'E'),
+        'interned': sum(1 for row in valid if row.get('type_commodity') == 'I'),
+        'cancelled': sum(1 for row in rows if row.get('status') == 'A'),
+    }
+
+
+def _total_report_group_rows(rows):
+    """Agrupa las filas por tipo de guía conservando el orden de TOTAL_REPORT_GROUPS."""
+    grouped = []
+    for group in TOTAL_REPORT_GROUPS:
+        items = [row for row in rows if row.get('type_guide') == group['code']]
+        grouped.append(dict(group, rows=items, **_total_report_group_totals(items)))
+    return grouped
+
+
+def total_commodity_report(request):
+    """Reporte total: encomiendas de OFICINA y de REPARTO en una sola tabla por grupos."""
+    user_obj = request.user
+    subsidiary_obj = get_subsidiary_by_user(user_obj)
+    company_obj = user_obj.companyuser.company_rotation
+    date_now = timezone.localdate()
+
+    if request.method == 'GET':
+        return render(request, 'comercial/total_commodity_report.html', {
+            'date_now': date_now.strftime('%Y-%m-%d'),
+            'month_start': date_now.replace(day=1).strftime('%Y-%m-%d'),
+            'subsidiary': subsidiary_obj,
+            'company': company_obj,
+            'type_guide_choices': GUIDE_TYPE_CHOICES,
+            'way_to_pay_choices': WAY_TO_PAY_CHOICES,
+            'subsidiaries_set': Subsidiary.objects.filter(
+                serials__company=company_obj, is_enabled=True,
+            ).distinct().order_by('name'),
+            'user_set': UserSubsidiary.objects.filter(
+                subsidiary=subsidiary_obj, rol__in=['A', 'O'], user__is_active=True,
+            ).select_related('user'),
+        })
+
+    start_date_raw = (request.POST.get('start-date') or '').strip()
+    end_date_raw = (request.POST.get('end-date') or '').strip()
+    dni = ''.join(ch for ch in (request.POST.get('dni') or '').strip() if ch.isdigit())
+    type_guide = _normalize_type_guide_filter(request.POST.get('type-guide'))
+    way_to_pay = (request.POST.get('way_to_pay') or '').strip()
+    user_selected = (request.POST.get('user') or '').strip()
+    delivery_filter = _normalize_delivery_filter(request.POST.get('delivery-status') or 'all')
+    origin_subsidiary = (request.POST.get('origin-subsidiary') or '').strip()
+
+    if dni and len(dni) != 8:
+        return JsonResponse(
+            {'error': 'El DNI del destinatario debe contener exactamente 8 dígitos.'},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+
+    start_date = end_date = None
+    if not dni:
+        try:
+            start_date = date.fromisoformat(start_date_raw)
+            end_date = date.fromisoformat(end_date_raw)
+        except ValueError:
+            return JsonResponse(
+                {'error': 'Seleccione un rango de fechas válido o ingrese el DNI del destinatario.'},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+        if start_date > end_date:
+            return JsonResponse(
+                {'error': 'La fecha inicial no puede ser posterior a la fecha final.'},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+
+    order_set = list(_total_report_orders(
+        subsidiary_obj, company_obj, start_date, end_date, dni,
+        type_guide, way_to_pay, user_selected, origin_subsidiary, delivery_filter,
+    ))
+
+    rows = _total_report_row_values(order_set, subsidiary_obj)
+    groups = _total_report_group_rows(rows)
+    grand_total_cash = sum((group['total_cash'] for group in groups), decimal.Decimal('0.00'))
+    grand_total_destination = sum(
+        (group['total_destination'] for group in groups), decimal.Decimal('0.00'),
+    )
+
+    grid = loader.get_template('comercial/total_commodity_report_grid.html').render({
+        'groups': groups,
+        'count': len(rows),
+        'subsidiary': subsidiary_obj,
+        'company': company_obj,
+        'dni': dni,
+        'f1': start_date,
+        'f2': end_date,
+        'type_guide': type_guide,
+        'way_to_pay': report_filter_url_value(way_to_pay),
+        'user_selected': report_filter_url_value(user_selected),
+        'origin_subsidiary': origin_subsidiary,
+        'delivery_filter': delivery_filter,
+        'total_cash': grand_total_cash.quantize(
+            decimal.Decimal('0.00'), rounding=decimal.ROUND_HALF_EVEN,
+        ),
+        'total_destination': grand_total_destination.quantize(
+            decimal.Decimal('0.00'), rounding=decimal.ROUND_HALF_EVEN,
+        ),
+        'total_general': (grand_total_cash + grand_total_destination).quantize(
+            decimal.Decimal('0.00'), rounding=decimal.ROUND_HALF_EVEN,
+        ),
+    }, request)
+    return JsonResponse({'grid': grid, 'count': len(rows)}, status=HTTPStatus.OK)
+
+
 def _order_is_accessible_for_destination_actions(order_obj, subsidiary_obj):
     """
     True si la sede puede cobrar/entregar la orden:
@@ -2364,7 +2632,79 @@ def check_commodity_destiny(o):
     return type_commodity_destiny
 
 
-def get_order_comodity_values(order_set=None):
+def _quantize_money(value):
+    return decimal.Decimal(value).quantize(decimal.Decimal('0.00'),
+                                           rounding=decimal.ROUND_HALF_EVEN)
+
+
+def _order_row_total(order_obj, totals=None):
+    """
+    Importe de la fila. Reproduce Order.sum_total_details(): la suma de los
+    detalles y, si no hay detalles, el total guardado en la orden.
+    """
+    if totals is not None:
+        amount = totals.get(order_obj.id)
+    else:
+        amount = order_obj.sum_total_details()
+    if amount is None:
+        amount = order_obj.total or decimal.Decimal('0')
+    return _quantize_money(amount)
+
+
+def _batch_order_totals(order_set):
+    """Suma de detalles de todas las órdenes en una sola consulta."""
+    order_ids = [order.id for order in order_set]
+    if not order_ids:
+        return {}
+    sums = dict(
+        OrderDetail.objects
+        .filter(order_id__in=order_ids)
+        .values_list('order_id')
+        .annotate(total_amount=Sum('amount'))
+        .values_list('order_id', 'total_amount')
+    )
+    return {order_id: _quantize_money(amount) for order_id, amount in sums.items()}
+
+
+def _batch_destination_recipients(order_set):
+    """
+    Destinatario principal por orden usando el orderaction_set ya prefetcheado.
+    Mismo criterio que _destination_recipient: primero la acción 'D' con
+    cliente registrado; si no, la primera acción 'D'.
+    """
+    recipients = {}
+    for order_obj in order_set:
+        addressees = [action for action in order_obj.orderaction_set.all() if action.type == 'D']
+        with_client = next((action for action in addressees if action.client_id), None)
+        recipients[order_obj.id] = with_client or (addressees[0] if addressees else None)
+    return recipients
+
+
+def _batch_client_documents(recipient_actions):
+    """Documento del destinatario por cliente, en una sola consulta."""
+    client_ids = {
+        action.client_id for action in recipient_actions if action is not None and action.client_id
+    }
+    if not client_ids:
+        return {}
+    documents = {}
+    queryset = ClientType.objects.filter(client_id__in=client_ids).order_by('id')
+    for client_type in queryset:
+        # setdefault replica el .first() por pk de la versión por orden.
+        documents.setdefault(client_type.client_id, (
+            client_type.document_type_id, client_type.document_number,
+        ))
+    return documents
+
+
+def get_order_comodity_values(order_set=None, totals=None):
+    """
+    Normaliza las órdenes a filas de reporte.
+
+    `totals` es opcional: si se entrega un mapa {order_id: Decimal} con la suma
+    de los detalles, se evita un aggregate por orden. El reporte total lo usa
+    porque consulta toda la empresa y el aggregate por orden lo hace inviable.
+    """
     order_dict = []
     # cont_counted = 0
     for o in order_set:
@@ -2446,8 +2786,7 @@ def get_order_comodity_values(order_set=None):
             'service_type_label': o.get_service_type_display(),
             'serial': o.serial,
             'correlative_sale': o.correlative_sale,
-            'total': decimal.Decimal(o.sum_total_details()).quantize(decimal.Decimal('0.00'),
-                                                                     rounding=decimal.ROUND_HALF_EVEN),
+            'total': _order_row_total(o, totals),
             'way_to_pay': o.way_to_pay,
             'way_to_pay_label': o.get_way_to_pay_display(),
             'destination_collected': destination_collected,

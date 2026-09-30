@@ -1,0 +1,160 @@
+{% extends 'home.html' %}
+{% block title %}Reporte total de encomiendas — RapidoVip{% endblock %}
+
+{% block body %}
+<div class="rv-page rv-report-page rv-total-report-page">
+    <div class="rv-report-hero rv-total-report-hero">
+        <div class="rv-report-hero-text">
+            <h1><i class="fas fa-layer-group"></i> Reporte total de encomiendas</h1>
+            <p>Unifica en una sola consulta las encomiendas de <strong>oficina</strong> y de
+               <strong>reparto</strong> de toda la empresa. Cada tipo se presenta en su propio
+               grupo de color, con subtotales independientes y un total general al cierre.
+               Use el filtro <em>Sede de origen</em> para limitar a una sede.</p>
+        </div>
+        <div class="rv-report-hero-meta">
+            <span class="rv-report-sede"><i class="fas fa-industry"></i> Empresa: {{ company.business_name }}</span>
+            <span class="rv-report-sede"><i class="fas fa-map-marker-alt"></i> Sede activa: {{ subsidiary.name }}</span>
+        </div>
+    </div>
+
+    <div class="rv-form-section rv-report-filters">
+        <form class="rv-filter-bar" id="total-search-form" method="POST">
+            {% csrf_token %}
+            <div class="rv-total-filter-grid">
+                <div class="rv-form-group">
+                    <label for="total-start-date">Desde</label>
+                    <input type="date" class="rv-form-control" id="total-start-date"
+                           name="start-date" value="{{ month_start }}">
+                </div>
+                <div class="rv-form-group">
+                    <label for="total-end-date">Hasta</label>
+                    <input type="date" class="rv-form-control" id="total-end-date"
+                           name="end-date" value="{{ date_now }}">
+                </div>
+                <div class="rv-form-group">
+                    <label for="total-type-guide">Tipo de encomienda</label>
+                    <select class="rv-form-control" id="total-type-guide" name="type-guide">
+                        <option value="">Todos los tipos</option>
+                        {% for code, label in type_guide_choices %}
+                            <option value="{{ code }}">{{ label|capfirst }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="rv-form-group">
+                    <label for="total-delivery-status">Estado de entrega</label>
+                    <select class="rv-form-control" id="total-delivery-status" name="delivery-status">
+                        <option value="all" selected>Todas</option>
+                        <option value="pending">Pendientes de entrega</option>
+                        <option value="delivered">Entregadas</option>
+                    </select>
+                </div>
+                <div class="rv-form-group">
+                    <label for="total-way-to-pay">Forma de pago</label>
+                    <select class="rv-form-control" id="total-way-to-pay" name="way_to_pay">
+                        <option value="ALL">Todas</option>
+                        {% for code, label in way_to_pay_choices %}
+                            {% if code == 'C' or code == 'D' %}
+                                <option value="{{ code }}">{{ label|title }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="rv-form-group">
+                    <label for="total-origin-subsidiary">Sede de origen</label>
+                    <select class="rv-form-control" id="total-origin-subsidiary" name="origin-subsidiary">
+                        <option value="">Todas las sedes</option>
+                        {% for s in subsidiaries_set %}
+                            <option value="{{ s.id }}">{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="rv-form-group">
+                    <label for="total-user">Usuario</label>
+                    <select class="rv-form-control" id="total-user" name="user">
+                        <option value="">Todos</option>
+                        {% for us in user_set %}
+                            <option value="{{ us.user.id }}">{{ us.user.get_full_name|default:us.user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="rv-form-group rv-total-dni-group">
+                    <label for="total-dni">DNI del destinatario</label>
+                    <div class="rv-input-icon-wrap">
+                        <i class="fas fa-id-card"></i>
+                        <input type="text" class="rv-form-control" id="total-dni" name="dni"
+                               maxlength="8" inputmode="numeric" autocomplete="off"
+                               placeholder="8 dígitos exactos"
+                               title="Al ingresar un DNI se buscará sin limitar por fechas">
+                    </div>
+                    <small>Sin límite de fechas al buscar por DNI</small>
+                </div>
+                <div class="rv-form-group rv-form-group-action">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="rv-btn rv-btn-search" id="btn-total-search">
+                        <i class="fas fa-search"></i> Generar reporte
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="rv-form-section rv-report-results-wrap">
+        <div id="total-results" class="rv-report-results">
+            <div class="rv-report-empty">
+                <i class="fas fa-layer-group"></i>
+                <p>Elija un rango de fechas y pulse <strong>Generar reporte</strong> para obtener
+                   el consolidado de encomiendas de oficina y reparto.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extrajs %}
+<script type="text/javascript">
+(function () {
+    function searchTotal() {
+        var $btn = $('#btn-total-search');
+        $btn.prop('disabled', true);
+        $('#total-results').html(
+            '<div class="rv-report-loading"><i class="fas fa-spinner fa-spin"></i> Consolidando encomiendas…</div>'
+        );
+        $.ajax({
+            url: '{% url "comercial:total_commodity_report" %}',
+            type: 'POST',
+            data: $('#total-search-form').serialize(),
+            success: function (response) {
+                $('#total-results').html(response.grid);
+            },
+            error: function (xhr) {
+                var message = xhr.responseJSON && xhr.responseJSON.error
+                    ? xhr.responseJSON.error : 'No fue posible generar el reporte.';
+                toastr.warning(message);
+                $('#total-results').html(
+                    '<div class="rv-report-empty"><i class="fas fa-exclamation-circle"></i><p>' +
+                    $('<div>').text(message).html() + '</p></div>'
+                );
+            },
+            complete: function () { $btn.prop('disabled', false); }
+        });
+    }
+
+    $('#total-search-form').on('submit', function (event) {
+        event.preventDefault();
+        var dni = $('#total-dni').val().replace(/\D/g, '');
+        $('#total-dni').val(dni);
+        if (dni && dni.length !== 8) {
+            toastr.warning('Ingrese los 8 dígitos del DNI.');
+            return;
+        }
+        searchTotal();
+    });
+
+    $('#total-dni').on('input', function () {
+        this.value = this.value.replace(/\D/g, '').slice(0, 8);
+        var searchingByDni = this.value.length > 0;
+        $('#total-start-date, #total-end-date').prop('disabled', searchingByDni);
+    });
+})();
+</script>
+{% endblock %}
