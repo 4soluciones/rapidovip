@@ -1961,16 +1961,23 @@ def total_commodity_report(request):
     date_now = timezone.localdate()
 
     if request.method == 'GET':
+        # Arranca en el dia de hoy y acotado a la sede del usuario: es el uso
+        # mas frecuente y el rango se amplía desde ahi si hace falta.
+        subsidiaries_set = Subsidiary.objects.filter(
+            serials__company=company_obj, is_enabled=True,
+        ).distinct()
+        # La sede activa siempre debe poder quedar seleccionada, aunque este
+        # deshabilitada o aun no tenga serie para la empresa.
+        if subsidiary_obj and not subsidiaries_set.filter(id=subsidiary_obj.id).exists():
+            subsidiaries_set = subsidiaries_set | Subsidiary.objects.filter(id=subsidiary_obj.id)
+
         return render(request, 'comercial/total_commodity_report.html', {
             'date_now': date_now.strftime('%Y-%m-%d'),
-            'month_start': date_now.replace(day=1).strftime('%Y-%m-%d'),
             'subsidiary': subsidiary_obj,
             'company': company_obj,
             'type_guide_choices': GUIDE_TYPE_CHOICES,
             'way_to_pay_choices': WAY_TO_PAY_CHOICES,
-            'subsidiaries_set': Subsidiary.objects.filter(
-                serials__company=company_obj, is_enabled=True,
-            ).distinct().order_by('name'),
+            'subsidiaries_set': subsidiaries_set.order_by('name'),
             'user_set': UserSubsidiary.objects.filter(
                 subsidiary=subsidiary_obj, rol__in=['A', 'O'], user__is_active=True,
             ).select_related('user'),

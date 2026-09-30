@@ -7,9 +7,9 @@
         <div class="rv-report-hero-text">
             <h1><i class="fas fa-layer-group"></i> Reporte total de encomiendas</h1>
             <p>Unifica en una sola consulta las encomiendas de <strong>oficina</strong> y de
-               <strong>reparto</strong> de toda la empresa. Cada tipo se presenta en su propio
-               grupo de color, con subtotales independientes y un total general al cierre.
-               Use el filtro <em>Sede de origen</em> para limitar a una sede.</p>
+               <strong>reparto</strong>. Cada tipo se presenta en su propio grupo de color,
+               con subtotales independientes y un total general al cierre.
+               Arranca en el día de hoy y acotado a su sede; use los filtros para ampliar.</p>
         </div>
         <div class="rv-report-hero-meta">
             <span class="rv-report-sede"><i class="fas fa-industry"></i> Empresa: {{ company.business_name }}</span>
@@ -24,7 +24,7 @@
                 <div class="rv-form-group">
                     <label for="total-start-date">Desde</label>
                     <input type="date" class="rv-form-control" id="total-start-date"
-                           name="start-date" value="{{ month_start }}">
+                           name="start-date" value="{{ date_now }}">
                 </div>
                 <div class="rv-form-group">
                     <label for="total-end-date">Hasta</label>
@@ -64,9 +64,10 @@
                     <select class="rv-form-control" id="total-origin-subsidiary" name="origin-subsidiary">
                         <option value="">Todas las sedes</option>
                         {% for s in subsidiaries_set %}
-                            <option value="{{ s.id }}">{{ s.name }}</option>
+                            <option value="{{ s.id }}"{% if s.id == subsidiary.id %} selected{% endif %}>{{ s.name }}</option>
                         {% endfor %}
                     </select>
+                    <small>Por defecto: la sede con la que inició sesión</small>
                 </div>
                 <div class="rv-form-group">
                     <label for="total-user">Usuario</label>
