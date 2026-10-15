@@ -16,6 +16,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from apps.comercial.money import igv_breakdown, line_amount, money, money_str
 from apps.sales.format_to_dates import utc_to_local
 from apps.sales.models import Order, OrderAction, PAYMENT_METHOD_CHOICES
 from apps.sales.number_to_letters import numero_a_moneda
@@ -544,11 +545,10 @@ def _encomienda_details_table(order_obj, use_base=False, width=None):
         desc_text = (detail.description or '').upper()
         desc = Paragraph(desc_text, s['value']) if len(desc_text) > 32 else desc_text
         if use_base:
-            base_total = detail.quantity * detail.price_unit
-            amount_val = base_total / decimal.Decimal('1.18')
-            amount = str(round(amount_val, 2))
+            gravada, _, _ = igv_breakdown(line_amount(detail))
+            amount = money_str(gravada)
         else:
-            amount = str(round(detail.amount, 2))
+            amount = money_str(line_amount(detail))
         detail_rows.append((desc, qty, amount))
 
     if not detail_rows:
@@ -560,22 +560,23 @@ def _encomienda_details_table(order_obj, use_base=False, width=None):
 
 
 def _bill_amounts(order_obj):
-    """Calcula subtotal (gravada), IGV y total de la boleta/factura."""
+    """Calcula subtotal (gravada), IGV y total de la boleta/factura.
+
+    El importe cobrado (`detail.amount` / `order.total`) es la fuente de
+    verdad. No se usa cantidad × precio unitario: el P/U se trunca a 2
+    decimales en pantalla y 3 × 13.33 = 39.99 aunque se hayan cobrado 40.00.
+    """
     sub_total = decimal.Decimal('0')
     total = decimal.Decimal('0')
     igv_total = decimal.Decimal('0')
     for detail in order_obj.orderdetail_set.all():
-        base_total = detail.quantity * detail.price_unit
-        base_amount = base_total / decimal.Decimal('1.18')
-        igv = base_total - base_amount
-        sub_total += base_amount
-        total += base_total
+        gravada, igv, line_total = igv_breakdown(line_amount(detail))
+        sub_total += gravada
+        total += line_total
         igv_total += igv
 
     if total == 0 and order_obj.total:
-        total = decimal.Decimal(str(order_obj.total))
-        sub_total = total / decimal.Decimal('1.18')
-        igv_total = total - sub_total
+        sub_total, igv_total, total = igv_breakdown(order_obj.total)
     return sub_total, igv_total, total
 
 
@@ -588,7 +589,7 @@ def _bill_totals_table(order_obj, width=None):
         ('I.G.V. (18.00)', igv_total),
         ('IMPORTE TOTAL', total),
     ]
-    data = [(label, '', 'S/', str(round(value, 2))) for label, value in rows]
+    data = [(label, '', 'S/', money_str(value)) for label, value in rows]
     tbl = Table(data, colWidths=[wt * 0.61, wt * 0.02, wt * 0.12, wt * 0.25])
     tbl.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (-1, -2), 'Helvetica'),
@@ -839,11 +840,10 @@ def _details_table(order_obj, qty_header='CNT.', desc_header='ARTÍCULO', amount
         desc_text = (detail.description or '').upper()
         desc = Paragraph(desc_text, s['value']) if len(desc_text) > 35 else desc_text
         if use_base:
-            base_total = detail.quantity * detail.price_unit
-            amount_val = base_total / decimal.Decimal('1.18')
-            amount = str(round(amount_val, 2))
+            gravada, _, _ = igv_breakdown(line_amount(detail))
+            amount = money_str(gravada)
         else:
-            amount = str(round(detail.amount, 2))
+            amount = money_str(line_amount(detail))
         detail_rows.append((qty, desc, amount))
 
     if not detail_rows:
@@ -879,31 +879,18 @@ def _inventory_table(order_obj, width=None):
 
 def _totals_table(order_obj, show_igv=False, width=None, font_size=8):
     wt = width or THERMAL_WT
-    sub_total = decimal.Decimal('0')
-    total = decimal.Decimal('0')
-    igv_total = decimal.Decimal('0')
-    for detail in order_obj.orderdetail_set.all():
-        base_total = detail.quantity * detail.price_unit
-        base_amount = base_total / decimal.Decimal('1.18')
-        igv = base_total - base_amount
-        sub_total += base_amount
-        total += base_total
-        igv_total += igv
-
-    if total == 0 and order_obj.total:
-        total = decimal.Decimal(str(order_obj.total))
-        sub_total = total
+    sub_total, igv_total, total = _bill_amounts(order_obj)
 
     rows = []
     if show_igv:
         rows.extend([
-            ('OP. GRAVADA', 'S/', str(round(sub_total, 2))),
-            ('I.G.V. 18%', 'S/', str(round(igv_total, 2))),
+            ('OP. GRAVADA', 'S/', money_str(sub_total)),
+            ('I.G.V. 18%', 'S/', money_str(igv_total)),
         ])
-    rows.append(('TOTAL', 'S/', str(round(total, 2))))
+    rows.append(('TOTAL', 'S/', money_str(total)))
 
     if not show_igv:
-        tbl = Table([['', f'TOTAL S/ {round(total, 2)}']], colWidths=[wt * 0.35, wt * 0.65])
+        tbl = Table([['', f'TOTAL S/ {money_str(total)}']], colWidths=[wt * 0.35, wt * 0.65])
         tbl.setStyle(TableStyle([
             ('FONTNAME', (0, 0), (-1, -1), 'Square'),
             ('FONTSIZE', (0, 0), (-1, -1), font_size),
@@ -967,8 +954,8 @@ def _bill_qr_payload(order_obj, igv_total, total):
         tipo_cpe,
         str(serie),
         str(correlativo),
-        f'{round(igv_total, 2):.2f}',
-        f'{round(total, 2):.2f}',
+        money_str(igv_total),
+        money_str(total),
         fecha_qr,
         str(tipo_doc_cliente),
         '',
@@ -1412,13 +1399,14 @@ def _bill_details_table(order_obj, width=None):
     detail_rows = []
     for detail in order_obj.orderdetail_set.all():
         qty = detail.quantity or decimal.Decimal('0')
-        qty_display = str(int(qty)) if qty == qty.to_integral_value() else str(round(qty, 2))
+        qty_display = str(int(qty)) if qty == qty.to_integral_value() else money_str(qty)
         unit_name = 'ZZ'
         if detail.unit_id and detail.unit and detail.unit.description:
             unit_name = detail.unit.description.strip().upper()
         desc = f'ZZ SERVICIO DE TRANSPORTE {qty_display} {unit_name}'
-        price = str(round(detail.price_unit or 0, 2))
-        amount = str(round(detail.amount or (detail.quantity * detail.price_unit), 2))
+        line_total = line_amount(detail)
+        price = money_str(line_total / qty) if qty else money_str(detail.price_unit or 0)
+        amount = money_str(line_total)
         detail_rows.append([
             Paragraph(f'[ {qty_display} ]', s['detail_center']),
             Paragraph(desc, s['detail']),
@@ -1486,7 +1474,7 @@ def build_bill_encomienda(order_obj, pk, request=None):
         Spacer(1, 6),
         _separator(BILL_WT),
         Spacer(1, 6),
-        Paragraph(f'<b>IMPORTE EN LETRAS:</b> {numero_a_moneda(total)}', s['left']),
+        Paragraph(f'<b>IMPORTE EN LETRAS:</b> {numero_a_moneda(money(total))}', s['left']),
         Spacer(1, 4),
         Paragraph(f'<b>FORMA DE PAGO:</b> [{payment}]', s['left']),
     ]

@@ -22,6 +22,7 @@ from reportlab.lib import colors
 from reportlab.lib.units import cm, inch, mm
 from reportlab.rl_settings import defaultPageSize
 from rapidovip import settings
+from apps.comercial.money import igv_breakdown, line_amount, money_str
 from apps.sales.format_to_dates import utc_to_local
 from .models import Programming
 from apps.sales.number_to_letters import numero_a_moneda
@@ -517,19 +518,21 @@ def _print_destination_delivery_ticket(request, order_obj, pk):
             str(decimal.Decimal(round(d.quantity))),
             _order_detail_unit_label(d),
             weight_txt,
-            Paragraph(str(round(d.amount, 2)), h_desc_right),
+            Paragraph(money_str(line_amount(d)), h_desc_right),
         ))
-        base_total = d.quantity * d.price_unit
-        total = total + base_total
+        total = total + line_amount(d)
         _details_q_qr.append(str(round(d.quantity)))
         _details_d_qr.append(d.description.upper())
-        _detail_amount = str(round(d.amount, 2))
+        _detail_amount = money_str(line_amount(d))
+
+    if not total and order_obj.total:
+        total = order_obj.total
 
     ana_c7 = Table(_rows_detail, colWidths=col_detail, rowHeights=0.28 * inch)
     ana_c7.setStyle(TableStyle(my_style_table4))
 
     ana_c8 = Table(
-        [('IMPORTE TOTAL', '', 'S/', str(decimal.Decimal(round(total, 2))))],
+        [('IMPORTE TOTAL', '', 'S/', money_str(total))],
         colWidths=[_wt * 60 / 100, _wt * 10 / 100, _wt * 17 / 100, _wt * 13 / 100])
     ana_c8.setStyle(TableStyle(my_style_table5))
 
@@ -1059,22 +1062,23 @@ def print_ticket_order_commodity(request, pk=None):  # Ticket/Guia de encomienda
              str(decimal.Decimal(round(d.quantity))),
              _order_detail_unit_label(d),
              weight_txt,
-             Paragraph(str(round(d.amount, 2)), h_desc_right)))
-        base_total = d.quantity * d.price_unit
-        base_amount = base_total / decimal.Decimal(1.1800)
-        igv = base_total - base_amount
-        sub_total = sub_total + base_amount
-        total = total + base_total
+             Paragraph(money_str(line_amount(d)), h_desc_right)))
+        gravada, igv, line_total = igv_breakdown(line_amount(d))
+        sub_total = sub_total + gravada
+        total = total + line_total
         igv_total = igv_total + igv
         _details_q_qr.append(str(round(d.quantity)))
         _details_d_qr.append(d.description.upper())
-        _detail_amount = str(round(d.amount, 2))
+        _detail_amount = money_str(line_total)
+
+    if not total and order_obj.total:
+        total = order_obj.total
 
     ana_c7 = Table(_rows, colWidths=col_detail, rowHeights=0.28 * inch)
     ana_c7.setStyle(TableStyle(my_style_table4))
 
     td_importe_total = (
-        'IMPORTE TOTAL', '', 'S/', '{:.2f}'.format(decimal.Decimal(round(total, 2))))
+        'IMPORTE TOTAL', '', 'S/', money_str(total))
 
     ana_c8 = Table([td_importe_total],
                    colWidths=[_wt * 54 / 100, _wt * 8 / 100, _wt * 17 / 100, _wt * 21 / 100])

@@ -21,6 +21,7 @@ from django.views.generic import View, TemplateView, UpdateView, CreateView
 from apps.accounting.cash_utils import get_open_cash_for_subsidiary
 from apps.accounting.views import Cash, CashFlow, save_cash_flow
 from apps.comercial.guide_helpers import get_serial_service, get_correlative_service
+from apps.comercial.money import unit_price_from_amount
 from apps.comercial.service_helpers import (
     get_service_destiny_label,
     filter_report_orders,
@@ -986,9 +987,11 @@ def create_order(request):
         # Guardando el detalle de la orden
         for detail in data_orders['Details']:
             quantity = decimal.Decimal(detail['Quantity'])
-            price_unit = decimal.Decimal(detail['Price_unit'])
             description = str(detail['Description'])
             amount = decimal.Decimal(detail['Amount'])
+            # Recalcular P/U desde el importe cobrado. El frontend muestra el
+            # precio a 2 decimales (3 × 13.33 = 39.99) aunque el total sea 40.00.
+            price_unit = unit_price_from_amount(amount, quantity)
             raw_weight = detail.get('Weight', '')
             try:
                 weight = decimal.Decimal(str(raw_weight).strip() or '0')

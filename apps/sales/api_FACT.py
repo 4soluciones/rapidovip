@@ -31,16 +31,20 @@ FACT_COMMODITY_QTY_SUNAT = 1
 
 
 def _order_details_amounts(details):
-    """Calcula totales gravados desde líneas de OrderDetail."""
+    """Calcula totales gravados desde líneas de OrderDetail.
+
+    Usa el importe cobrado (`amount`), no cantidad × precio unitario: el P/U
+    se guarda truncado a 2 decimales y 3 × 13.33 = 39.99 aunque se cobren 40.00.
+    """
+    from apps.comercial.money import igv_breakdown, line_amount
+
     sub_total = decimal.Decimal('0')
     total = decimal.Decimal('0')
     igv_total = decimal.Decimal('0')
     for d in details:
-        base_total = (d.quantity or decimal.Decimal('0')) * (d.price_unit or decimal.Decimal('0'))
-        base_amount = base_total / decimal.Decimal('1.1800')
-        igv = base_total - base_amount
-        sub_total += base_amount
-        total += base_total
+        gravada, igv, line_total = igv_breakdown(line_amount(d))
+        sub_total += gravada
+        total += line_total
         igv_total += igv
     return sub_total, total, igv_total
 
@@ -130,9 +134,8 @@ def send_bill_commodity_fact(
 
     details = list(OrderDetail.objects.filter(order=order_obj))
     if not details and order_obj.total:
-        sub_total = order_obj.total / decimal.Decimal('1.1800')
-        total = order_obj.total
-        igv_total = total - sub_total
+        from apps.comercial.money import igv_breakdown
+        sub_total, igv_total, total = igv_breakdown(order_obj.total)
     else:
         sub_total, total, igv_total = _order_details_amounts(details)
 
@@ -274,9 +277,8 @@ def send_receipt_commodity_fact(
 
     details = list(OrderDetail.objects.filter(order=order_obj))
     if not details and order_obj.total:
-        sub_total = order_obj.total / decimal.Decimal('1.1800')
-        total = order_obj.total
-        igv_total = total - sub_total
+        from apps.comercial.money import igv_breakdown
+        sub_total, igv_total, total = igv_breakdown(order_obj.total)
     else:
         sub_total, total, igv_total = _order_details_amounts(details)
 

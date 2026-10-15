@@ -824,7 +824,7 @@ var GuideServices = (function ($) {
                 '<span class="e-item-unit text-center" data-unit-id="' + unitId + '">' + unitLabel + '</span>' +
                 '<span class="e-item-desc">' + desc.toUpperCase() + '</span>' +
                 '<span class="e-item-weight text-right" data-weight="' + weightValue + '">' + weightDisplay + '</span>' +
-                '<span class="e-item-price text-right item-price">' + price.toFixed(2) + '</span>' +
+                '<span class="e-item-price text-right item-price" data-price="' + Number(price).toFixed(6) + '">' + Number(price).toFixed(2) + '</span>' +
                 '<span class="e-item-amount text-right item-amount">' + amount.toFixed(2) + '</span>' +
                 '<button type="button" class="rv-btn rv-btn-outline rv-btn-sm e-remove-detail" title="Quitar">' +
                     '<i class="fas fa-trash-alt"></i>' +
@@ -1100,7 +1100,7 @@ var GuideServices = (function ($) {
                     Quantity: $(this).find('.e-item-qty').text(),
                     Description: $(this).find('.e-item-desc').text(),
                     Weight: $(this).find('.e-item-weight').attr('data-weight') || '',
-                    Price_unit: $(this).find('.item-price').text(),
+                    Price_unit: $(this).find('.item-price').attr('data-price') || $(this).find('.item-price').text(),
                     Amount: $(this).find('.item-amount').text(),
                     Unit: $(this).find('.e-item-unit').attr('data-unit-id') || $('#e_detail_unit').val() || ''
                 });
